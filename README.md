@@ -163,7 +163,7 @@ For now, see:
 
 - **GitHub:** https://github.com/mjshuff23/agents-with-remote-control-mobile-controller
 - **Linear project:** https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c
-- **Notion strategy doc:** _to be added_
+- **Notion strategy doc:** https://www.notion.so/35bc2ea5f18f8186b134efa7759a19e6
 - **Figma diagrams:** _deferred until seat upgrade — Mermaid versions live in `docs/diagrams.md`_
 
 ---
