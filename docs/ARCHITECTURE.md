@@ -106,7 +106,7 @@ SQLite first. Migration to Postgres only if/when concurrency or multi-host requi
 | **AgentLog** | Append-only log entries (`stdout`, `stderr`, `system`, `user`, `agent`) |
 | **ApprovalRequest** | One approval ask with action type, description, risk level, decision |
 | **GitChangeSummary** | Snapshot of files changed, +/- counts, narrative summary per session/step |
-| **SyncEvent** | Outbound integration record — target (`github` / `linear` / `figma` / `notion`), action, status, external URL |
+| **SyncEvent** | Outbound integration record — target (`GitHub` / `Linear` / `Figma` / `Notion`), action, status, external URL |
 
 ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 
@@ -129,7 +129,7 @@ Long polling is intentionally **not** the primary mechanism — it is client-ini
 
 Every task runs in its own worktree:
 
-```
+```text
 agents-with-remote-control-mobile-controller/   ← main checkout
 ../arc-task-001/                                  ← worktree for task 1
 ../arc-task-002/                                  ← worktree for task 2

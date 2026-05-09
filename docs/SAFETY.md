@@ -78,7 +78,7 @@ Two reasons.
 
 The SAFE / NEEDS_APPROVAL / BLOCKED classification is **data, not code** (Phase 3).
 
-```
+```text
 arc.config.json
 ├── safe:                # patterns auto-allowed
 ├── needsApproval:       # patterns prompted to phone
