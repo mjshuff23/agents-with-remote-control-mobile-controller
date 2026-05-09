@@ -1,0 +1,55 @@
+# Node / package managers
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+.next/
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local databases (SQLite)
+*.sqlite
+*.sqlite3
+*.db
+data/
+.data/
+
+# Env files (NEVER commit)
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Testing
+coverage/
+.nyc_output/
+
+# Worktrees and agent scratch space
+worktrees/
+.arc/
+*.agent.tmp
+
+# Temp / cache
+.cache/
+.tmp/
+tmp/
