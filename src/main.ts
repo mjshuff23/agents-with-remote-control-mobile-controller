@@ -11,7 +11,7 @@ const logger = new Logger('Bootstrap');
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.useWebSocketAdapter(new IoAdapter(app));
-  app.enableCors({ origin: '*' }); // LAN-only; tighten per ARC_ALLOW_PUBLIC_BIND in Phase 3
+  app.enableCors({ origin: '*' }); // LAN-only dev tool; CONTROLLER_SECRET is the auth boundary until Phase 3 locks origin
   applyAppGlobals(app);
   app.enableShutdownHooks();
 
