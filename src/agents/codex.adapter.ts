@@ -1,0 +1,132 @@
+import { Injectable } from '@nestjs/common';
+import * as pty from 'node-pty';
+import { AppConfigService } from '../config/app-config.service';
+import {
+  AgentAdapter,
+  RunningAgentProcess,
+  StartAgentTaskInput
+} from './agent-adapter.interface';
+
+const BASE_CHILD_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'SHELL',
+  'TZ'
+];
+
+@Injectable()
+export class CodexAdapter implements AgentAdapter {
+  readonly name = 'codex' as const;
+
+  constructor(private readonly config: AppConfigService) {}
+
+  async startTask(input: StartAgentTaskInput): Promise<RunningAgentProcess> {
+    const launch = this.buildLaunchCommand(input.repoPath);
+    let ptyProcess: pty.IPty;
+
+    try {
+      const spawnOptions: pty.IPtyForkOptions = {
+        name: 'xterm-color',
+        cols: 120,
+        rows: 30,
+        env: buildChildEnv(this.config.codexEnvKeys)
+      };
+      if (this.config.runnerMode === 'local') {
+        spawnOptions.cwd = input.repoPath;
+      }
+
+      ptyProcess = pty.spawn(launch.command, launch.args, {
+        ...spawnOptions
+      });
+    } catch (error) {
+      throw new Error(`Unable to spawn Codex CLI: ${this.errorMessage(error)}`);
+    }
+
+    ptyProcess.onData((content) => {
+      void input.onOutput({ type: 'stdout', content });
+    });
+    ptyProcess.onExit((event) => {
+      void input.onExit({
+        exitCode: event.exitCode,
+        signal: event.signal === undefined ? undefined : String(event.signal)
+      });
+    });
+
+    this.writePrompt(ptyProcess, input.prompt);
+
+    return {
+      externalSessionId: `pty:${ptyProcess.pid}`,
+      stop: () => {
+        try {
+          ptyProcess.kill('SIGTERM');
+        } catch {
+          // Process already exited.
+          return;
+        }
+
+        setTimeout(() => {
+          try {
+            ptyProcess.kill('SIGKILL');
+          } catch {
+            // Process already exited.
+          }
+        }, this.config.shutdownGraceMs).unref();
+      }
+    };
+  }
+
+  private buildLaunchCommand(repoPath: string): { command: string; args: string[] } {
+    const codexArgs = this.config.codexArgs.map((arg) => arg.replaceAll('{repoPath}', repoPath));
+
+    if (this.config.runnerMode === 'local') {
+      return {
+        command: this.config.codexCommand,
+        args: codexArgs
+      };
+    }
+
+    const args: string[] = [];
+    if (this.config.wslDistro) {
+      args.push('-d', this.config.wslDistro);
+    }
+    if (this.config.wslUser) {
+      args.push('-u', this.config.wslUser);
+    }
+    args.push('--cd', repoPath, '--', this.config.codexCommand, ...codexArgs);
+
+    return {
+      command: this.config.wslCommand,
+      args
+    };
+  }
+
+  private writePrompt(process: pty.IPty, prompt: string): void {
+    process.write(prompt.replace(/\r?\n/g, '\r'));
+    process.write('\x04');
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function buildChildEnv(extraKeys: string[]): Record<string, string> {
+  const allowedKeys = new Set(BASE_CHILD_ENV_KEYS.concat(extraKeys));
+  const env: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    if (allowedKeys.has(key) || key.startsWith('OPENAI_') || key.startsWith('CODEX_')) {
+      env[key] = value;
+    }
+  }
+
+  return env;
+}

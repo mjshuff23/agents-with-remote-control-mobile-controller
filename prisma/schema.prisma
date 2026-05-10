@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Task {
+  id            String         @id @default(uuid())
+  title         String?
+  prompt        String
+  status        String         @default("queued")
+  selectedAgent String
+  repoPath      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  sessions      AgentSession[]
+}
+
+model AgentSession {
+  id                String     @id @default(uuid())
+  taskId            String
+  task              Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agentName         String
+  status            String     @default("starting")
+  externalSessionId String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  exitCode          Int?
+  errorMessage      String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  logs              AgentLog[]
+
+  @@index([taskId])
+  @@index([status])
+}
+
+model AgentLog {
+  id        String       @id @default(uuid())
+  sessionId String
+  session   AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type      String
+  sequence  Int
+  content   String
+  createdAt DateTime     @default(now())
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId, sequence])
+}

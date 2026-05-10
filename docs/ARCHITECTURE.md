@@ -2,6 +2,8 @@
 
 This document is the in-depth companion to [`README.md`](../README.md). It captures the system's working architecture, modules, data model, and the decisions behind them.
 
+> **Current implementation note:** Phase 1 implements only the local REST orchestrator subset: `TaskModule`, `AgentSessionModule`, `AgentAdapterModule`, a single `CodexAdapter`, and SQLite persistence for `Task`, `AgentSession`, and `AgentLog`. WebSockets, worktrees, approval gates, audit policy tables, sync modules, controller UI, and additional agent adapters are deferred. See [`PLAN.md`](../PLAN.md) for the current handoff contract.
+
 ---
 
 ## Layered view
