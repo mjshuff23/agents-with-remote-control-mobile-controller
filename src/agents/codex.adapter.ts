@@ -105,9 +105,9 @@ export class CodexAdapter implements AgentAdapter {
     };
   }
 
-  private writePrompt(process: pty.IPty, prompt: string): void {
-    process.write(prompt.replace(/\r?\n/g, '\r'));
-    process.write('\x04');
+  private writePrompt(ptyProcess: pty.IPty, prompt: string): void {
+    ptyProcess.write(`${prompt.replace(/\r?\n/g, '\r')}\r`);
+    ptyProcess.write('\x04');
   }
 
   private errorMessage(error: unknown): string {
