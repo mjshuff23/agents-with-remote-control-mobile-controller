@@ -95,13 +95,6 @@ export class TasksService {
     if (!task) {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${id}" does not exist.`);
     }
-    const session = await this.prisma.agentSession.findFirst({
-      where: { taskId: id },
-      orderBy: { createdAt: 'desc' }
-    });
-    if (!session) {
-      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Session Not Found', `Task "${id}" has no agent session.`);
-    }
-    await this.agentSessions.sendInput(task.id, session.id, text);
+    await this.agentSessions.sendInput(task.id, text);
   }
 }

@@ -77,16 +77,23 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
   }
 
-  async sendInput(taskId: string, sessionId: string, text: string): Promise<void> {
-    const running = this.runningProcesses.get(sessionId);
+  async sendInput(taskId: string, text: string): Promise<void> {
+    const session = await this.prisma.agentSession.findFirst({
+      where: { taskId },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!session) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Session Not Found', `Task "${taskId}" has no agent session.`);
+    }
+    const running = this.runningProcesses.get(session.id);
     if (!running) {
-      throw new ProblemException(HttpStatus.CONFLICT, 'Session Not Active', `Session "${sessionId}" has no live process.`);
+      throw new ProblemException(HttpStatus.CONFLICT, 'Session Not Active', `Session "${session.id}" has no live process.`);
     }
     if (!running.write) {
       throw new ProblemException(HttpStatus.CONFLICT, 'Input Not Supported', 'The running agent does not accept live input.');
     }
     running.write(text);
-    await this.appendLog(sessionId, 'system', `Input sent: ${text.slice(0, 100)}`);
+    await this.appendLog(session.id, 'system', `Input sent: ${text.slice(0, 100)}`);
   }
 
   async stopTask(taskId: string): Promise<StopTaskResult> {

@@ -158,16 +158,12 @@ describe('Tasks API', () => {
 
     expect(response.body.accepted).toBe(true);
     expect(writeStub).toHaveBeenCalledWith('yes, continue');
+    expect(writeStub).toHaveBeenCalledTimes(1);
   });
 
   it('returns 400 when input text is empty', async () => {
-    const created = await request(app.getHttpServer())
-      .post('/tasks')
-      .send({ prompt: 'Run something', agent: 'codex' })
-      .expect(201);
-
     await request(app.getHttpServer())
-      .post(`/tasks/${created.body.task.id}/input`)
+      .post('/tasks/nonexistent-id/input')
       .send({ text: '' })
       .expect(400);
   });
