@@ -31,7 +31,7 @@ function makeStubConfig(repoPath: string, codexBin: string) {
 }
 
 describeIfKey('CodexAdapter — PTY integration', () => {
-  let repoFixture: string;
+  let repoFixture: string | undefined;
 
   beforeAll(() => {
     repoFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-it-'));
@@ -42,7 +42,11 @@ describeIfKey('CodexAdapter — PTY integration', () => {
   });
 
   afterAll(() => {
-    fs.rmSync(repoFixture, { recursive: true, force: true });
+    // Guard against beforeAll failing before repoFixture was assigned —
+    // calling rmSync on undefined would throw and obscure the real error.
+    if (repoFixture) {
+      fs.rmSync(repoFixture, { recursive: true, force: true });
+    }
   });
 
   it(
@@ -71,30 +75,28 @@ describeIfKey('CodexAdapter — PTY integration', () => {
         }
       }) ?? 'codex';
 
-      const config = makeStubConfig(repoFixture, codexBin);
+      const config = makeStubConfig(repoFixture!, codexBin);
       const adapter = new CodexAdapter(config as any);
 
       const outputChunks: string[] = [];
       let exitEvent: AgentExitEvent | undefined;
-      // Captured after startTask resolves so the watchdog can stop it.
+      // Captured after startTask resolves so watchdog and error paths can stop it.
       let runningProcess: { stop: () => void | Promise<void> } | undefined;
 
-      const settled = new Promise<void>((resolve) => {
+      const settled = new Promise<void>((resolve, reject) => {
         const watchdog = setTimeout(() => {
-          // Kill any still-running codex process before the promise resolves,
-          // preventing orphaned processes from outliving the test.
-          if (runningProcess) {
-            void runningProcess.stop();
-          }
-          resolve();
+          // Stop the process before rejecting so it is never orphaned.
+          void Promise.resolve(runningProcess?.stop()).finally(() => {
+            reject(new Error(`codex did not exit within ${TIMEOUT_MS - 5_000}ms`));
+          });
         }, TIMEOUT_MS - 5_000);
         watchdog.unref();
 
-        void adapter
+        adapter
           .startTask({
             taskId: 'it-1',
             sessionId: 'it-session-1',
-            repoPath: repoFixture,
+            repoPath: repoFixture!,
             prompt: 'say hi in one word',
             onOutput: async (event: AgentOutputEvent) => {
               outputChunks.push(event.content);
@@ -109,7 +111,8 @@ describeIfKey('CodexAdapter — PTY integration', () => {
             runningProcess = handle;
           })
           .catch((err: Error) => {
-            throw new Error(`startTask rejected: ${err.message}`);
+            clearTimeout(watchdog);
+            reject(new Error(`startTask rejected: ${err.message}`));
           });
       });
 
