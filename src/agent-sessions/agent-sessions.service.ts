@@ -17,6 +17,7 @@ export interface StopTaskResult {
 export class AgentSessionsService implements OnApplicationBootstrap {
   private readonly runningProcesses = new Map<string, RunningAgentProcess>();
   private readonly nextLogSequences = new Map<string, number>();
+  private readonly logWriteQueues = new Map<string, Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -66,18 +67,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     } catch (error) {
       const message = this.errorMessage(error);
       await this.appendLog(session.id, 'system', `Codex startup failed: ${message}`);
-      await this.prisma.agentSession.update({
-        where: { id: session.id },
-        data: {
-          status: 'failed',
-          completedAt: new Date(),
-          errorMessage: message
-        }
-      });
-      await this.prisma.task.update({
-        where: { id: task.id },
-        data: { status: 'failed' }
-      });
+      await this.markSessionFailed(task.id, session.id, message);
 
       throw new ProblemException(
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -123,15 +113,42 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   }
 
   private async appendLog(sessionId: string, type: AgentLogType, content: string): Promise<void> {
-    const sequence = await this.nextSequence(sessionId);
-    await this.prisma.agentLog.create({
+    const previousWrite = this.logWriteQueues.get(sessionId) ?? Promise.resolve();
+    const currentWrite = previousWrite.catch(() => undefined).then(async () => {
+      const sequence = await this.nextSequence(sessionId);
+      await this.prisma.agentLog.create({
+        data: {
+          sessionId,
+          type,
+          sequence,
+          content
+        }
+      });
+    });
+
+    this.logWriteQueues.set(sessionId, currentWrite);
+    await currentWrite;
+  }
+
+  private clearLogState(sessionId: string): void {
+    this.nextLogSequences.delete(sessionId);
+    this.logWriteQueues.delete(sessionId);
+  }
+
+  private async markSessionFailed(taskId: string, sessionId: string, message: string): Promise<void> {
+    await this.prisma.agentSession.update({
+      where: { id: sessionId },
       data: {
-        sessionId,
-        type,
-        sequence,
-        content
+        status: 'failed',
+        completedAt: new Date(),
+        errorMessage: message
       }
     });
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { status: 'failed' }
+    });
+    this.clearLogState(sessionId);
   }
 
   private async nextSequence(sessionId: string): Promise<number> {
@@ -174,6 +191,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       where: { id: taskId },
       data: { status: finalTaskStatus }
     });
+    this.clearLogState(sessionId);
   }
 
   private async markStoppedWithoutProcess(taskId: string, sessionId: string): Promise<AgentSession> {
@@ -182,13 +200,15 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       where: { id: taskId },
       data: { status: 'stopped' }
     });
-    return this.prisma.agentSession.update({
+    const stopped = await this.prisma.agentSession.update({
       where: { id: sessionId },
       data: {
         status: 'stopped',
         completedAt: new Date()
       }
     });
+    this.clearLogState(sessionId);
+    return stopped;
   }
 
   private async recoverInterruptedSessions(): Promise<void> {
@@ -213,6 +233,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         where: { id: session.taskId },
         data: { status }
       });
+      this.clearLogState(session.id);
     }
   }
 

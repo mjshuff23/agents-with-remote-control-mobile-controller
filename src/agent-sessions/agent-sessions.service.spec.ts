@@ -138,6 +138,33 @@ describe('AgentSessionsService', () => {
     });
   });
 
+  it('serializes concurrent output writes for the same session', async () => {
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+
+    await Promise.all([
+      startInput.onOutput({ type: 'stdout', content: 'first' }),
+      startInput.onOutput({ type: 'stdout', content: 'second' })
+    ]);
+
+    expect(prisma.agentLog.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        sessionId: session.id,
+        type: 'stdout',
+        sequence: 2,
+        content: 'first'
+      }
+    });
+    expect(prisma.agentLog.create).toHaveBeenNthCalledWith(3, {
+      data: {
+        sessionId: session.id,
+        type: 'stdout',
+        sequence: 3,
+        content: 'second'
+      }
+    });
+  });
+
   it('marks the session and task failed when adapter startup fails', async () => {
     adapter.startTask.mockRejectedValue(new Error('codex missing'));
 
@@ -169,5 +196,19 @@ describe('AgentSessionsService', () => {
       where: { id: session.id },
       data: { status: 'stopping' }
     });
+  });
+
+  it('clears per-session log bookkeeping after process exit', async () => {
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+    prisma.agentSession.findFirst.mockResolvedValue({ ...session, status: 'running' });
+
+    await startInput.onOutput({ type: 'stdout', content: 'before exit' });
+    expect((service as any).nextLogSequences.has(session.id)).toBe(true);
+
+    await startInput.onExit({ exitCode: 0 });
+
+    expect((service as any).nextLogSequences.has(session.id)).toBe(false);
+    expect((service as any).logWriteQueues.has(session.id)).toBe(false);
   });
 });

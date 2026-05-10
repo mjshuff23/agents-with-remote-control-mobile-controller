@@ -18,12 +18,18 @@ export class CodexAdapter implements AgentAdapter {
     let process: pty.IPty;
 
     try {
-      process = pty.spawn(launch.command, launch.args, {
+      const spawnOptions: pty.IPtyForkOptions = {
         name: 'xterm-color',
         cols: 120,
         rows: 30,
-        cwd: input.repoPath,
         env: processEnv()
+      };
+      if (this.config.runnerMode === 'local') {
+        spawnOptions.cwd = input.repoPath;
+      }
+
+      process = pty.spawn(launch.command, launch.args, {
+        ...spawnOptions
       });
     } catch (error) {
       throw new Error(`Unable to spawn Codex CLI: ${this.errorMessage(error)}`);
@@ -44,7 +50,13 @@ export class CodexAdapter implements AgentAdapter {
     return {
       externalSessionId: `pty:${process.pid}`,
       stop: () => {
-        process.kill('SIGTERM');
+        try {
+          process.kill('SIGTERM');
+        } catch {
+          // Process already exited.
+          return;
+        }
+
         setTimeout(() => {
           try {
             process.kill('SIGKILL');

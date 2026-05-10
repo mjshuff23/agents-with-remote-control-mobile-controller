@@ -21,11 +21,26 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
   if (!where) {
     return true;
   }
+
   return Object.entries(where).every(([key, value]) => {
-    if (value && typeof value === 'object' && 'in' in value) {
-      return (value.in as unknown[]).includes(row[key]);
+    const rowValue = row[key];
+
+    if (value === null || typeof value !== 'object') {
+      return rowValue === value;
     }
-    return row[key] === value;
+
+    if ('in' in value) {
+      if (!Array.isArray(value.in)) {
+        throw new Error(`Unsupported where condition for "${key}": "in" operator requires an array`);
+      }
+      return value.in.includes(rowValue);
+    }
+
+    if ('equals' in value) {
+      return rowValue === value.equals;
+    }
+
+    throw new Error(`Unsupported where condition for "${key}": ${JSON.stringify(value)}`);
   });
 };
 
