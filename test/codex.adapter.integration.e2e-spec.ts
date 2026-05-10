@@ -48,13 +48,20 @@ describeIfKey('CodexAdapter — PTY integration', () => {
   it(
     'spawns codex, receives stdout, and the process exits',
     async () => {
-      // Resolve the codex binary explicitly so the test is not sensitive to
-      // whichever shell PATH is active when jest runs.
+      // Resolve the codex binary. Priority order:
+      //   1. CODEX_BIN env var — explicit CI/local override
+      //   2. $NVM_BIN/codex  — set by nvm when a version is active
+      //   3. ~/.npm-global/bin/codex — common global prefix
+      //   4. "codex" on $PATH — last resort
+      // The hard-coded nvm path is intentionally omitted: it embeds a Node
+      // version string that will break when the version changes.
       const candidates = [
+        process.env.CODEX_BIN,
+        process.env.NVM_BIN ? path.join(process.env.NVM_BIN, 'codex') : undefined,
         path.join(os.homedir(), '.npm-global', 'bin', 'codex'),
-        path.join(os.homedir(), '.nvm', 'versions', 'node', 'v22.18.0', 'bin', 'codex'),
         'codex'
-      ];
+      ].filter((c): c is string => Boolean(c));
+
       const codexBin = candidates.find((c) => {
         try {
           fs.accessSync(c, fs.constants.X_OK);
@@ -69,9 +76,16 @@ describeIfKey('CodexAdapter — PTY integration', () => {
 
       const outputChunks: string[] = [];
       let exitEvent: AgentExitEvent | undefined;
+      // Captured after startTask resolves so the watchdog can stop it.
+      let runningProcess: { stop: () => void | Promise<void> } | undefined;
 
       const settled = new Promise<void>((resolve) => {
         const watchdog = setTimeout(() => {
+          // Kill any still-running codex process before the promise resolves,
+          // preventing orphaned processes from outliving the test.
+          if (runningProcess) {
+            void runningProcess.stop();
+          }
           resolve();
         }, TIMEOUT_MS - 5_000);
         watchdog.unref();
@@ -90,6 +104,9 @@ describeIfKey('CodexAdapter — PTY integration', () => {
               clearTimeout(watchdog);
               resolve();
             }
+          })
+          .then((handle) => {
+            runningProcess = handle;
           })
           .catch((err: Error) => {
             throw new Error(`startTask rejected: ${err.message}`);
