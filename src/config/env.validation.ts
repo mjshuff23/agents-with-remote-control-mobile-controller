@@ -89,6 +89,7 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_WSL_DISTRO: readOptionalString(config, 'ARC_WSL_DISTRO'),
     ARC_WSL_USER: readOptionalString(config, 'ARC_WSL_USER'),
     ARC_LOG_TAIL_LIMIT: readNumber(config, 'ARC_LOG_TAIL_LIMIT', 200),
-    ARC_SHUTDOWN_GRACE_MS: readNumber(config, 'ARC_SHUTDOWN_GRACE_MS', 2000)
+    ARC_SHUTDOWN_GRACE_MS: readNumber(config, 'ARC_SHUTDOWN_GRACE_MS', 2000),
+    CONTROLLER_SECRET: readOptionalString(config, 'CONTROLLER_SECRET')
   };
 }

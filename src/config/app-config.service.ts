@@ -54,6 +54,10 @@ export class AppConfigService {
     return this.config.getOrThrow<number>('ARC_SHUTDOWN_GRACE_MS');
   }
 
+  get controllerSecret(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('CONTROLLER_SECRET'));
+  }
+
   private emptyToUndefined(value: string | undefined): string | undefined {
     return value && value.trim().length > 0 ? value : undefined;
   }
