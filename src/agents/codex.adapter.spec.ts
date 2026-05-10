@@ -179,6 +179,7 @@ describe('CodexAdapter', () => {
     });
 
     process.write.mockClear(); // clear calls from writePrompt
+    expect(running.write).toBeDefined();
     running.write!('some input');
     expect(process.write).toHaveBeenCalledWith('some input\r');
   });
