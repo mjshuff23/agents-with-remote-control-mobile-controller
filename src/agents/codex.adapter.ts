@@ -18,6 +18,10 @@ const BASE_CHILD_ENV_KEYS = [
   'SHELL',
   'TZ'
 ];
+// PTY_ENTER (\r) submits the current line to the terminal's line discipline.
+// PTY_EOF (\x04, Ctrl-D) signals end-of-input to the reading process.
+// They must arrive in this order: Enter first so the line is consumed, then
+// EOF to close the stream cleanly.
 const PTY_EOF = '\x04';
 const PTY_ENTER = '\r';
 
@@ -108,7 +112,8 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   private writePrompt(ptyProcess: pty.IPty, prompt: string): void {
-    ptyProcess.write(`${prompt.replace(/\r?\n/g, PTY_ENTER)}${PTY_ENTER}`);
+    const normalized = prompt.replace(/\r?\n/g, PTY_ENTER).replace(/\r$/, '');
+    ptyProcess.write(`${normalized}${PTY_ENTER}`);
     ptyProcess.write(PTY_EOF);
   }
 
