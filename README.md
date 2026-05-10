@@ -2,13 +2,32 @@
 
 > Local-first agent orchestration: control CLI coding agents (Codex, Claude Code, Gemini) from your phone, with approval gates and Git worktree isolation.
 
-**Status:** Pre-implementation. Strategy and project planning complete; Phase 1 implementation pending.
+**Status:** Phase 1 backend scaffold is implemented. Current work is the local orchestrator + single Codex CLI runner; phone UI, approval gates, worktrees, and external sync are later phases.
 
 ---
 
 ## TL;DR
 
 Run AI coding agents on your PC. Control them from your phone. The agent works in an isolated Git worktree. When it needs to commit, push, install something, or do anything risky, it asks you on your phone. You approve, deny, or steer with free-text. When it's done, it opens a draft PR.
+
+## Current implementation scope
+
+Phase 1 is intentionally narrower than the end-state architecture. The code in this repo currently ships:
+
+- A root-level NestJS REST API.
+- Prisma + SQLite persistence for `Task`, `AgentSession`, and `AgentLog`.
+- A single `CodexAdapter` that launches `codex exec --json --cd <repoPath> -` through `node-pty`.
+- REST endpoints for task creation, listing, inspection, and stop requests.
+- Problem-details style JSON errors.
+
+Deferred until later phases:
+
+- WebSockets and the mobile/web controller UI.
+- Git worktree creation, approval gates, diffs, and audit policy tables.
+- GitHub, Linear, Notion, Figma, MCP sync, and draft PR automation.
+- Claude Code, Gemini, and multi-agent workflows.
+
+See [`PLAN.md`](PLAN.md) for the Phase 1 handoff contract and manual smoke test.
 
 ---
 
@@ -89,11 +108,11 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 **Backend (orchestrator)**
 - Node.js + TypeScript
 - NestJS
-- SQLite (MVP) → Postgres later if needed
-- WebSocket gateway for live updates
+- Prisma + SQLite (MVP) → Postgres later if needed
 - REST endpoints for one-shot commands
-- `node-pty` / `child_process` for wrapping CLI agents
-- `simple-git` (or shelling to git) for worktree operations
+- `node-pty` for wrapping the Codex CLI
+- WebSocket gateway for live updates in Phase 2
+- Git worktree operations in Phase 3
 
 **Frontend (controller)**
 - Next.js (App Router) or React+Vite, mobile-first
@@ -134,7 +153,7 @@ Every approval and denial is recorded in an audit log. Full taxonomy and rationa
 
 ## Communication transport
 
-**WebSockets** for bidirectional controller ↔ orchestrator updates. Long polling is client-initiated and not full duplex, so it's intentionally avoided as the primary architecture. REST handles one-shot commands.
+Phase 1 is **REST only**. The end-state architecture uses WebSockets for bidirectional controller ↔ orchestrator updates, but that starts in Phase 2. Long polling is client-initiated and not full duplex, so it's intentionally avoided as the primary architecture.
 
 ---
 
@@ -149,13 +168,62 @@ Every approval and denial is recorded in an audit log. Full taxonomy and rationa
 
 ## Getting started
 
-> Phase 1 implementation has not landed yet. Once it does, this section will document WSL2 + Node.js + Codex CLI setup and the first prompt walkthrough.
+Prerequisites:
 
-For now, see:
+- Node.js 22+
+- `pnpm`
+- Local Codex CLI authentication already configured
+- A Linux-side repo path for `ARC_REPO_PATH`
+
+Install dependencies and generate Prisma:
+
+```bash
+pnpm install
+pnpm prisma:generate
+```
+
+If `pnpm` is not available locally, this machine has been tested with:
+
+```bash
+npm exec --yes pnpm@10.18.3 -- install
+npm exec --yes pnpm@10.18.3 -- prisma:generate
+```
+
+Create local config and initialize SQLite:
+
+```bash
+cp .env.example .env
+pnpm prisma:migrate
+```
+
+Edit `.env` before running if `ARC_REPO_PATH` should point somewhere other than this checkout.
+
+Run the orchestrator:
+
+```bash
+pnpm start:dev
+```
+
+Start a task:
+
+```bash
+curl -i -X POST http://127.0.0.1:3000/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"Say hello from Codex and then stop.","agent":"codex","title":"Smoke test"}'
+```
+
+Inspect it:
+
+```bash
+curl http://127.0.0.1:3000/tasks/<task-id>
+```
+
+More detail:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full system design
 - [`docs/SAFETY.md`](docs/SAFETY.md) — safety model and approval gates
 - [`docs/diagrams.md`](docs/diagrams.md) — all 7 system diagrams
 - [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md) — Mermaid mirrors of the FigJam companion boards
+- [`PLAN.md`](PLAN.md) — Phase 1 runtime scope and manual smoke test
 - [`AGENTS.md`](AGENTS.md) — instructions for AI agents working on this repo
 
 ---
