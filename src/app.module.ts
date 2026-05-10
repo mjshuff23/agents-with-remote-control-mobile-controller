@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AgentSessionsModule } from './agent-sessions/agent-sessions.module';
 import { AgentsModule } from './agents/agents.module';
 import { AppConfigModule } from './config/app-config.module';
+import { EventsModule } from './events/events.module';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { TasksModule } from './tasks/tasks.module';
@@ -12,6 +13,7 @@ import { TasksModule } from './tasks/tasks.module';
     PrismaModule,
     AgentsModule,
     AgentSessionsModule,
+    EventsModule,
     TasksModule
   ],
   controllers: [HealthController]
