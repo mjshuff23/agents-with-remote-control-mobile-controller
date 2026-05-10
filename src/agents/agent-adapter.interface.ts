@@ -23,6 +23,7 @@ export interface StartAgentTaskInput {
 export interface RunningAgentProcess {
   externalSessionId: string;
   stop: () => Promise<void> | void;
+  write?(text: string): void;
 }
 
 export interface AgentAdapter {
