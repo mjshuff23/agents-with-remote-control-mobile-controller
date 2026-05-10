@@ -64,7 +64,7 @@ flowchart LR
   Orch --> MCP
 ```
 
-Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives considered: [`docs/diagrams.md`](docs/diagrams.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives considered: [`docs/diagrams.md`](docs/diagrams.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). FigJam companion diagrams are mirrored in [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md).
 
 ---
 
@@ -155,6 +155,7 @@ For now, see:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full system design
 - [`docs/SAFETY.md`](docs/SAFETY.md) — safety model and approval gates
 - [`docs/diagrams.md`](docs/diagrams.md) — all 7 system diagrams
+- [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md) — Mermaid mirrors of the FigJam companion boards
 - [`AGENTS.md`](AGENTS.md) — instructions for AI agents working on this repo
 
 ---
@@ -164,7 +165,7 @@ For now, see:
 - **GitHub:** https://github.com/mjshuff23/agents-with-remote-control-mobile-controller
 - **Linear project:** https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c
 - **Notion strategy doc:** https://www.notion.so/35bc2ea5f18f8186b134efa7759a19e6
-- **Figma diagrams:** _deferred until seat upgrade — Mermaid versions live in `docs/diagrams.md`_
+- **Figma companion diagrams:** [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md)
 
 ---
 
