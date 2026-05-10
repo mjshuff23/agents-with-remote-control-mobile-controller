@@ -91,6 +91,24 @@ describe('CodexAdapter', () => {
     expect(process.write).toHaveBeenNthCalledWith(2, '\x04');
   });
 
+  it('submits an empty prompt before sending PTY EOF', async () => {
+    const process = createPtyProcess();
+    spawn.mockReturnValue(process);
+    const adapter = new CodexAdapter(createConfig() as any);
+
+    await adapter.startTask({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      repoPath: '/home/user/repo',
+      prompt: '',
+      onOutput: jest.fn(),
+      onExit: jest.fn()
+    });
+
+    expect(process.write).toHaveBeenNthCalledWith(1, '\r');
+    expect(process.write).toHaveBeenNthCalledWith(2, '\x04');
+  });
+
   it('passes only allowlisted environment variables to the child process', async () => {
     const oldEnv = process.env;
     process.env = {

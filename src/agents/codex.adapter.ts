@@ -18,6 +18,8 @@ const BASE_CHILD_ENV_KEYS = [
   'SHELL',
   'TZ'
 ];
+const PTY_EOF = '\x04';
+const PTY_ENTER = '\r';
 
 @Injectable()
 export class CodexAdapter implements AgentAdapter {
@@ -106,8 +108,8 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   private writePrompt(ptyProcess: pty.IPty, prompt: string): void {
-    ptyProcess.write(`${prompt.replace(/\r?\n/g, '\r')}\r`);
-    ptyProcess.write('\x04');
+    ptyProcess.write(`${prompt.replace(/\r?\n/g, PTY_ENTER)}${PTY_ENTER}`);
+    ptyProcess.write(PTY_EOF);
   }
 
   private errorMessage(error: unknown): string {
