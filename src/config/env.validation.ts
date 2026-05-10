@@ -38,6 +38,14 @@ const readBoolean = (config: RawEnv, key: string, defaultValue = false): boolean
   return String(value).toLowerCase() === 'true';
 };
 
+const readStringList = (config: RawEnv, key: string, defaultValue = ''): string[] => {
+  const raw = readOptionalString(config, key, defaultValue);
+  if (raw.length === 0) {
+    return [];
+  }
+  return raw.split(',').map((value) => value.trim()).filter(Boolean);
+};
+
 const readCodexArgs = (config: RawEnv): string[] => {
   const raw = readString(config, 'ARC_CODEX_ARGS_JSON', '["exec","--json","--cd","{repoPath}","-"]');
   let parsed: unknown;
@@ -76,6 +84,7 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_RUNNER_MODE: runnerMode,
     ARC_CODEX_COMMAND: readString(config, 'ARC_CODEX_COMMAND', 'codex'),
     ARC_CODEX_ARGS: readCodexArgs(config),
+    ARC_CODEX_ENV_KEYS: readStringList(config, 'ARC_CODEX_ENV_KEYS'),
     ARC_WSL_COMMAND: readString(config, 'ARC_WSL_COMMAND', 'wsl.exe'),
     ARC_WSL_DISTRO: readOptionalString(config, 'ARC_WSL_DISTRO'),
     ARC_WSL_USER: readOptionalString(config, 'ARC_WSL_USER'),

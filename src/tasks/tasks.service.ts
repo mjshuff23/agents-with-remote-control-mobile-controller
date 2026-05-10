@@ -26,7 +26,7 @@ export class TasksService {
   ) {}
 
   async createTask(input: CreateTaskDto): Promise<CreateTaskResult> {
-    const task = await this.prisma.task.create({
+    const created = await this.prisma.task.create({
       data: {
         title: input.title,
         prompt: input.prompt,
@@ -35,7 +35,11 @@ export class TasksService {
         repoPath: this.config.repoPath
       }
     });
-    const session = await this.agentSessions.createAndStart(task);
+    const session = await this.agentSessions.createAndStart(created);
+    const task = await this.prisma.task.findUnique({ where: { id: created.id } });
+    if (!task) {
+      throw new ProblemException(HttpStatus.INTERNAL_SERVER_ERROR, 'Task Refresh Failed', `Task "${created.id}" could not be refreshed after startup.`);
+    }
 
     return { task, session };
   }

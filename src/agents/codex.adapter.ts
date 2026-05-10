@@ -7,6 +7,18 @@ import {
   StartAgentTaskInput
 } from './agent-adapter.interface';
 
+const BASE_CHILD_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'SHELL',
+  'TZ'
+];
+
 @Injectable()
 export class CodexAdapter implements AgentAdapter {
   readonly name = 'codex' as const;
@@ -15,43 +27,43 @@ export class CodexAdapter implements AgentAdapter {
 
   async startTask(input: StartAgentTaskInput): Promise<RunningAgentProcess> {
     const launch = this.buildLaunchCommand(input.repoPath);
-    let process: pty.IPty;
+    let ptyProcess: pty.IPty;
 
     try {
       const spawnOptions: pty.IPtyForkOptions = {
         name: 'xterm-color',
         cols: 120,
         rows: 30,
-        env: processEnv()
+        env: buildChildEnv(this.config.codexEnvKeys)
       };
       if (this.config.runnerMode === 'local') {
         spawnOptions.cwd = input.repoPath;
       }
 
-      process = pty.spawn(launch.command, launch.args, {
+      ptyProcess = pty.spawn(launch.command, launch.args, {
         ...spawnOptions
       });
     } catch (error) {
       throw new Error(`Unable to spawn Codex CLI: ${this.errorMessage(error)}`);
     }
 
-    process.onData((content) => {
+    ptyProcess.onData((content) => {
       void input.onOutput({ type: 'stdout', content });
     });
-    process.onExit((event) => {
+    ptyProcess.onExit((event) => {
       void input.onExit({
         exitCode: event.exitCode,
         signal: event.signal === undefined ? undefined : String(event.signal)
       });
     });
 
-    this.writePrompt(process, input.prompt);
+    this.writePrompt(ptyProcess, input.prompt);
 
     return {
-      externalSessionId: `pty:${process.pid}`,
+      externalSessionId: `pty:${ptyProcess.pid}`,
       stop: () => {
         try {
-          process.kill('SIGTERM');
+          ptyProcess.kill('SIGTERM');
         } catch {
           // Process already exited.
           return;
@@ -59,7 +71,7 @@ export class CodexAdapter implements AgentAdapter {
 
         setTimeout(() => {
           try {
-            process.kill('SIGKILL');
+            ptyProcess.kill('SIGKILL');
           } catch {
             // Process already exited.
           }
@@ -103,8 +115,18 @@ export class CodexAdapter implements AgentAdapter {
   }
 }
 
-function processEnv(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-  );
+function buildChildEnv(extraKeys: string[]): Record<string, string> {
+  const allowedKeys = new Set(BASE_CHILD_ENV_KEYS.concat(extraKeys));
+  const env: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    if (allowedKeys.has(key) || key.startsWith('OPENAI_') || key.startsWith('CODEX_')) {
+      env[key] = value;
+    }
+  }
+
+  return env;
 }

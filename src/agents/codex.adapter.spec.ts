@@ -17,6 +17,7 @@ const createConfig = (overrides: Record<string, unknown> = {}) => ({
   runnerMode: 'local',
   codexCommand: 'codex',
   codexArgs: ['exec', '--json', '--cd', '{repoPath}', '-'],
+  codexEnvKeys: [],
   wslCommand: 'wsl.exe',
   wslDistro: undefined,
   wslUser: undefined,
@@ -70,5 +71,42 @@ describe('CodexAdapter', () => {
 
     expect(() => running.stop()).not.toThrow();
     expect(process.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes only allowlisted environment variables to the child process', async () => {
+    const oldEnv = process.env;
+    process.env = {
+      PATH: '/usr/bin',
+      HOME: '/home/user',
+      DATABASE_URL: 'file:secret.sqlite',
+      GH_TOKEN: 'secret',
+      OPENAI_API_KEY: 'openai-secret',
+      CODEX_HOME: '/home/user/.codex',
+      EXTRA_SAFE_KEY: 'allowed'
+    };
+    const adapter = new CodexAdapter(createConfig({ codexEnvKeys: ['EXTRA_SAFE_KEY'] }) as any);
+
+    try {
+      await adapter.startTask({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        repoPath: '/home/user/repo',
+        prompt: 'hello',
+        onOutput: jest.fn(),
+        onExit: jest.fn()
+      });
+    } finally {
+      process.env = oldEnv;
+    }
+
+    expect(spawn.mock.calls[0][2].env).toEqual(expect.objectContaining({
+      PATH: '/usr/bin',
+      HOME: '/home/user',
+      OPENAI_API_KEY: 'openai-secret',
+      CODEX_HOME: '/home/user/.codex',
+      EXTRA_SAFE_KEY: 'allowed'
+    }));
+    expect(spawn.mock.calls[0][2].env).not.toHaveProperty('DATABASE_URL');
+    expect(spawn.mock.calls[0][2].env).not.toHaveProperty('GH_TOKEN');
   });
 });

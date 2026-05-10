@@ -30,6 +30,10 @@ export class AppConfigService {
     return this.config.getOrThrow<string[]>('ARC_CODEX_ARGS');
   }
 
+  get codexEnvKeys(): string[] {
+    return this.config.getOrThrow<string[]>('ARC_CODEX_ENV_KEYS');
+  }
+
   get wslCommand(): string {
     return this.config.getOrThrow<string>('ARC_WSL_COMMAND');
   }

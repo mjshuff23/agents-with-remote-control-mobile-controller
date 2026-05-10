@@ -40,7 +40,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(session.id, 'system', `Starting ${task.selectedAgent} for task ${task.id}`);
 
     try {
-      const adapter = this.agents.getAdapter(task.selectedAgent as 'codex');
+      const adapter = this.agents.getAdapter(task.selectedAgent);
       const runningProcess = await adapter.startTask({
         taskId: task.id,
         sessionId: session.id,

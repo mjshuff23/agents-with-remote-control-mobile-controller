@@ -52,7 +52,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       type: 'about:blank',
       title: this.titleForStatus(status),
       status,
-      detail: exception instanceof Error ? exception.message : 'Unexpected server error',
+      detail: status >= 500
+        ? 'Unexpected server error'
+        : exception instanceof Error ? exception.message : 'Unexpected server error',
       instance
     };
   }

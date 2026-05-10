@@ -16,6 +16,11 @@ describe('TasksService', () => {
     createdAt: new Date('2026-05-10T12:00:00.000Z'),
     updatedAt: new Date('2026-05-10T12:00:00.000Z')
   };
+  const runningTask = {
+    ...task,
+    status: 'running',
+    updatedAt: new Date('2026-05-10T12:00:01.000Z')
+  };
   const session = {
     id: 'session-1',
     taskId: task.id,
@@ -66,8 +71,9 @@ describe('TasksService', () => {
     service = module.get(TasksService);
   });
 
-  it('creates a queued codex task against the configured repo path and starts a session', async () => {
+  it('creates a codex task against the configured repo path and returns the refreshed task status', async () => {
     prisma.task.create.mockResolvedValue(task);
+    prisma.task.findUnique.mockResolvedValue(runningTask);
     agentSessions.createAndStart.mockResolvedValue(session);
 
     const result = await service.createTask({ prompt: 'Say hello', agent: 'codex', title: 'Demo' });
@@ -82,7 +88,8 @@ describe('TasksService', () => {
       }
     });
     expect(agentSessions.createAndStart).toHaveBeenCalledWith(task);
-    expect(result).toEqual({ task, session });
+    expect(prisma.task.findUnique).toHaveBeenCalledWith({ where: { id: task.id } });
+    expect(result).toEqual({ task: runningTask, session });
   });
 
   it('returns task details with the latest session and a bounded log tail', async () => {

@@ -62,6 +62,7 @@ describe('Tasks API', () => {
     expect(response.body.task).toEqual(expect.objectContaining({
       title: 'Greeting',
       prompt: 'Say hello',
+      status: 'running',
       selectedAgent: 'codex',
       repoPath: '/repo'
     }));
