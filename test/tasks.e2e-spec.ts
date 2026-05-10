@@ -134,4 +134,41 @@ describe('Tasks API', () => {
       detail: expect.stringContaining('prompt')
     }));
   });
+
+  it('returns 202 when sending input to a running task', async () => {
+    const writeStub = jest.fn();
+    adapter.startTask.mockImplementation(async (input) => {
+      await input.onOutput({ type: 'stdout', content: 'waiting' });
+      return {
+        externalSessionId: 'mock-session',
+        stop: jest.fn(),
+        write: writeStub
+      };
+    });
+
+    const created = await request(app.getHttpServer())
+      .post('/tasks')
+      .send({ prompt: 'Run something', agent: 'codex' })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`/tasks/${created.body.task.id}/input`)
+      .send({ text: 'yes, continue' })
+      .expect(202);
+
+    expect(response.body.accepted).toBe(true);
+    expect(writeStub).toHaveBeenCalledWith('yes, continue');
+  });
+
+  it('returns 400 when input text is empty', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/tasks')
+      .send({ prompt: 'Run something', agent: 'codex' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/tasks/${created.body.task.id}/input`)
+      .send({ text: '' })
+      .expect(400);
+  });
 });
