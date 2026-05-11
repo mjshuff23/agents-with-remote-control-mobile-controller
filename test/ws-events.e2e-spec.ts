@@ -68,7 +68,12 @@ describe('WebSocket events', () => {
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('timeout: task.completed not received')), 5000);
-      socket.on('task.completed', () => { clearTimeout(timeout); resolve(); });
+      socket.on('task.completed', (event: { exitCode: number; status: string }) => {
+        clearTimeout(timeout);
+        expect(event.exitCode).toBe(0);
+        expect(event.status).toBe('completed');
+        resolve();
+      });
     });
   });
 

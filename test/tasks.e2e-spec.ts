@@ -167,4 +167,28 @@ describe('Tasks API', () => {
       .send({ text: '' })
       .expect(400);
   });
+
+  it('returns 404 when sending input to a non-existent task', async () => {
+    await request(app.getHttpServer())
+      .post('/tasks/00000000-0000-0000-0000-000000000000/input')
+      .send({ text: 'hello' })
+      .expect(404);
+  });
+
+  it('returns 409 when sending input to a task whose adapter has no write method', async () => {
+    adapter.startTask.mockImplementationOnce(async (input) => {
+      await input.onOutput({ type: 'stdout', content: 'waiting' });
+      return { externalSessionId: 'mock-session-no-write', stop: jest.fn() };
+    });
+
+    const created = await request(app.getHttpServer())
+      .post('/tasks')
+      .send({ prompt: 'Run something', agent: 'codex' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/tasks/${created.body.task.id}/input`)
+      .send({ text: 'hello' })
+      .expect(409);
+  });
 });

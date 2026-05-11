@@ -55,6 +55,7 @@ export default function TaskDetailPage() {
     },
     onCompleted: (data) => {
       setTask((prev) => (prev ? { ...prev, status: data.status } : null));
+      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
     }
   });
 
