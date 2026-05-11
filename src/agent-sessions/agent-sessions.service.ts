@@ -491,7 +491,10 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
 function safeProtocolBufferRemainder(last: string): string {
   if (last.trim().startsWith(ACTION_REQUEST_PREFIX)) {
-    return last;
+    // Discard oversized partial frames; a legitimate ARC_ACTION_REQUEST fits
+    // well within PROTOCOL_BUFFER_LIMIT. An unbounded buffer here would allow
+    // a crashed or misbehaving agent to grow it without bound.
+    return last.length <= PROTOCOL_BUFFER_LIMIT ? last : '';
   }
   return last.slice(-PROTOCOL_BUFFER_LIMIT);
 }

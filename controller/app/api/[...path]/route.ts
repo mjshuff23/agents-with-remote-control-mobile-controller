@@ -11,7 +11,11 @@ const HOP_BY_HOP_HEADERS = new Set([
   'host',
   'keep-alive',
   'transfer-encoding',
-  'upgrade'
+  'upgrade',
+  // Always strip any client-supplied secret before proxying — the server-side
+  // value is injected below. Without this, a spoofed header passes through
+  // when CONTROLLER_SECRET is unset in the server environment.
+  'x-controller-secret'
 ]);
 
 export async function GET(request: NextRequest, context: RouteContext) {
