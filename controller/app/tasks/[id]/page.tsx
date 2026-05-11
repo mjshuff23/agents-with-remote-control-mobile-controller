@@ -14,29 +14,40 @@ export default function TaskDetailPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [inputText, setInputText] = useState('');
   const [showInput, setShowInput] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const seqRef = useRef(0);
+  const seenSeqs = useRef(new Set<number>());
+  const sessionIdRef = useRef<string>('');
 
   useEffect(() => {
     getTask(id)
       .then(({ task, session, logs }) => {
         setTask(task);
         setSession(session);
+        if (session) sessionIdRef.current = session.id;
         setLogs(logs);
-        seqRef.current = logs.length > 0 ? Math.max(...logs.map((l) => l.sequence)) : 0;
+        if (logs.length > 0) {
+          const maxSeq = Math.max(...logs.map((l) => l.sequence));
+          seqRef.current = maxSeq;
+          logs.forEach((l) => seenSeqs.current.add(l.sequence));
+        }
       })
       .catch(console.error);
   }, [id]);
 
   useTaskSocket(id, {
     onLog: (data) => {
-      seqRef.current += 1;
+      const seq = data.sequence;
+      if (seenSeqs.current.has(seq)) return;
+      seenSeqs.current.add(seq);
+      seqRef.current = Math.max(seqRef.current, seq);
       setLogs((prev) => [
         ...prev,
         {
-          id: `ws-${seqRef.current}`,
-          sessionId: session?.id ?? '',
+          id: `ws-${seq}`,
+          sessionId: sessionIdRef.current,
           type: data.type,
-          sequence: data.sequence ?? seqRef.current,
+          sequence: seq,
           content: data.content,
           createdAt: new Date().toISOString()
         }
@@ -48,15 +59,25 @@ export default function TaskDetailPage() {
   });
 
   async function handleStop() {
-    await stopTask(id);
-    setTask((prev) => (prev ? { ...prev, status: 'stopping' } : null));
+    setActionError(null);
+    try {
+      await stopTask(id);
+      setTask((prev) => (prev ? { ...prev, status: 'stopping' } : null));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Stop failed');
+    }
   }
 
   async function handleSendInput() {
     if (!inputText.trim()) return;
-    await sendInput(id, inputText.trim());
-    setInputText('');
-    setShowInput(false);
+    setActionError(null);
+    try {
+      await sendInput(id, inputText.trim());
+      setInputText('');
+      setShowInput(false);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Send failed');
+    }
   }
 
   const isLive = task?.status === 'running' || task?.status === 'starting';
