@@ -306,7 +306,7 @@ export default function TaskDetailPage() {
                     disabled={isResolving}
                     className="flex-1 border border-red-500 text-red-600 py-2 rounded text-xs font-semibold disabled:opacity-50"
                   >
-                    Deny
+                    {isResolving ? 'Working…' : 'Deny'}
                   </button>
                 </div>
               </div>

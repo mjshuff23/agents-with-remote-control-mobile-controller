@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsService } from '../agents/agents.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AppConfigService } from '../config/app-config.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentSessionsService } from './agent-sessions.service';
 
@@ -47,7 +48,11 @@ describe('AgentSessionsService', () => {
   };
   const approvals = {
     createFromAgentRequest: jest.fn(),
-    resolve: jest.fn()
+    resolve: jest.fn(),
+    hasPendingForSession: jest.fn()
+  };
+  const policies = {
+    load: jest.fn()
   };
   const prisma = {
     task: {
@@ -84,6 +89,12 @@ describe('AgentSessionsService', () => {
       ...(data as Record<string, unknown>)
     }));
     adapter.startTask.mockResolvedValue(runningProcess);
+    policies.load.mockResolvedValue({
+      version: 1,
+      approval: { timeoutMs: 50 },
+      policy: { safe: [], needsApproval: [], blocked: [] },
+      testCommands: []
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -91,7 +102,8 @@ describe('AgentSessionsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AgentsService, useValue: agents },
         { provide: AppConfigService, useValue: config },
-        { provide: ApprovalsService, useValue: approvals }
+        { provide: ApprovalsService, useValue: approvals },
+        { provide: PolicyLoaderService, useValue: policies }
       ]
     }).compile();
 

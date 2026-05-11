@@ -17,6 +17,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
 
 const TEST_SECRET = 'test-secret';
+const authed = (requestTest: request.Test) => requestTest.set('X-Controller-Secret', TEST_SECRET);
 
 describe('Phase 3 local safety loop', () => {
   let app: INestApplication;
@@ -109,7 +110,7 @@ describe('Phase 3 local safety loop', () => {
 
     const { port } = app.getHttpServer().address() as { port: number };
     socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET }, transports: ['websocket'] });
-    const created = await request(app.getHttpServer()).post('/tasks').send({ prompt: 'patch', agent: 'codex' }).expect(201);
+    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'patch', agent: 'codex' }).expect(201);
     await socket.emitWithAck('subscribe', { taskId: created.body.task.id });
 
     const eventPromise = new Promise<any>((resolve, reject) => {
@@ -146,8 +147,8 @@ describe('Phase 3 local safety loop', () => {
       return { externalSessionId: 'mock-session', stop: jest.fn(), write: writeStub };
     });
 
-    const created = await request(app.getHttpServer()).post('/tasks').send({ prompt: 'blocked', agent: 'codex' }).expect(201);
-    const approvals = await request(app.getHttpServer()).get(`/tasks/${created.body.task.id}/approvals`).expect(200);
+    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'blocked', agent: 'codex' }).expect(201);
+    const approvals = await authed(request(app.getHttpServer()).get(`/tasks/${created.body.task.id}/approvals`)).expect(200);
 
     expect(approvals.body.approvals).toEqual([
       expect.objectContaining({ status: 'refused', decision: 'refused', ruleMatched: 'secrets.paths' })
@@ -159,10 +160,10 @@ describe('Phase 3 local safety loop', () => {
 
     const { port } = app.getHttpServer().address() as { port: number };
     socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET }, transports: ['websocket'] });
-    const created = await request(app.getHttpServer()).post('/tasks').send({ prompt: 'summarize', agent: 'codex' }).expect(201);
+    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'summarize', agent: 'codex' }).expect(201);
     await socket.emitWithAck('subscribe', { taskId: created.body.task.id });
 
-    const diff = await request(app.getHttpServer()).post(`/tasks/${created.body.task.id}/diff-summary`).expect(202);
+    const diff = await authed(request(app.getHttpServer()).post(`/tasks/${created.body.task.id}/diff-summary`)).expect(202);
     expect(diff.body.filesChanged).toBe(1);
 
     const completed = new Promise<any>((resolve, reject) => {
@@ -174,6 +175,7 @@ describe('Phase 3 local safety loop', () => {
     });
     await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/test-runs`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ commandId: 'unit' })
       .expect(202);
 

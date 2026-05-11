@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { spawn } from 'child_process';
+import { existsSync, realpathSync } from 'fs';
 import * as path from 'path';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
@@ -36,8 +37,9 @@ export class TestRunnerService {
       where: { taskId },
       orderBy: { createdAt: 'desc' }
     });
-    const worktreePath = path.resolve(task.worktreePath);
-    const cwd = command.cwd ? path.resolve(worktreePath, command.cwd) : worktreePath;
+    const worktreePath = realpathSync(path.resolve(task.worktreePath));
+    const candidateCwd = command.cwd ? path.resolve(worktreePath, command.cwd) : worktreePath;
+    const cwd = existsSync(candidateCwd) ? realpathSync(candidateCwd) : candidateCwd;
     if (!isInside(worktreePath, cwd)) {
       throw new ProblemException(HttpStatus.FORBIDDEN, 'Test Command Outside Worktree', `Test command "${commandId}" resolves outside the task worktree.`);
     }
@@ -70,7 +72,14 @@ export class TestRunnerService {
 
   private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, command: string[], timeoutMs: number): Promise<void> {
     const [bin, ...args] = command;
-    const child = spawn(bin, args, { cwd, shell: false, env: safeTestEnv() });
+    let child;
+    try {
+      child = spawn(bin, args, { cwd, shell: false, env: safeTestEnv() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.complete(taskId, sessionId, testRunId, 1, 'failed', [`Failed to start: ${message}`]);
+      return;
+    }
     const highlights: string[] = [];
     let finished = false;
     let timedOut = false;

@@ -62,6 +62,35 @@ describe('PolicyLoaderService', () => {
 
     await expect(service.load()).rejects.toThrow('timeoutMs');
   });
+
+  it('rejects invalid approval timeout values', async () => {
+    await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
+      version: 1,
+      approval: { timeoutMs: 0 },
+      policy: {
+        safe: [{ id: 'safe.test', actionTypes: ['test.run'], rationale: 'Test.' }],
+        needsApproval: [],
+        blocked: []
+      },
+      testCommands: [{ id: 'root:test', label: 'Test', command: ['npm', 'test'] }]
+    }));
+
+    await expect(service.load()).rejects.toThrow('approval.timeoutMs');
+  });
+
+  it('rejects test command cwd values that escape the worktree', async () => {
+    await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
+      version: 1,
+      policy: {
+        safe: [{ id: 'safe.test', actionTypes: ['test.run'], rationale: 'Test.' }],
+        needsApproval: [],
+        blocked: []
+      },
+      testCommands: [{ id: 'root:test', label: 'Test', cwd: '../outside', command: ['npm', 'test'] }]
+    }));
+
+    await expect(service.load()).rejects.toThrow('cwd must stay within the task worktree');
+  });
 });
 
 async function writeConfig(root: string, safeRuleId: string): Promise<void> {

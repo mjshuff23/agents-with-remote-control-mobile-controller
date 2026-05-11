@@ -96,6 +96,7 @@ export interface TestCommandConfig {
   label: string;
   cwd?: string;
   command: string[];
+  timeoutMs?: number;
 }
 
 export interface TestRunSummary {
@@ -125,7 +126,7 @@ export interface TaskEventEnvelope<TName extends string = string, TData = unknow
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, withControllerSecret(init));
+  const res = await fetch(`${API_BASE}${path}`, init);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${init?.method ?? 'GET'} ${path} → ${res.status}: ${body}`);
@@ -133,16 +134,6 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
-}
-
-function withControllerSecret(init: RequestInit = {}): RequestInit {
-  const secret = process.env.NEXT_PUBLIC_CONTROLLER_SECRET;
-  if (!secret) {
-    return init;
-  }
-  const headers = new Headers(init.headers);
-  headers.set('X-Controller-Secret', secret);
-  return { ...init, headers };
 }
 
 export function listTasks(): Promise<{ tasks: Task[] }> {

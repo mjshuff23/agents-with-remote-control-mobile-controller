@@ -91,28 +91,28 @@
     {
       "id": "root:test",
       "label": "Root unit tests",
-      "command": ["pnpm", "test"]
+      "command": ["npm", "test"]
     },
     {
       "id": "root:test:e2e",
       "label": "Root e2e tests",
-      "command": ["pnpm", "test:e2e"]
+      "command": ["npm", "run", "test:e2e"]
     },
     {
       "id": "root:typecheck",
       "label": "Root typecheck",
-      "command": ["pnpm", "typecheck"]
+      "command": ["npm", "run", "typecheck"]
     },
     {
       "id": "root:build",
       "label": "Root build",
-      "command": ["pnpm", "build"]
+      "command": ["npm", "run", "build"]
     },
     {
       "id": "controller:typecheck",
       "label": "Controller typecheck",
       "cwd": "controller",
-      "command": ["node_modules/.bin/tsc", "--noEmit"]
+      "command": ["npm", "exec", "--", "tsc", "--noEmit"]
     }
   ]
 }

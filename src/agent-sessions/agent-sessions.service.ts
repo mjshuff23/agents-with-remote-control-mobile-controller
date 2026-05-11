@@ -6,12 +6,14 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { ApprovalDecision, AgentActionRequest } from '../policy/policy.types';
 import { PrismaService } from '../prisma/prisma.service';
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'stopped']);
 const ACTION_REQUEST_PREFIX = 'ARC_ACTION_REQUEST';
 const APPROVAL_RESPONSE_PREFIX = 'ARC_APPROVAL';
+const PROTOCOL_BUFFER_LIMIT = 20_000;
 
 export interface StopTaskResult {
   accepted: boolean;
@@ -33,6 +35,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     private readonly agents: AgentsService,
     private readonly config: AppConfigService,
     private readonly approvals: ApprovalsService,
+    private readonly policies: PolicyLoaderService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -321,7 +324,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       '- Do not read secrets such as .env, *.pem, *.key, id_*, or ~/.ssh files.',
       '- Do not commit, push, open PRs, deploy, modify global config, or run internet-piped shell scripts.',
       '- When an action may mutate files, install packages, run migrations, write git state, or execute an unknown shell command, print exactly one machine-readable line before doing it:',
-      'ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"short title","rationale":"why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"one sentence"}',
+      'ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | git.branch | test.run | shell.command","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"short title","rationale":"why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"one sentence"}',
       '- Wait for ARC_APPROVAL on stdin. If denied or expired, do not retry the same action by paraphrasing it. If refused or BLOCKED, do not ask again.',
       '- If approved, do only the exact approved action inside the stated constraints.',
       '- After mutating actions, allow the orchestrator to capture diff and test summaries.',
@@ -351,7 +354,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           });
         } else {
           await this.markWaitingForApproval(taskId, sessionId);
-          this.scheduleApprovalExpiry(result.approval.id, sessionId);
+          void this.scheduleApprovalExpiry(result.approval.id, sessionId).catch(async (error) => {
+            await this.appendLog(sessionId, 'system', `Approval expiry scheduling failed: ${this.errorMessage(error)}`);
+          });
         }
       } catch (error) {
         await this.appendLog(sessionId, 'system', `Invalid ARC_ACTION_REQUEST ignored: ${this.errorMessage(error)}`);
@@ -376,7 +381,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       }
     }
 
-    this.protocolBuffers.set(sessionId, last.slice(-20000));
+    this.protocolBuffers.set(sessionId, safeProtocolBufferRemainder(last));
     return complete;
   }
 
@@ -422,13 +427,14 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(sessionId, 'system', `Approval ${payload.decision} sent for ${payload.id}`);
   }
 
-  private scheduleApprovalExpiry(approvalId: string, sessionId: string): void {
+  private async scheduleApprovalExpiry(approvalId: string, sessionId: string): Promise<void> {
     this.clearApprovalTimeout(approvalId);
+    const timeoutMs = await this.approvalTimeoutMs();
     const timeout = setTimeout(() => {
       void this.expireApproval(approvalId, sessionId).catch(async (error) => {
         await this.appendLog(sessionId, 'system', `Approval expiry failed: ${this.errorMessage(error)}`);
       });
-    }, this.config.approvalTimeoutMs).unref();
+    }, timeoutMs).unref();
     this.approvalTimeouts.set(approvalId, timeout);
     this.approvalTimeoutSessions.set(approvalId, sessionId);
   }
@@ -470,4 +476,22 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       }
     }
   }
+
+  private async approvalTimeoutMs(): Promise<number> {
+    try {
+      const policy = await this.policies.load();
+      return policy.approval?.timeoutMs ?? this.config.approvalTimeoutMs;
+    } catch {
+      // If policy loading fails during timeout setup, keep the env fallback so
+      // pending approvals still expire rather than staying open indefinitely.
+      return this.config.approvalTimeoutMs;
+    }
+  }
+}
+
+function safeProtocolBufferRemainder(last: string): string {
+  if (last.trim().startsWith(ACTION_REQUEST_PREFIX)) {
+    return last;
+  }
+  return last.slice(-PROTOCOL_BUFFER_LIMIT);
 }

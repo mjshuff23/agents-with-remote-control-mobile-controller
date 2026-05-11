@@ -131,12 +131,30 @@ function wildcardMatches(pattern: string, value: string, pi: number, vi: number,
 }
 
 function commandIncludesAll(command: string[], pieces: string[]): boolean {
-  const tokens = command.flatMap(tokenizeCommandPart);
+  const tokens = commandTokens(command);
   return pieces.every((piece) => tokens.some((token) => commandPieceMatches(token, piece.toLowerCase())));
 }
 
-function tokenizeCommandPart(part: string): string[] {
-  return part
+function commandTokens(command: string[]): string[] {
+  const argv = command.map((part) => part.trim().toLowerCase()).filter(Boolean);
+  const shellText = shellCommandText(argv);
+  return shellText ? argv.concat(tokenizeShellCommandText(shellText)) : argv;
+}
+
+function shellCommandText(argv: string[]): string | undefined {
+  const shellIndex = argv.findIndex((token) => {
+    const executable = token.split(/[\\/]/).pop() ?? token;
+    return ['sh', 'bash', 'zsh', 'dash'].includes(executable);
+  });
+  if (shellIndex === -1) {
+    return undefined;
+  }
+  const commandFlagIndex = argv.findIndex((token, index) => index > shellIndex && ['-c', '-lc'].includes(token));
+  return commandFlagIndex === -1 ? undefined : argv[commandFlagIndex + 1];
+}
+
+function tokenizeShellCommandText(text: string): string[] {
+  return text
     .replaceAll('|', ' | ')
     .replaceAll('&', ' & ')
     .replaceAll(';', ' ; ')

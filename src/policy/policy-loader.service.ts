@@ -54,6 +54,9 @@ export class PolicyLoaderService {
     if (!Array.isArray(config.testCommands)) {
       throw new Error('arc.config.json must define testCommands');
     }
+    if (config.approval?.timeoutMs !== undefined && (!Number.isInteger(config.approval.timeoutMs) || config.approval.timeoutMs <= 0)) {
+      throw new Error('arc.config.json approval.timeoutMs must be a positive integer');
+    }
     for (const rule of [...config.policy.safe, ...config.policy.needsApproval, ...config.policy.blocked]) {
       this.validateRule(rule);
     }
@@ -63,6 +66,12 @@ export class PolicyLoaderService {
       }
       if (testCommand.command.some((part) => typeof part !== 'string' || part.length === 0)) {
         throw new Error(`Test command "${testCommand.id}" command entries must be non-empty strings`);
+      }
+      if (testCommand.cwd) {
+        const normalizedCwd = path.posix.normalize(testCommand.cwd.replaceAll('\\', '/'));
+        if (path.isAbsolute(testCommand.cwd) || normalizedCwd === '..' || normalizedCwd.startsWith('../')) {
+          throw new Error(`Test command "${testCommand.id}" cwd must stay within the task worktree`);
+        }
       }
       if (testCommand.timeoutMs !== undefined && (!Number.isInteger(testCommand.timeoutMs) || testCommand.timeoutMs <= 0)) {
         throw new Error(`Test command "${testCommand.id}" timeoutMs must be a positive integer`);

@@ -91,6 +91,8 @@ This means:
 - Configured test runs are time-bounded by `ARC_TEST_COMMAND_TIMEOUT_MS`, with optional per-command `timeoutMs` overrides.
 - The audit log includes which rule fired, which makes "why was this blocked?" debugging trivial.
 
+The controller UI keeps REST approval/task actions behind a server-side Next.js proxy that forwards `CONTROLLER_SECRET` to the orchestrator. WebSocket auth remains a browser-present token because the browser opens the socket.io connection directly; this is local-loop controller auth, not a production secrecy boundary.
+
 ---
 
 ## Approval modes

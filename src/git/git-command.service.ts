@@ -16,8 +16,23 @@ export class GitCommandService {
     const { stdout, stderr } = await execFileAsync('git', ['-C', cwd, ...args], {
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
-      timeout: GIT_COMMAND_TIMEOUT_MS
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      env: buildGitEnv()
     });
     return { stdout, stderr };
   }
+}
+
+function buildGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_PAGER: 'cat'
+  };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('GIT_') && key !== 'GIT_TERMINAL_PROMPT' && key !== 'GIT_PAGER') {
+      delete env[key];
+    }
+  }
+  return env;
 }

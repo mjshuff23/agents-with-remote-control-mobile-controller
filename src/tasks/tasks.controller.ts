@@ -1,11 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
+import { ControllerSecretGuard } from '../common/guards/controller-secret.guard';
 import { RunTestDto } from '../test-runs/dto/run-test.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
 
 @Controller('tasks')
+@UseGuards(ControllerSecretGuard)
 export class TasksController {
   constructor(private readonly tasks: TasksService) {}
 

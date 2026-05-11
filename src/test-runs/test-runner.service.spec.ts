@@ -1,6 +1,10 @@
+import { mkdtemp, rm } from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
 import { TestRunnerService } from './test-runner.service';
 
 describe('TestRunnerService', () => {
+  let worktreePath: string;
   const prisma = {
     task: { findUnique: jest.fn() },
     agentSession: { findFirst: jest.fn() },
@@ -21,14 +25,19 @@ describe('TestRunnerService', () => {
 
   let service: TestRunnerService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    worktreePath = await mkdtemp(path.join(os.tmpdir(), 'arc-test-runner-'));
     jest.clearAllMocks();
     service = new TestRunnerService(prisma as any, policies as any, config as any, events as any);
     prisma.task.findUnique.mockResolvedValue({
       id: 'task-1',
-      worktreePath: '/tmp/arc-worktrees/task-1'
+      worktreePath
     });
     prisma.agentSession.findFirst.mockResolvedValue({ id: 'session-1' });
+  });
+
+  afterEach(async () => {
+    await rm(worktreePath, { recursive: true, force: true });
   });
 
   it('rejects unknown test command ids', async () => {

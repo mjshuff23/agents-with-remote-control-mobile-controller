@@ -66,6 +66,7 @@ describe('WebSocket events', () => {
 
     const createRes = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'do something', agent: 'codex' })
       .expect(201);
     const taskId: string = createRes.body.task.id;

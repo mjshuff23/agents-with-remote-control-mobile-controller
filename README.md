@@ -245,6 +245,8 @@ pnpm install
 pnpm dev          # http://localhost:3001
 ```
 
+The controller proxies REST calls through its Next.js server so `CONTROLLER_SECRET` can stay server-side for HTTP actions. WebSocket auth still uses `NEXT_PUBLIC_CONTROLLER_SECRET` because the browser connects directly to the orchestrator socket.
+
 The controller UI proxies API calls to the orchestrator at `http://127.0.0.1:3000`. Open `http://localhost:3001` in a browser (or on your phone via LAN IP) to start and monitor tasks.
 
 You can also use the REST API directly:
