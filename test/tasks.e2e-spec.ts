@@ -198,4 +198,36 @@ describe('Tasks API', () => {
       .send({ text: 'hello' })
       .expect(409);
   });
+
+  it('returns 409 when sending input to a task whose session is no longer active', async () => {
+    adapter.startTask.mockImplementationOnce(async (input) => {
+      await input.onOutput({ type: 'stdout', content: 'waiting' });
+      return {
+        externalSessionId: 'mock-session-exited',
+        stop: jest.fn(async () => { await input.onExit({ exitCode: 0 }); }),
+        write: jest.fn()
+      };
+    });
+
+    const created = await request(app.getHttpServer())
+      .post('/tasks')
+      .send({ prompt: 'Wait then exit', agent: 'codex' })
+      .expect(201);
+
+    // Stop the task; the mock stop() fires onExit() which removes the process
+    // from runningProcesses via completeFromExit (deferred through setImmediate).
+    await request(app.getHttpServer())
+      .post(`/tasks/${created.body.task.id}/stop`)
+      .expect(202);
+
+    // Allow the setImmediate → stop() → onExit → completeFromExit chain to finish.
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
+
+    const res = await request(app.getHttpServer())
+      .post(`/tasks/${created.body.task.id}/input`)
+      .send({ text: 'hello' })
+      .expect(409);
+
+    expect(res.body.detail).toMatch(/no live process/i);
+  });
 });

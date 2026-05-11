@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayInit,
@@ -12,6 +12,8 @@ import { AppConfigService } from '../config/app-config.service';
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' } })
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
+  private readonly logger = new Logger(EventsGateway.name);
+
   @WebSocketServer()
   private server?: Server;
 
@@ -19,6 +21,12 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
 
   afterInit(server: Server): void {
     this.server = server;
+    if (!this.config.controllerSecret) {
+      this.logger.error(
+        'CONTROLLER_SECRET is not set — all WebSocket connections will be rejected. ' +
+        'Set this environment variable to enable the controller UI.'
+      );
+    }
   }
 
   handleConnection(client: Socket): void {
