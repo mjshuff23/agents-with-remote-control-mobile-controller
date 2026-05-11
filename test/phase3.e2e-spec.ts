@@ -29,7 +29,8 @@ describe('Phase 3 local safety loop', () => {
   const gitCommands = { git: jest.fn() };
   const policy = {
     load: jest.fn(),
-    getTestCommand: jest.fn()
+    getTestCommand: jest.fn(),
+    listTestCommands: jest.fn()
   };
 
   beforeEach(async () => {
@@ -44,11 +45,14 @@ describe('Phase 3 local safety loop', () => {
       baseRef: 'main',
       baseCommit: 'abc123'
     });
-    gitCommands.git
-      .mockResolvedValueOnce({ stdout: '# branch.oid abc\0', stderr: '' })
-      .mockResolvedValueOnce({ stdout: ' src/a.ts | 2 +-\n', stderr: '' })
-      .mockResolvedValueOnce({ stdout: '2\t1\tsrc/a.ts\0', stderr: '' })
-      .mockResolvedValueOnce({ stdout: 'M\0src/a.ts\0', stderr: '' });
+    gitCommands.git.mockImplementation(async (_cwd: string, args: string[]) => {
+      const key = args.join(' ');
+      if (key.startsWith('status')) return { stdout: '# branch.oid abc\0', stderr: '' };
+      if (key.includes('--stat')) return { stdout: ' src/a.ts | 2 +-\n', stderr: '' };
+      if (key.includes('--numstat')) return { stdout: '2\t1\tsrc/a.ts\0', stderr: '' };
+      if (key.includes('--name-status')) return { stdout: 'M\0src/a.ts\0', stderr: '' };
+      throw new Error(`unexpected git args: ${key}`);
+    });
     policy.load.mockResolvedValue({
       version: 1,
       policy: {
@@ -63,6 +67,13 @@ describe('Phase 3 local safety loop', () => {
       label: 'Unit smoke',
       command: ['node', '-e', 'console.log("unit ok")']
     });
+    policy.listTestCommands.mockResolvedValue([
+      {
+        id: 'unit',
+        label: 'Unit smoke',
+        command: ['node', '-e', 'console.log("unit ok")']
+      }
+    ]);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService).useValue(createInMemoryPrisma())
@@ -90,13 +101,9 @@ describe('Phase 3 local safety loop', () => {
   });
 
   it('persists and resolves cooperative approval requests over REST and WebSocket', async () => {
+    let output: ((event: { type: 'stdout'; content: string }) => Promise<void>) | undefined;
     adapter.startTask.mockImplementation(async (input) => {
-      setTimeout(() => {
-        void input.onOutput({
-          type: 'stdout',
-          content: 'ARC_ACTION_REQUEST {"id":"action-1","actionType":"fs.write_patch","title":"Patch file","files":["src/a.ts"]}\n'
-        });
-      }, 100);
+      output = input.onOutput;
       return { externalSessionId: 'mock-session', stop: jest.fn(), write: writeStub };
     });
 
@@ -105,17 +112,23 @@ describe('Phase 3 local safety loop', () => {
     const created = await request(app.getHttpServer()).post('/tasks').send({ prompt: 'patch', agent: 'codex' }).expect(201);
     await socket.emitWithAck('subscribe', { taskId: created.body.task.id });
 
-    const event = await new Promise<any>((resolve, reject) => {
+    const eventPromise = new Promise<any>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('approval.requested timeout')), 3000);
       socket.on('approval.requested', (payload) => {
         clearTimeout(timeout);
         resolve(payload);
       });
     });
+    await output?.({
+      type: 'stdout',
+      content: 'ARC_ACTION_REQUEST {"id":"action-1","actionType":"fs.write_patch","title":"Patch file","files":["src/a.ts"]}\n'
+    });
+    const event = await eventPromise;
     expect(event.data.status).toBe('pending');
 
     const denied = await request(app.getHttpServer())
       .post(`/approvals/${event.data.id}/deny`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ message: 'Not this way' })
       .expect(202);
 

@@ -24,49 +24,58 @@ This document is the in-depth companion to [`README.md`](../README.md). It captu
 These are the NestJS modules the orchestrator is built around. Names are intentional — they should map 1:1 to source folders.
 
 ### TaskModule
+
 - Owns the `Task` entity and its lifecycle.
 - Endpoints: create / get / list / stop / input / approvals / diff summary / configured test runs.
 - Coordinates worktree creation before agent launch.
 
 ### AgentSessionModule
+
 - Owns the live link between a `Task` and a running agent process.
 - Tracks `AgentSession` state (`starting -> running -> waiting_approval -> completed | failed | stopped`).
 - Streams logs into `AgentLog`.
 - Parses cooperative `ARC_ACTION_REQUEST` lines from stdout without dropping normal logs.
 
 ### AgentAdapterModule
+
 - Houses the `AgentAdapter` interface + concrete adapters.
 - Current adapter: `CodexAdapter`.
 - Phase 6 grows it: `ClaudeAdapter`, `GeminiAdapter`.
 
 ### GitModule
+
 - `GitCommandService` wraps `git` with `execFile` argument arrays.
 - `GitWorktreeService` creates or reuses per-task worktrees.
 - `GitDiffService` summarizes worktree-scoped status, stat, numstat, and name-status output.
 - Branch naming: `agent/<task-id>-<slug>`.
 
 ### PolicyModule
+
 - Three-tier action taxonomy (see [`SAFETY.md`](SAFETY.md)).
 - `PolicyLoaderService` reads `arc.config.json`.
 - `ActionClassifierService` returns `SAFE`, `NEEDS_APPROVAL`, or `BLOCKED` with `ruleMatched` and rationale.
 
 ### ApprovalsModule
+
 - Owns the `ApprovalRequest` lifecycle: `pending -> approved | denied | expired | refused`.
 - Brokers cooperative `ARC_ACTION_REQUEST` and `ARC_APPROVAL` decisions.
 - Detects repeated denied/refused action requests and emits security events.
 
 ### EventsModule
+
 - Pushes lifecycle, log, approval, policy, diff, test, and worktree events to controller task rooms.
 - Keeps Phase 2 events compatible while adding a typed envelope for Phase 3 events.
 - Phase 6 can add Web Push for PWA + optional notification adapters.
 
 ### SyncModule (Phase 4+)
+
 - Outbound integrations.
 - Phase 4: GitHub + Linear.
 - Phase 5: Notion + Figma + MCP.
 - Not implemented in Phase 3.
 
 ### AuditLogModule
+
 - Append-only log of every approval, denial, and risk-classification decision.
 - Source of truth for "what did the agent ask, and what did the human decide?"
 
@@ -174,18 +183,23 @@ Detailed flow: [`diagrams.md`](diagrams.md#2-task-lifecycle-flow).
 ## Decisions worth surfacing
 
 ### Why CLI agents and not VS Code chat extensions?
+
 CLI agents have stable stdin/stdout contracts and a long history of being scriptable. VS Code chat panels are GUIs with private interaction protocols — automating them is fragile and ethically questionable. CLI is the right seam.
 
 ### Why NestJS over a hand-rolled Node server?
+
 Modules, DI, lifecycle, validators, guards, and WebSocket support are all first-class. The structure of the orchestrator (`TaskModule`, `AgentSessionModule`, `GitModule`, `PolicyModule`, `ApprovalsModule`, ...) maps cleanly to Nest modules. The cost of carrying NestJS for an MVP is small relative to the readability win.
 
 ### Why SQLite first?
+
 Single host, single user, embedded, zero ops. The day this matters is the day Phase 6 actually has parallel agents writing concurrently — at which point migrating to Postgres is a known and small project.
 
 ### Why default-deny on the safety model?
+
 Because the human is on a phone, with a smaller screen and less context than at the keyboard. The worst possible default is "let it through and trust the agent." The cost of a false denial is a single tap to override; the cost of a false allow is unbounded.
 
 ### Why no auto-merge?
+
 Even after every approval, merging stays a deliberate human action. This is a guardrail against drift — a system that auto-merges with approvals quickly becomes "look at the green check and merge," which is identical in outcome to no approval at all.
 
 ---

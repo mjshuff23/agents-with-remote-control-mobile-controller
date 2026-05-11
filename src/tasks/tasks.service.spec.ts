@@ -5,6 +5,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { GitDiffService } from '../git/git-diff.service';
 import { GitWorktreeService } from '../git/git-worktree.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
 import { TasksService } from './tasks.service';
 
@@ -27,7 +28,7 @@ describe('TasksService', () => {
   };
   const worktreeTask = {
     ...task,
-    repoPath: '/repo/worktrees/task-1-demo',
+    repoPath: '/repo',
     worktreePath: '/repo/worktrees/task-1-demo',
     branchName: 'agent/task-1-demo',
     baseRef: 'main',
@@ -87,6 +88,9 @@ describe('TasksService', () => {
   const tests = {
     runTaskCommand: jest.fn()
   };
+  const policies = {
+    listTestCommands: jest.fn()
+  };
   const config = {
     repoPath: '/repo',
     logTailLimit: 200
@@ -115,7 +119,8 @@ describe('TasksService', () => {
         { provide: GitWorktreeService, useValue: worktrees },
         { provide: ApprovalsService, useValue: approvals },
         { provide: GitDiffService, useValue: diffs },
-        { provide: TestRunnerService, useValue: tests }
+        { provide: TestRunnerService, useValue: tests },
+        { provide: PolicyLoaderService, useValue: policies }
       ]
     }).compile();
 
@@ -146,7 +151,7 @@ describe('TasksService', () => {
     expect(prisma.task.update).toHaveBeenCalledWith({
       where: { id: task.id },
       data: {
-        repoPath: '/repo/worktrees/task-1-demo',
+        repoPath: '/repo',
         worktreePath: '/repo/worktrees/task-1-demo',
         branchName: 'agent/task-1-demo',
         baseRef: 'main',

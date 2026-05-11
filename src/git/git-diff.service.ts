@@ -54,13 +54,14 @@ export class GitDiffService {
 
     const [status, stat, numstat, nameStatus] = await Promise.all([
       this.gitCommands.git(task.worktreePath, ['status', '--porcelain=v2', '-z', '--branch']),
-      this.gitCommands.git(task.worktreePath, ['diff', '--stat']),
-      this.gitCommands.git(task.worktreePath, ['diff', '--numstat', '-z']),
-      this.gitCommands.git(task.worktreePath, ['diff', '--name-status', '-z'])
+      this.gitCommands.git(task.worktreePath, ['diff', '--stat', 'HEAD']),
+      this.gitCommands.git(task.worktreePath, ['diff', '--numstat', '-z', 'HEAD']),
+      this.gitCommands.git(task.worktreePath, ['diff', '--name-status', '-z', 'HEAD'])
     ]);
 
-    const topFiles = parseNumstat(numstat.stdout);
-    const counts = parseNameStatus(nameStatus.stdout);
+    const statusCounts = parsePorcelainStatus(status.stdout);
+    const topFiles = mergeUntracked(parseNumstat(numstat.stdout), statusCounts.untrackedPaths);
+    const counts = mergeCounts(parseNameStatus(nameStatus.stdout), statusCounts);
     const riskFlags = computeRiskFlags(topFiles.map((file) => file.path), topFiles);
 
     const row = await this.prisma.gitChangeSummary.create({
@@ -106,18 +107,26 @@ export class GitDiffService {
 }
 
 function parseNumstat(output: string): Array<{ path: string; insertions: number; deletions: number }> {
-  return output
-    .split('\0')
-    .filter(Boolean)
-    .map((record) => {
-      const [insertionsRaw, deletionsRaw, filePath] = record.split('\t');
-      return {
-        path: filePath ?? record,
+  const tokens = output.split('\0').filter(Boolean);
+  const files: Array<{ path: string; insertions: number; deletions: number }> = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const [insertionsRaw, deletionsRaw, inlinePath] = tokens[i].split('\t');
+    let filePath = inlinePath;
+    if (!filePath && i + 1 < tokens.length) {
+      const sourcePath = tokens[i + 1];
+      const destinationPath = tokens[i + 2];
+      filePath = destinationPath ?? sourcePath;
+      i += destinationPath ? 2 : 1;
+    }
+    if (filePath) {
+      files.push({
+        path: filePath,
         insertions: parseCount(insertionsRaw),
         deletions: parseCount(deletionsRaw)
-      };
-    })
-    .filter((file) => file.path.length > 0);
+      });
+    }
+  }
+  return files;
 }
 
 function parseCount(value: string | undefined): number {
@@ -133,15 +142,71 @@ function parseNameStatus(output: string): { addedCount: number; modifiedCount: n
   let deletedCount = 0;
   let renamedCount = 0;
 
-  for (let i = 0; i < tokens.length; i += 2) {
+  for (let i = 0; i < tokens.length;) {
     const status = tokens[i] ?? '';
+    i += 1;
     if (status.startsWith('A')) addedCount += 1;
     else if (status.startsWith('D')) deletedCount += 1;
     else if (status.startsWith('R')) renamedCount += 1;
     else if (status.startsWith('M')) modifiedCount += 1;
+    i += status.startsWith('R') || status.startsWith('C') ? 2 : 1;
   }
 
   return { addedCount, modifiedCount, deletedCount, renamedCount };
+}
+
+function parsePorcelainStatus(output: string): { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number; untrackedPaths: string[] } {
+  const tokens = output.split('\0').filter(Boolean);
+  const counts = { addedCount: 0, modifiedCount: 0, deletedCount: 0, renamedCount: 0, untrackedPaths: [] as string[] };
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token.startsWith('#')) {
+      continue;
+    }
+    if (token.startsWith('? ')) {
+      counts.addedCount += 1;
+      counts.untrackedPaths.push(token.slice(2));
+      continue;
+    }
+    if (token.startsWith('2 ')) {
+      counts.renamedCount += 1;
+      i += 1;
+      continue;
+    }
+    if (!token.startsWith('1 ')) {
+      continue;
+    }
+    const xy = token.split(' ')[1] ?? '';
+    if (xy.includes('A')) counts.addedCount += 1;
+    else if (xy.includes('D')) counts.deletedCount += 1;
+    else if (xy.includes('M')) counts.modifiedCount += 1;
+  }
+  return counts;
+}
+
+function mergeCounts(
+  diffCounts: { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number },
+  statusCounts: { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number; untrackedPaths: string[] }
+) {
+  return {
+    addedCount: Math.max(diffCounts.addedCount, statusCounts.addedCount),
+    modifiedCount: Math.max(diffCounts.modifiedCount, statusCounts.modifiedCount),
+    deletedCount: Math.max(diffCounts.deletedCount, statusCounts.deletedCount),
+    renamedCount: Math.max(diffCounts.renamedCount, statusCounts.renamedCount)
+  };
+}
+
+function mergeUntracked(
+  files: Array<{ path: string; insertions: number; deletions: number }>,
+  untrackedPaths: string[]
+): Array<{ path: string; insertions: number; deletions: number }> {
+  const seen = new Set(files.map((file) => file.path));
+  for (const filePath of untrackedPaths) {
+    if (!seen.has(filePath)) {
+      files.push({ path: filePath, insertions: 0, deletions: 0 });
+    }
+  }
+  return files;
 }
 
 function computeRiskFlags(paths: string[], topFiles: Array<{ path: string; insertions: number; deletions: number }>): string[] {

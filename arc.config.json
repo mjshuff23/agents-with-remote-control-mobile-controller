@@ -56,8 +56,18 @@
         "rationale": "Force pushes are blocked by default."
       },
       {
+        "id": "git.force_push_with_lease",
+        "commandIncludes": ["push", "--force-with-lease"],
+        "rationale": "Force pushes are blocked by default."
+      },
+      {
         "id": "internet.pipe_shell",
         "commandIncludes": ["|", "sh"],
+        "rationale": "Pipe-from-internet shell execution is blocked."
+      },
+      {
+        "id": "internet.pipe_bash",
+        "commandIncludes": ["|", "bash"],
         "rationale": "Pipe-from-internet shell execution is blocked."
       },
       {

@@ -32,7 +32,8 @@ export class CodexAdapter implements AgentAdapter {
   constructor(private readonly config: AppConfigService) {}
 
   async startTask(input: StartAgentTaskInput): Promise<RunningAgentProcess> {
-    const launch = this.buildLaunchCommand(input.repoPath);
+    const executionPath = input.worktreePath ?? input.repoPath;
+    const launch = this.buildLaunchCommand(executionPath);
     let ptyProcess: pty.IPty;
 
     try {
@@ -43,7 +44,7 @@ export class CodexAdapter implements AgentAdapter {
         env: buildChildEnv(this.config.codexEnvKeys)
       };
       if (this.config.runnerMode === 'local') {
-        spawnOptions.cwd = input.repoPath;
+        spawnOptions.cwd = executionPath;
       }
 
       ptyProcess = pty.spawn(launch.command, launch.args, {

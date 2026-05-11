@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface AppendAuditInput {
@@ -16,9 +16,12 @@ export interface AppendAuditInput {
 
 @Injectable()
 export class AuditLogService {
+  private readonly logger = new Logger(AuditLogService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async append(input: AppendAuditInput) {
+    const metadataJson = this.serializeMetadata(input.metadata);
     return this.prisma.auditLog.create({
       data: {
         taskId: input.taskId,
@@ -30,8 +33,20 @@ export class AuditLogService {
         ruleMatched: input.ruleMatched,
         decision: input.decision,
         message: input.message,
-        metadataJson: input.metadata === undefined ? undefined : JSON.stringify(input.metadata)
+        metadataJson
       }
     });
+  }
+
+  private serializeMetadata(metadata: unknown): string | undefined {
+    if (metadata === undefined) {
+      return undefined;
+    }
+    try {
+      return JSON.stringify(metadata);
+    } catch (error) {
+      this.logger.warn(`Audit metadata could not be serialized: ${error instanceof Error ? error.message : String(error)}`);
+      return JSON.stringify({ error: 'unserializable metadata' });
+    }
   }
 }

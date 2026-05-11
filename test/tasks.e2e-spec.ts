@@ -77,7 +77,7 @@ describe('Tasks API', () => {
       prompt: 'Say hello',
       status: 'running',
       selectedAgent: 'codex',
-      repoPath: '/repo/worktrees/task',
+      repoPath: '/repo',
       worktreePath: '/repo/worktrees/task',
       branchName: 'agent/task-demo',
       baseRef: 'main',

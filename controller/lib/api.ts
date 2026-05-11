@@ -74,6 +74,30 @@ export interface GitChangeSummary {
   createdAt: string;
 }
 
+export interface DiffSummaryResponse {
+  id: string;
+  taskId: string;
+  sessionId: string | null;
+  statusText: string;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+  addedCount: number;
+  modifiedCount: number;
+  deletedCount: number;
+  renamedCount: number;
+  riskFlags: string[];
+  topFiles: Array<{ path: string; insertions: number; deletions: number; status?: string }>;
+  createdAt: string;
+}
+
+export interface TestCommandConfig {
+  id: string;
+  label: string;
+  cwd?: string;
+  command: string[];
+}
+
 export interface TestRunSummary {
   id: string;
   taskId: string;
@@ -101,7 +125,7 @@ export interface TaskEventEnvelope<TName extends string = string, TData = unknow
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, init);
+  const res = await fetch(`${API_BASE}${path}`, withControllerSecret(init));
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${init?.method ?? 'GET'} ${path} → ${res.status}: ${body}`);
@@ -109,6 +133,16 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+function withControllerSecret(init: RequestInit = {}): RequestInit {
+  const secret = process.env.NEXT_PUBLIC_CONTROLLER_SECRET;
+  if (!secret) {
+    return init;
+  }
+  const headers = new Headers(init.headers);
+  headers.set('X-Controller-Secret', secret);
+  return { ...init, headers };
 }
 
 export function listTasks(): Promise<{ tasks: Task[] }> {
@@ -143,6 +177,10 @@ export function listApprovals(id: string): Promise<{ approvals: ApprovalRequest[
   return apiFetch(`/tasks/${id}/approvals`);
 }
 
+export function listTestCommands(id: string): Promise<{ testCommands: TestCommandConfig[] }> {
+  return apiFetch(`/tasks/${id}/test-commands`);
+}
+
 export function approveAction(id: string, message?: string): Promise<{ approval: ApprovalRequest }> {
   return apiFetch(`/approvals/${id}/approve`, {
     method: 'POST',
@@ -159,7 +197,7 @@ export function denyAction(id: string, message?: string): Promise<{ approval: Ap
   });
 }
 
-export function summarizeDiff(id: string): Promise<GitChangeSummary> {
+export function summarizeDiff(id: string): Promise<DiffSummaryResponse> {
   return apiFetch(`/tasks/${id}/diff-summary`, { method: 'POST' });
 }
 

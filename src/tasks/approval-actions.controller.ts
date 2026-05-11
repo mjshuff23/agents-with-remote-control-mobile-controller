@@ -1,8 +1,10 @@
-import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import { AgentSessionsService } from '../agent-sessions/agent-sessions.service';
+import { ControllerSecretGuard } from '../common/guards/controller-secret.guard';
 import { ApprovalDecisionDto } from '../approvals/dto/approval-decision.dto';
 
 @Controller('approvals')
+@UseGuards(ControllerSecretGuard)
 export class ApprovalActionsController {
   constructor(private readonly agentSessions: AgentSessionsService) {}
 

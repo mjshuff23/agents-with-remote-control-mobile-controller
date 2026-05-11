@@ -92,6 +92,8 @@ model ApprovalRequest {
 
   @@unique([taskId, actionRequestId])
   @@index([taskId, status])
+  @@index([taskId, actionType, status])
+  @@index([taskId, actionType, requestedAt])
   @@index([sessionId])
 }
 

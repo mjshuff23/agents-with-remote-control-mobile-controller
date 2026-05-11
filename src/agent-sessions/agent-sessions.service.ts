@@ -321,7 +321,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       '- Do not read secrets such as .env, *.pem, *.key, id_*, or ~/.ssh files.',
       '- Do not commit, push, open PRs, deploy, modify global config, or run internet-piped shell scripts.',
       '- When an action may mutate files, install packages, run migrations, write git state, or execute an unknown shell command, print exactly one machine-readable line before doing it:',
-      'ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command | policy.violation","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"short title","rationale":"why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"one sentence"}',
+      'ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"short title","rationale":"why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"one sentence"}',
       '- Wait for ARC_APPROVAL on stdin. If denied or expired, do not retry the same action by paraphrasing it. If refused or BLOCKED, do not ask again.',
       '- If approved, do only the exact approved action inside the stated constraints.',
       '- After mutating actions, allow the orchestrator to capture diff and test summaries.',
@@ -396,6 +396,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     if (session?.status !== 'waiting_approval') {
       return;
     }
+    if (await this.approvals.hasPendingForSession(sessionId)) {
+      return;
+    }
     await this.prisma.agentSession.update({
       where: { id: sessionId },
       data: { status: 'running' }
@@ -415,14 +418,16 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       await this.appendLog(sessionId, 'system', `Approval response could not be sent; session has no writable process`);
       return;
     }
-    running.write(`${APPROVAL_RESPONSE_PREFIX} ${JSON.stringify(payload)}`);
+    running.write(`${APPROVAL_RESPONSE_PREFIX} ${JSON.stringify(payload)}\n`);
     await this.appendLog(sessionId, 'system', `Approval ${payload.decision} sent for ${payload.id}`);
   }
 
   private scheduleApprovalExpiry(approvalId: string, sessionId: string): void {
     this.clearApprovalTimeout(approvalId);
     const timeout = setTimeout(() => {
-      void this.expireApproval(approvalId, sessionId);
+      void this.expireApproval(approvalId, sessionId).catch(async (error) => {
+        await this.appendLog(sessionId, 'system', `Approval expiry failed: ${this.errorMessage(error)}`);
+      });
     }, this.config.approvalTimeoutMs).unref();
     this.approvalTimeouts.set(approvalId, timeout);
     this.approvalTimeoutSessions.set(approvalId, sessionId);
@@ -430,7 +435,16 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
   private async expireApproval(approvalId: string, sessionId: string): Promise<void> {
     this.clearApprovalTimeout(approvalId);
-    const approval = await this.approvals.resolve(approvalId, 'expired', 'Approval timed out; expired approvals are denied.');
+    let approval;
+    try {
+      approval = await this.approvals.resolve(approvalId, 'expired', 'Approval timed out; expired approvals are denied.');
+    } catch (error) {
+      if (error instanceof ProblemException && error.getStatus() === HttpStatus.CONFLICT) {
+        await this.appendLog(sessionId, 'system', `Approval ${approvalId} was already resolved before expiry`);
+        return;
+      }
+      throw error;
+    }
     await this.writeApprovalResponse(sessionId, {
       id: approval.actionRequestId,
       decision: 'expired',

@@ -33,9 +33,15 @@ export class ApprovalsService {
     return { approvals };
   }
 
+  async hasPendingForSession(sessionId: string): Promise<boolean> {
+    const pending = await this.prisma.approvalRequest.findFirst({
+      where: { sessionId, status: 'pending' }
+    });
+    return pending !== null;
+  }
+
   async createFromAgentRequest(taskId: string, sessionId: string, request: AgentActionRequest): Promise<CreateApprovalResult> {
     this.validateRequest(request);
-    const classification = await this.classifier.classify(request);
     const commandJson = JSON.stringify(request.command ?? []);
     const filesJson = JSON.stringify(request.files ?? []);
     const repeated = await this.findRepeatedDenied(taskId, request.actionType, commandJson, filesJson);
@@ -82,6 +88,7 @@ export class ApprovalsService {
       return { approval, decision: 'refused', responseMessage: 'Repeated denied/refused action request was blocked.' };
     }
 
+    const classification = await this.classifier.classify(request);
     const terminalDecision =
       classification.riskLevel === 'BLOCKED' ? 'refused' :
         classification.riskLevel === 'SAFE' ? 'auto_allow' :
@@ -151,7 +158,23 @@ export class ApprovalsService {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Approval Not Found', `Approval "${approvalId}" does not exist.`);
     }
     if (approval.status !== 'pending') {
-      return approval;
+      await this.audit.append({
+        taskId: approval.taskId,
+        sessionId: approval.sessionId ?? undefined,
+        approvalRequestId: approval.id,
+        kind: 'approval.resolve_conflict',
+        actionType: approval.actionType,
+        riskLevel: approval.riskLevel,
+        ruleMatched: approval.ruleMatched ?? undefined,
+        decision,
+        message: `Approval "${approval.id}" is already ${approval.status}`,
+        metadata: { attemptedDecision: decision }
+      });
+      throw new ProblemException(
+        HttpStatus.CONFLICT,
+        'Approval Already Resolved',
+        `Approval "${approval.id}" is already ${approval.status}.`
+      );
     }
 
     const now = new Date();
@@ -189,27 +212,27 @@ export class ApprovalsService {
   }
 
   private async findRepeatedDenied(taskId: string, actionType: string, commandJson: string, filesJson: string): Promise<ApprovalRequest | null> {
-    const previous = await this.prisma.approvalRequest.findMany({
-      where: { taskId, actionType },
-      orderBy: { requestedAt: 'desc' },
-      take: 20
+    return this.prisma.approvalRequest.findFirst({
+      where: {
+        taskId,
+        actionType,
+        status: { in: ['denied', 'expired', 'refused'] },
+        commandJson,
+        filesJson
+      },
+      orderBy: { requestedAt: 'desc' }
     });
-    return previous.find((approval) =>
-      ['denied', 'expired', 'refused'].includes(approval.status) &&
-      approval.commandJson === commandJson &&
-      approval.filesJson === filesJson
-    ) ?? null;
   }
 
   private validateRequest(request: AgentActionRequest): void {
     if (!request.id || !request.actionType || !request.title) {
-      throw new Error('ARC_ACTION_REQUEST must include id, actionType, and title');
+      throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Action Request', 'ARC_ACTION_REQUEST must include id, actionType, and title');
     }
     if (request.command && !Array.isArray(request.command)) {
-      throw new Error('ARC_ACTION_REQUEST command must be an array');
+      throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Action Request', 'ARC_ACTION_REQUEST command must be an array');
     }
     if (request.files && !Array.isArray(request.files)) {
-      throw new Error('ARC_ACTION_REQUEST files must be an array');
+      throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Action Request', 'ARC_ACTION_REQUEST files must be an array');
     }
   }
 }

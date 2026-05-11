@@ -52,6 +52,27 @@ describe('CodexAdapter', () => {
     );
   });
 
+  it('uses the task worktree as the execution directory when present', async () => {
+    const adapter = new CodexAdapter(createConfig() as any);
+
+    await adapter.startTask({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      repoPath: '/home/user/repo',
+      worktreePath: '/home/user/worktrees/task-1',
+      prompt: 'hello',
+      onOutput: jest.fn(),
+      onExit: jest.fn()
+    });
+
+    expect(spawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--json', '--cd', '/home/user/worktrees/task-1', '-'],
+      expect.objectContaining({ cwd: '/home/user/worktrees/task-1' })
+    );
+  });
+
+
   it('keeps stop idempotent if the PTY already exited', async () => {
     const process = createPtyProcess();
     process.kill.mockImplementationOnce(() => {

@@ -53,8 +53,7 @@ export class ActionClassifierService {
     }
 
     if (rule.commandIncludes) {
-      const commandText = (request.command ?? []).join(' ').toLowerCase();
-      if (!rule.commandIncludes.every((piece) => commandText.includes(piece.toLowerCase()))) {
+      if (!commandIncludesAll(request.command ?? [], rule.commandIncludes)) {
         return false;
       }
     }
@@ -71,12 +70,87 @@ export class ActionClassifierService {
 }
 
 function globMatches(glob: string, value: string): boolean {
-  const normalized = value.replaceAll('\\', '/').replace(/^\.?\//, '');
-  const escaped = glob
-    .replaceAll('\\', '/')
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replaceAll('**', '\u0000')
-    .replaceAll('*', '[^/]*')
-    .replaceAll('\u0000', '.*');
-  return new RegExp(`(^|/)${escaped}$`).test(normalized);
+  const globSegments = normalizePath(glob).split('/').filter(Boolean);
+  const valueSegments = normalizePath(value).split('/').filter(Boolean);
+  if (globSegments.length === 1) {
+    return valueSegments.some((segment) => segmentMatches(globSegments[0], segment));
+  }
+  return matchSegments(globSegments, valueSegments, 0, 0, new Map<string, boolean>());
+}
+
+function normalizePath(value: string): string {
+  return value.replaceAll('\\', '/').replace(/^\.?\//, '');
+}
+
+function matchSegments(globSegments: string[], valueSegments: string[], gi: number, vi: number, memo: Map<string, boolean>): boolean {
+  const key = `${gi}:${vi}`;
+  const cached = memo.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const globSegment = globSegments[gi];
+  let result: boolean;
+  if (globSegment === undefined) {
+    result = vi === valueSegments.length;
+  } else if (globSegment === '**') {
+    result =
+      matchSegments(globSegments, valueSegments, gi + 1, vi, memo) ||
+      (vi < valueSegments.length && matchSegments(globSegments, valueSegments, gi, vi + 1, memo));
+  } else {
+    result = vi < valueSegments.length && segmentMatches(globSegment, valueSegments[vi]) &&
+      matchSegments(globSegments, valueSegments, gi + 1, vi + 1, memo);
+  }
+  memo.set(key, result);
+  return result;
+}
+
+function segmentMatches(globSegment: string, valueSegment: string): boolean {
+  return wildcardMatches(globSegment, valueSegment, 0, 0, new Map<string, boolean>());
+}
+
+function wildcardMatches(pattern: string, value: string, pi: number, vi: number, memo: Map<string, boolean>): boolean {
+  const key = `${pi}:${vi}`;
+  const cached = memo.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const char = pattern[pi];
+  let result: boolean;
+  if (char === undefined) {
+    result = vi === value.length;
+  } else if (char === '*') {
+    result =
+      wildcardMatches(pattern, value, pi + 1, vi, memo) ||
+      (vi < value.length && wildcardMatches(pattern, value, pi, vi + 1, memo));
+  } else {
+    result = value[vi] === char && wildcardMatches(pattern, value, pi + 1, vi + 1, memo);
+  }
+  memo.set(key, result);
+  return result;
+}
+
+function commandIncludesAll(command: string[], pieces: string[]): boolean {
+  const tokens = command.flatMap(tokenizeCommandPart);
+  return pieces.every((piece) => tokens.some((token) => commandPieceMatches(token, piece.toLowerCase())));
+}
+
+function tokenizeCommandPart(part: string): string[] {
+  return part
+    .replaceAll('|', ' | ')
+    .replaceAll('&', ' & ')
+    .replaceAll(';', ' ; ')
+    .split(/\s+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function commandPieceMatches(token: string, piece: string): boolean {
+  if (piece === '..') {
+    return token === '..' || token.startsWith('../') || token.includes('/../');
+  }
+  if (piece.startsWith('--')) {
+    return token === piece || token.startsWith(`${piece}=`);
+  }
+  return token === piece;
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import type { ApprovalRequest, GitChangeSummary, TaskEventEnvelope, TestRunSummary } from './api';
+import type { ApprovalRequest, DiffSummaryResponse, TaskEventEnvelope, TestRunSummary } from './api';
 
 type GlobalWithSocket = typeof globalThis & {
   __CONTROLLER_SOCKET__?: Socket;
@@ -67,7 +67,7 @@ export interface TaskSocketHandlers {
   onApprovalRequested?: (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => void;
   onApprovalResolved?: (event: TaskEventEnvelope<'approval.resolved', ApprovalRequest>) => void;
   onPolicyViolation?: (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => void;
-  onDiffSummary?: (event: TaskEventEnvelope<'diff.summary', GitChangeSummary>) => void;
+  onDiffSummary?: (event: TaskEventEnvelope<'diff.summary', DiffSummaryResponse>) => void;
   onTestStarted?: (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => void;
   onTestLog?: (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => void;
   onTestCompleted?: (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => void;
@@ -114,7 +114,7 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
       const onPolicyViolation = (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => {
         if (event.taskId === taskId) ref.current.onPolicyViolation?.(event);
       };
-      const onDiffSummary = (event: TaskEventEnvelope<'diff.summary', GitChangeSummary>) => {
+      const onDiffSummary = (event: TaskEventEnvelope<'diff.summary', DiffSummaryResponse>) => {
         if (event.taskId === taskId) ref.current.onDiffSummary?.(event);
       };
       const onTestStarted = (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => {

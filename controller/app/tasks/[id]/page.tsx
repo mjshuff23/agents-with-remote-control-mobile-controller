@@ -5,15 +5,18 @@ import {
   approveAction,
   denyAction,
   getTask,
+  listTestCommands,
   runTest,
   sendInput,
   stopTask,
   summarizeDiff,
   type ApprovalRequest,
+  type DiffSummaryResponse,
   type GitChangeSummary,
   type LogEntry,
   type Session,
   type Task,
+  type TestCommandConfig,
   type TestRunSummary
 } from '../../../lib/api';
 import { TaskLogPane } from '../../../components/task-log-pane';
@@ -27,12 +30,15 @@ export default function TaskDetailPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
-  const [changeSummaries, setChangeSummaries] = useState<GitChangeSummary[]>([]);
+  const [changeSummaries, setChangeSummaries] = useState<DiffSummaryResponse[]>([]);
   const [testRuns, setTestRuns] = useState<TestRunSummary[]>([]);
+  const [testCommands, setTestCommands] = useState<TestCommandConfig[]>([]);
+  const [selectedTestCommandId, setSelectedTestCommandId] = useState('');
   const [inputText, setInputText] = useState('');
   const [showInput, setShowInput] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [denyMessages, setDenyMessages] = useState<Record<string, string>>({});
+  const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
   const seqRef = useRef(0);
   const seenSeqs = useRef(new Set<number>());
   const seenEvents = useRef(new Set<string>());
@@ -48,16 +54,21 @@ export default function TaskDetailPage() {
     setApprovals([]);
     setChangeSummaries([]);
     setTestRuns([]);
+    setTestCommands([]);
+    setSelectedTestCommandId('');
     setTask(null);
     setSession(null);
 
-    getTask(id)
-      .then(({ task, session, logs, approvals, changeSummaries, testRuns }) => {
+    Promise.all([getTask(id), listTestCommands(id)])
+      .then(([details, commands]) => {
+        const { task, session, logs, approvals, changeSummaries, testRuns } = details;
         setTask(task);
         setSession(session);
         setApprovals(approvals);
-        setChangeSummaries(changeSummaries);
+        setChangeSummaries(changeSummaries.map(normalizeStoredDiffSummary));
         setTestRuns(testRuns);
+        setTestCommands(commands.testCommands);
+        setSelectedTestCommandId(commands.testCommands[0]?.id ?? '');
         sessionIdRef.current = session?.id ?? '';
         setLogs(logs);
         if (logs.length > 0) {
@@ -174,22 +185,36 @@ export default function TaskDetailPage() {
 
   async function handleApprove(approvalId: string) {
     setActionError(null);
+    setPendingApprovalActionIds((prev) => new Set(prev).add(approvalId));
     try {
       const result = await approveAction(approvalId);
       upsertApproval(result.approval);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Approval failed');
+    } finally {
+      setPendingApprovalActionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(approvalId);
+        return next;
+      });
     }
   }
 
   async function handleDeny(approvalId: string) {
     setActionError(null);
+    setPendingApprovalActionIds((prev) => new Set(prev).add(approvalId));
     try {
       const result = await denyAction(approvalId, denyMessages[approvalId]);
       upsertApproval(result.approval);
       setDenyMessages((prev) => ({ ...prev, [approvalId]: '' }));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Deny failed');
+    } finally {
+      setPendingApprovalActionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(approvalId);
+        return next;
+      });
     }
   }
 
@@ -205,8 +230,12 @@ export default function TaskDetailPage() {
 
   async function handleRunTests() {
     setActionError(null);
+    if (!selectedTestCommandId) {
+      setActionError('No configured test command is available for this task.');
+      return;
+    }
     try {
-      const started = await runTest(id, 'root:test');
+      const started = await runTest(id, selectedTestCommandId);
       setTestRuns((prev) => [started, ...prev.filter((item) => item.id !== started.id)].slice(0, 10));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Test run failed');
@@ -242,6 +271,7 @@ export default function TaskDetailPage() {
           {pendingApprovals.map((approval) => {
             const command = parseJson<string[]>(approval.commandJson, []);
             const files = parseJson<string[]>(approval.filesJson, []);
+            const isResolving = pendingApprovalActionIds.has(approval.id);
             return (
               <div key={approval.id} className="border border-amber-200 bg-white rounded-lg p-3 space-y-2">
                 <div className="flex items-start justify-between gap-3">
@@ -266,13 +296,15 @@ export default function TaskDetailPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => void handleApprove(approval.id)}
-                    className="flex-1 bg-green-600 text-white py-2 rounded text-xs font-semibold"
+                    disabled={isResolving}
+                    className="flex-1 bg-green-600 text-white py-2 rounded text-xs font-semibold disabled:opacity-50"
                   >
-                    Approve
+                    {isResolving ? 'Working…' : 'Approve'}
                   </button>
                   <button
                     onClick={() => void handleDeny(approval.id)}
-                    className="flex-1 border border-red-500 text-red-600 py-2 rounded text-xs font-semibold"
+                    disabled={isResolving}
+                    className="flex-1 border border-red-500 text-red-600 py-2 rounded text-xs font-semibold disabled:opacity-50"
                   >
                     Deny
                   </button>
@@ -290,9 +322,9 @@ export default function TaskDetailPage() {
               <p className="text-xs text-gray-500">
                 +{latestDiff.insertions} / -{latestDiff.deletions} · A{latestDiff.addedCount} M{latestDiff.modifiedCount} D{latestDiff.deletedCount} R{latestDiff.renamedCount}
               </p>
-              {parseJson<string[]>(latestDiff.riskFlagsJson, []).length > 0 && (
+              {latestDiff.riskFlags.length > 0 && (
                 <p className="mt-1 text-xs text-amber-700">
-                  {parseJson<string[]>(latestDiff.riskFlagsJson, []).join(', ')}
+                  {latestDiff.riskFlags.join(', ')}
                 </p>
               )}
             </div>
@@ -371,10 +403,24 @@ export default function TaskDetailPage() {
             </button>
             <button
               onClick={() => void handleRunTests()}
+              disabled={!selectedTestCommandId}
               className="border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 active:scale-95 transition-all"
             >
               Test
             </button>
+            {testCommands.length > 1 && (
+              <select
+                value={selectedTestCommandId}
+                onChange={(e) => setSelectedTestCommandId(e.target.value)}
+                className="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                {testCommands.map((command) => (
+                  <option key={command.id} value={command.id}>
+                    {command.label}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
         {!isLive && (
@@ -385,6 +431,25 @@ export default function TaskDetailPage() {
       </div>
     </div>
   );
+}
+
+function normalizeStoredDiffSummary(summary: GitChangeSummary): DiffSummaryResponse {
+  return {
+    id: summary.id,
+    taskId: summary.taskId,
+    sessionId: summary.sessionId,
+    statusText: summary.statusText,
+    filesChanged: summary.filesChanged,
+    insertions: summary.insertions,
+    deletions: summary.deletions,
+    addedCount: summary.addedCount,
+    modifiedCount: summary.modifiedCount,
+    deletedCount: summary.deletedCount,
+    renamedCount: summary.renamedCount,
+    riskFlags: parseJson<string[]>(summary.riskFlagsJson, []),
+    topFiles: parseJson<Array<{ path: string; insertions: number; deletions: number; status?: string }>>(summary.topFilesJson, []),
+    createdAt: summary.createdAt
+  };
 }
 
 function parseJson<T>(value: string | null, fallback: T): T {

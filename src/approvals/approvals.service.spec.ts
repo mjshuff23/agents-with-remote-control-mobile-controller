@@ -7,6 +7,7 @@ describe('ApprovalsService', () => {
   const prisma = {
     approvalRequest: {
       create: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn()
@@ -21,7 +22,7 @@ describe('ApprovalsService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers().setSystemTime(now);
-    (prisma.approvalRequest.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.approvalRequest.findFirst as jest.Mock).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -93,7 +94,7 @@ describe('ApprovalsService', () => {
       ruleMatched: 'fs.mutation',
       rationale: 'file writes require approval'
     });
-    (prisma.approvalRequest.findMany as jest.Mock).mockResolvedValue([
+    (prisma.approvalRequest.findFirst as jest.Mock).mockResolvedValue(
       {
         id: 'old-approval',
         taskId: 'task-1',
@@ -102,7 +103,7 @@ describe('ApprovalsService', () => {
         filesJson: '["src/a.ts"]',
         status: 'denied'
       }
-    ]);
+    );
     (prisma.approvalRequest.create as jest.Mock).mockImplementation(async ({ data }) => ({ id: 'approval-2', ...data }));
 
     const result = await service.createFromAgentRequest('task-1', 'session-1', {
@@ -159,5 +160,28 @@ describe('ApprovalsService', () => {
         decision: 'expired'
       })
     });
+  });
+
+  it('conflicts when resolving an already resolved approval', async () => {
+    const resolvedApproval = {
+      id: 'approval-1',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      actionRequestId: 'action-1',
+      actionType: 'fs.write_patch',
+      riskLevel: 'NEEDS_APPROVAL',
+      status: 'denied',
+      ruleMatched: 'fs.mutation',
+      expiresAt: new Date('2026-05-11T12:10:00.000Z')
+    };
+    (prisma.approvalRequest.findUnique as jest.Mock).mockResolvedValue(resolvedApproval);
+
+    await expect(service.resolve('approval-1', 'approved')).rejects.toMatchObject({
+      response: { status: 409 }
+    });
+    expect(audit.append).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'approval.resolve_conflict',
+      decision: 'approved'
+    }));
   });
 });

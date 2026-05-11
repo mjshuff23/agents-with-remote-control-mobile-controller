@@ -40,6 +40,7 @@ export class TestRunnerService {
     if (command.command.length === 0) {
       throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" has no executable.`);
     }
+    assertSafeConfiguredCommand(command.command, commandId);
     const row = await this.prisma.testRunSummary.create({
       data: {
         taskId,
@@ -65,6 +66,7 @@ export class TestRunnerService {
     const [bin, ...args] = command;
     const child = spawn(bin, args, { cwd, shell: false, env: safeTestEnv() });
     const highlights: string[] = [];
+    let finished = false;
 
     const handleData = (chunk: Buffer, stream: 'stdout' | 'stderr') => {
       const content = chunk.toString('utf8');
@@ -81,9 +83,13 @@ export class TestRunnerService {
     child.stdout.on('data', (chunk: Buffer) => handleData(chunk, 'stdout'));
     child.stderr.on('data', (chunk: Buffer) => handleData(chunk, 'stderr'));
     child.on('error', async (error) => {
+      if (finished) return;
+      finished = true;
       await this.complete(taskId, sessionId, testRunId, 1, 'failed', [`Failed to start: ${error.message}`]);
     });
     child.on('close', async (exitCode) => {
+      if (finished) return;
+      finished = true;
       await this.complete(taskId, sessionId, testRunId, exitCode ?? 1, exitCode === 0 ? 'passed' : 'failed', highlights);
     });
   }
@@ -111,7 +117,7 @@ function isInside(root: string, candidate: string): boolean {
 }
 
 function safeTestEnv(): NodeJS.ProcessEnv {
-  const allowedKeys = ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'TERM', 'TZ', 'CI'];
+  const allowedKeys = ['PATH', 'USER', 'USERNAME', 'SHELL', 'TERM', 'TZ', 'CI'];
   const env: NodeJS.ProcessEnv = { NODE_ENV: 'test' };
   for (const key of allowedKeys) {
     const value = process.env[key];
@@ -120,4 +126,17 @@ function safeTestEnv(): NodeJS.ProcessEnv {
     }
   }
   return env;
+}
+
+function assertSafeConfiguredCommand(command: string[], commandId: string): void {
+  const [bin, ...args] = command;
+  if (!bin || bin.includes('\0') || /[|&;<>()`$]/.test(bin)) {
+    throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" has an unsafe executable.`);
+  }
+  if ((path.isAbsolute(bin) || bin.includes('..')) && !bin.startsWith('node_modules/.bin/')) {
+    throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" executable must be a bare command or a repo-local node_modules binary.`);
+  }
+  if (args.some((arg) => arg.includes('\0'))) {
+    throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" contains an invalid argument.`);
+  }
 }

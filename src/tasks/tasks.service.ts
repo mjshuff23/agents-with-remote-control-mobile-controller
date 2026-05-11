@@ -9,6 +9,7 @@ import { GitWorktreeService, WorktreeResult } from '../git/git-worktree.service'
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 
 export interface CreateTaskResult {
@@ -35,6 +36,7 @@ export class TasksService {
     private readonly approvals: ApprovalsService,
     private readonly diffs: GitDiffService,
     private readonly tests: TestRunnerService,
+    private readonly policies: PolicyLoaderService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -65,7 +67,7 @@ export class TasksService {
     const created = await this.prisma.task.update({
       where: { id: draft.id },
       data: {
-        repoPath: worktree.worktreePath,
+        repoPath: worktree.repoPath,
         worktreePath: worktree.worktreePath,
         branchName: worktree.branchName,
         baseRef: worktree.baseRef,
@@ -164,6 +166,11 @@ export class TasksService {
   async runTest(id: string, commandId: string) {
     await this.assertTaskExists(id);
     return this.tests.runTaskCommand(id, commandId);
+  }
+
+  async listTestCommands(id: string) {
+    await this.assertTaskExists(id);
+    return { testCommands: await this.policies.listTestCommands() };
   }
 
   private async assertTaskExists(id: string): Promise<Task> {

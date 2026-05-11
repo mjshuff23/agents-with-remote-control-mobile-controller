@@ -80,7 +80,7 @@ If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassi
 When native CLI approval hooks are unavailable, agents cooperate with the orchestrator using exactly one machine-readable stdout line:
 
 ```text
-ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command | policy.violation","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"Short title","rationale":"Why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"One sentence"}
+ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"Short title","rationale":"Why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"One sentence"}
 ```
 
 The orchestrator classifies the request with `arc.config.json`, creates an `ApprovalRequest` row when relevant, emits `approval.requested` or `policy.violation`, and replies over stdin:

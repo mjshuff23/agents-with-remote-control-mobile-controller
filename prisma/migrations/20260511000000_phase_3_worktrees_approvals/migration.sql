@@ -96,6 +96,12 @@ CREATE UNIQUE INDEX "ApprovalRequest_taskId_actionRequestId_key" ON "ApprovalReq
 CREATE INDEX "ApprovalRequest_taskId_status_idx" ON "ApprovalRequest"("taskId", "status");
 
 -- CreateIndex
+CREATE INDEX "ApprovalRequest_taskId_actionType_status_idx" ON "ApprovalRequest"("taskId", "actionType", "status");
+
+-- CreateIndex
+CREATE INDEX "ApprovalRequest_taskId_actionType_requestedAt_idx" ON "ApprovalRequest"("taskId", "actionType", "requestedAt");
+
+-- CreateIndex
 CREATE INDEX "ApprovalRequest_sessionId_idx" ON "ApprovalRequest"("sessionId");
 
 -- CreateIndex

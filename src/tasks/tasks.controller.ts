@@ -56,4 +56,9 @@ export class TasksController {
   async runTest(@Param('id') id: string, @Body() body: RunTestDto) {
     return this.tasks.runTest(id, body.commandId);
   }
+
+  @Get(':id/test-commands')
+  async listTestCommands(@Param('id') id: string) {
+    return this.tasks.listTestCommands(id);
+  }
 }
