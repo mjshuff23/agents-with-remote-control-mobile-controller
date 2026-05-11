@@ -81,10 +81,10 @@ export class TestRunnerService {
     return row;
   }
 
-  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, command: SafeSpawnCommand, timeoutMs: number): Promise<void> {
+  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, safeSpawn: SafeSpawnCommand, timeoutMs: number): Promise<void> {
     let child;
     try {
-      child = spawn(command.bin, command.args, { cwd, shell: false, env: safeTestEnv() });
+      child = spawn(safeSpawn.bin, safeSpawn.args, { cwd, shell: false, env: safeTestEnv() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.complete(taskId, sessionId, testRunId, 1, 'failed', [`Failed to start: ${message}`]);
