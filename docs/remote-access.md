@@ -25,8 +25,16 @@ ARC_ALLOW_PUBLIC_BIND=true
 
 Update `controller/.env.local`:
 ```bash
+# NEXT_PUBLIC_WS_URL — used by the phone's browser to open the WebSocket.
+# Must be the external IP/hostname, since the browser connects from outside WSL2.
 NEXT_PUBLIC_WS_URL=http://100.x.x.x:3000
-BACKEND_URL=http://100.x.x.x:3000
+
+# BACKEND_URL — used by the Next.js server to proxy REST calls to NestJS.
+# Next.js and NestJS both run inside WSL2, so always use 127.0.0.1 here.
+# Do NOT set this to the Windows LAN or Tailscale IP — that routes traffic
+# out of WSL2 and back in, which breaks under most WSL2 network configs.
+BACKEND_URL=http://127.0.0.1:3000
+
 NEXT_PUBLIC_CONTROLLER_SECRET=<your secret>
 CONTROLLER_SECRET=<your secret>
 ```
