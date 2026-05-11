@@ -40,7 +40,7 @@ Phases 1 and 2 are complete. Phase 3 is the current local-loop hardening impleme
 Deferred until later phases:
 
 - GitHub, Linear, Notion, Figma, MCP sync, and draft PR automation.
-- Claude Code, Gemini, and multi-agent workflows.
+- Claude Code, Gemini, opencode, and multi-agent workflows (adapter pattern is documented in [`docs/adding-agents.md`](docs/adding-agents.md)).
 
 See [`PLAN.md`](PLAN.md) for phase handoff contracts and manual smoke tests.
 
@@ -255,15 +255,24 @@ You can also use the REST API directly:
 # Start a task
 curl -i -X POST http://127.0.0.1:3000/tasks \
   -H 'Content-Type: application/json' \
+  -H 'X-Controller-Secret: <your-secret>' \
   -d '{"prompt":"Say hello from Codex and then stop.","agent":"codex","title":"Smoke test"}'
 
 # Inspect it
-curl http://127.0.0.1:3000/tasks/<task-id>
+curl -H 'X-Controller-Secret: <your-secret>' http://127.0.0.1:3000/tasks/<task-id>
 ```
+
+### Accessing from your phone
+
+**Same network (home/office WiFi):** set `ARC_HOST=0.0.0.0` and `ARC_ALLOW_PUBLIC_BIND=true` in `.env`, update `controller/.env.local` with your LAN IP, and open `http://<LAN-IP>:3001` on your phone.
+
+**Outside your network (gym, travel):** see [`docs/remote-access.md`](docs/remote-access.md) for Tailscale, NetBird, Cloudflare Tunnel, and ngrok options. Tailscale is recommended for daily use — install once, works everywhere, no open ports.
 
 More detail:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full system design
 - [`docs/SAFETY.md`](docs/SAFETY.md) — safety model and approval gates
+- [`docs/remote-access.md`](docs/remote-access.md) — Tailscale, NetBird, Cloudflare Tunnel, ngrok
+- [`docs/adding-agents.md`](docs/adding-agents.md) — how to add Claude Code, Gemini, opencode, or any custom CLI agent
 - [`docs/diagrams.md`](docs/diagrams.md) — all 7 system diagrams
 - [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md) — Mermaid mirrors of the FigJam companion boards
 - [`PLAN.md`](PLAN.md) — current phase contracts, Phase 3 handoff, and manual smoke tests
