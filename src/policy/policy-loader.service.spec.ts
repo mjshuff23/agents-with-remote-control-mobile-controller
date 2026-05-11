@@ -107,6 +107,25 @@ describe('PolicyLoaderService', () => {
     await expect(service.load()).rejects.toThrow('approval.timeoutMs');
   });
 
+  it('returns the policy approval timeout with env fallback', async () => {
+    await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
+      version: 1,
+      approval: { timeoutMs: 1234 },
+      policy: {
+        safe: [{ id: 'safe.test', actionTypes: ['test.run'], rationale: 'Test.' }],
+        needsApproval: [],
+        blocked: []
+      },
+      testCommands: [{ id: 'root:test', label: 'Test', command: ['npm', 'test'] }]
+    }));
+
+    await expect(service.approvalTimeoutMs(300000)).resolves.toBe(1234);
+  });
+
+  it('falls back to env approval timeout if policy loading fails', async () => {
+    await expect(service.approvalTimeoutMs(300000)).resolves.toBe(300000);
+  });
+
   it('rejects test command cwd values that escape the worktree', async () => {
     await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
       version: 1,

@@ -34,6 +34,17 @@ export class PolicyLoaderService {
     return policy.testCommands;
   }
 
+  async approvalTimeoutMs(fallbackMs: number): Promise<number> {
+    try {
+      const policy = await this.load();
+      return policy.approval?.timeoutMs ?? fallbackMs;
+    } catch {
+      // Keep the env fallback so pending approvals still expire even if the
+      // policy file is temporarily unreadable during timeout setup.
+      return fallbackMs;
+    }
+  }
+
   clearCache(): void {
     this.cached = undefined;
   }

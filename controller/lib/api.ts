@@ -181,20 +181,21 @@ export function listTestCommands(id: string): Promise<{ testCommands: TestComman
   return apiFetch(`/tasks/${id}/test-commands`);
 }
 
+function postApprovalDecision(path: string, message?: string): Promise<{ approval: ApprovalRequest }> {
+  const init: RequestInit = { method: 'POST' };
+  if (message !== undefined) {
+    init.headers = { 'Content-Type': 'application/json' };
+    init.body = JSON.stringify({ message });
+  }
+  return apiFetch(path, init);
+}
+
 export function approveAction(id: string, message?: string): Promise<{ approval: ApprovalRequest }> {
-  return apiFetch(`/approvals/${id}/approve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: message === undefined ? undefined : JSON.stringify({ message })
-  });
+  return postApprovalDecision(`/approvals/${id}/approve`, message);
 }
 
 export function denyAction(id: string, message?: string): Promise<{ approval: ApprovalRequest }> {
-  return apiFetch(`/approvals/${id}/deny`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: message === undefined ? undefined : JSON.stringify({ message })
-  });
+  return postApprovalDecision(`/approvals/${id}/deny`, message);
 }
 
 export function summarizeDiff(id: string): Promise<DiffSummaryResponse> {

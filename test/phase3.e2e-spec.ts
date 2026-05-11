@@ -31,7 +31,8 @@ describe('Phase 3 local safety loop', () => {
   const policy = {
     load: jest.fn(),
     getTestCommand: jest.fn(),
-    listTestCommands: jest.fn()
+    listTestCommands: jest.fn(),
+    approvalTimeoutMs: jest.fn()
   };
 
   beforeEach(async () => {
@@ -75,6 +76,7 @@ describe('Phase 3 local safety loop', () => {
         command: ['node', '-e', 'console.log("unit ok")']
       }
     ]);
+    policy.approvalTimeoutMs.mockResolvedValue(10000);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService).useValue(createInMemoryPrisma())

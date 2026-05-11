@@ -9,6 +9,15 @@ export class ActionClassifierService {
   async classify(request: AgentActionRequest): Promise<ClassificationResult> {
     const config = await this.policies.load();
 
+    const semanticBlocked = this.semanticBlockedRule(config.policy.blocked, request);
+    if (semanticBlocked) {
+      return {
+        riskLevel: 'BLOCKED',
+        ruleMatched: semanticBlocked.id,
+        rationale: semanticBlocked.rationale
+      };
+    }
+
     const blocked = config.policy.blocked.find((rule) => this.matchesRule(rule, request));
     if (blocked) {
       return {
@@ -66,6 +75,29 @@ export class ActionClassifierService {
     }
 
     return true;
+  }
+
+  private semanticBlockedRule(rules: PolicyRule[], request: AgentActionRequest): PolicyRule | undefined {
+    const tokens = commandTokens(request.command ?? []);
+
+    const forcePushRuleId = forcePushBlockedRuleId(tokens);
+    if (forcePushRuleId) {
+      return findRule(rules, forcePushRuleId);
+    }
+    if (isPipeFromInternetToInterpreter(tokens)) {
+      return findRule(rules, 'internet.pipe_shell') ?? findRule(rules, 'internet.pipe_bash');
+    }
+    if (isProductionDeploy(tokens)) {
+      return findRule(rules, 'production.deploy');
+    }
+    if (isGlobalConfigEdit(tokens)) {
+      return findRule(rules, 'global.config');
+    }
+    if (isOutsideWorktreeDelete(request, tokens)) {
+      return findRule(rules, 'outside.worktree.delete');
+    }
+
+    return undefined;
   }
 }
 
@@ -175,4 +207,89 @@ function commandPieceMatches(token: string, piece: string): boolean {
     return token === piece || token.startsWith(`${piece}=`);
   }
   return token === piece;
+}
+
+function findRule(rules: PolicyRule[], id: string): PolicyRule | undefined {
+  return rules.find((rule) => rule.id === id);
+}
+
+function forcePushBlockedRuleId(tokens: string[]): 'git.force_push' | 'git.force_push_with_lease' | undefined {
+  if (!tokens.includes('git') || !tokens.includes('push')) {
+    return undefined;
+  }
+  if (tokens.some((token) => token === '--force-with-lease' || token.startsWith('--force-with-lease='))) {
+    return 'git.force_push_with_lease';
+  }
+  if (tokens.some((token) => token === '--force' || token.startsWith('--force='))) {
+    return 'git.force_push';
+  }
+  return undefined;
+}
+
+function isPipeFromInternetToInterpreter(tokens: string[]): boolean {
+  const pipeIndex = tokens.indexOf('|');
+  if (pipeIndex === -1 || !tokens.some(isInternetFetcher)) {
+    return false;
+  }
+  return tokens.slice(pipeIndex + 1).some(isShellOrInterpreter);
+}
+
+function isInternetFetcher(token: string): boolean {
+  return ['curl', 'wget', 'http', 'https'].includes(executableName(token));
+}
+
+function isShellOrInterpreter(token: string): boolean {
+  return ['sh', 'bash', 'zsh', 'dash', 'python', 'python3', 'node', 'ruby', 'perl', 'pwsh', 'powershell'].includes(executableName(token));
+}
+
+function isProductionDeploy(tokens: string[]): boolean {
+  return tokens.includes('deploy') && tokens.some((token) => ['--prod', '--production', 'prod', 'production'].includes(token));
+}
+
+function isGlobalConfigEdit(tokens: string[]): boolean {
+  return tokens.includes('config') && tokens.some((token) => token === '--global' || token.startsWith('--global='));
+}
+
+function isOutsideWorktreeDelete(request: AgentActionRequest, tokens: string[]): boolean {
+  if (request.actionType === 'fs.delete' && (request.files ?? []).some(isOutsideWorktreePath)) {
+    return true;
+  }
+  if (tokens.includes('rm') && tokens.some(isRecursiveForceFlag)) {
+    return tokens.some(isDangerousDeleteTarget);
+  }
+  if (tokens.includes('find') && tokens.includes('-delete')) {
+    return tokens.some(isDangerousDeleteTarget);
+  }
+  return false;
+}
+
+function isRecursiveForceFlag(token: string): boolean {
+  return token === '-rf' || token === '-fr' || /^-[a-z]*r[a-z]*f[a-z]*$/.test(token) || /^-[a-z]*f[a-z]*r[a-z]*$/.test(token);
+}
+
+function isDangerousDeleteTarget(token: string): boolean {
+  if (!token || token.startsWith('-') || ['rm', 'find', '-delete'].includes(token)) {
+    return false;
+  }
+  return isOutsideWorktreePath(token);
+}
+
+function isOutsideWorktreePath(value: string): boolean {
+  const lower = value.toLowerCase();
+  const normalized = normalizePath(value);
+  return lower === '/' ||
+    lower.startsWith('/') ||
+    lower === '~' ||
+    lower.startsWith('~/') ||
+    lower === '$home' ||
+    lower.startsWith('$home/') ||
+    lower === '${home}' ||
+    lower.startsWith('${home}/') ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    normalized.includes('/../');
+}
+
+function executableName(token: string): string {
+  return token.split(/[\\/]/).pop() ?? token;
 }

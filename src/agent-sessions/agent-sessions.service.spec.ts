@@ -52,7 +52,8 @@ describe('AgentSessionsService', () => {
     hasPendingForSession: jest.fn()
   };
   const policies = {
-    load: jest.fn()
+    load: jest.fn(),
+    approvalTimeoutMs: jest.fn()
   };
   const prisma = {
     task: {
@@ -95,6 +96,7 @@ describe('AgentSessionsService', () => {
       policy: { safe: [], needsApproval: [], blocked: [] },
       testCommands: []
     });
+    policies.approvalTimeoutMs.mockResolvedValue(50);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

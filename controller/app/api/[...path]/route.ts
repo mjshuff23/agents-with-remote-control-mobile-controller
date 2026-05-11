@@ -17,6 +17,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   // when CONTROLLER_SECRET is unset in the server environment.
   'x-controller-secret'
 ]);
+const PROXY_TIMEOUT_MS = 30_000;
 
 export async function GET(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
@@ -60,13 +61,20 @@ async function proxyToBackend(request: NextRequest, context: RouteContext): Prom
   }
 
   const method = request.method.toUpperCase();
-  const response = await fetch(target, {
-    method,
-    headers,
-    body: method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer(),
-    redirect: 'manual',
-    signal: AbortSignal.timeout(30_000)
-  });
+  let response: Response;
+  try {
+    response = await fetch(target, {
+      method,
+      headers,
+      body: method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer(),
+      redirect: 'manual',
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS)
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : '';
+    const status = name === 'TimeoutError' || name === 'AbortError' ? 504 : 502;
+    return NextResponse.json({ error: 'Upstream request failed' }, { status });
+  }
 
   return new NextResponse(response.body, {
     status: response.status,

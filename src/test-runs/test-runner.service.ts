@@ -10,6 +10,12 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const TEST_KILL_GRACE_MS = 2000;
 
+interface SafeSpawnCommand {
+  bin: string;
+  args: string[];
+  argv: string[];
+}
+
 @Injectable()
 export class TestRunnerService {
   constructor(
@@ -51,14 +57,14 @@ export class TestRunnerService {
     if (command.command.length === 0) {
       throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" has no executable.`);
     }
-    assertSafeConfiguredCommand(command.command, commandId);
+    const safeCommand = toSafeSpawnCommand(command.command, commandId);
     const timeoutMs = command.timeoutMs ?? this.config.testCommandTimeoutMs;
     const row = await this.prisma.testRunSummary.create({
       data: {
         taskId,
         sessionId: session?.id,
         commandId: command.id,
-        commandJson: JSON.stringify(command.command),
+        commandJson: JSON.stringify(safeCommand.argv),
         status: 'running'
       }
     });
@@ -67,19 +73,18 @@ export class TestRunnerService {
       id: row.id,
       commandId: command.id,
       label: command.label,
-      command: command.command,
+      command: safeCommand.argv,
       timeoutMs
     }, { sessionId: session?.id, correlationId: row.id });
 
-    void this.runProcess(taskId, session?.id, row.id, cwd, command.command, timeoutMs);
+    void this.runProcess(taskId, session?.id, row.id, cwd, safeCommand, timeoutMs);
     return row;
   }
 
-  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, command: string[], timeoutMs: number): Promise<void> {
-    const [bin, ...args] = command;
+  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, command: SafeSpawnCommand, timeoutMs: number): Promise<void> {
     let child;
     try {
-      child = spawn(bin, args, { cwd, shell: false, env: safeTestEnv() });
+      child = spawn(command.bin, command.args, { cwd, shell: false, env: safeTestEnv() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.complete(taskId, sessionId, testRunId, 1, 'failed', [`Failed to start: ${message}`]);
@@ -186,7 +191,7 @@ function safeTestEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function assertSafeConfiguredCommand(command: string[], commandId: string): void {
+function toSafeSpawnCommand(command: string[], commandId: string): SafeSpawnCommand {
   const [bin, ...args] = command;
   if (!bin || bin.includes('\0') || /[|&;<>()`$]/.test(bin)) {
     throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" has an unsafe executable.`);
@@ -197,4 +202,9 @@ function assertSafeConfiguredCommand(command: string[], commandId: string): void
   if (args.some((arg) => arg.includes('\0'))) {
     throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" contains an invalid argument.`);
   }
+  return {
+    bin,
+    args: [...args],
+    argv: [bin, ...args]
+  };
 }

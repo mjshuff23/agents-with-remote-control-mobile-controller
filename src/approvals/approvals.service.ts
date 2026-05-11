@@ -5,6 +5,7 @@ import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
 import { ActionClassifierService } from '../policy/action-classifier.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { AgentActionRequest, ApprovalDecision } from '../policy/policy.types';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -21,6 +22,7 @@ export class ApprovalsService {
     private readonly classifier: ActionClassifierService,
     private readonly audit: AuditLogService,
     private readonly config: AppConfigService,
+    private readonly policies: PolicyLoaderService,
     private readonly events: EventsGateway
   ) {}
 
@@ -45,7 +47,8 @@ export class ApprovalsService {
     const commandJson = JSON.stringify(request.command ?? []);
     const filesJson = JSON.stringify(request.files ?? []);
     const repeated = await this.findRepeatedDenied(taskId, request.actionType, commandJson, filesJson);
-    const expiresAt = new Date(Date.now() + this.config.approvalTimeoutMs);
+    const timeoutMs = await this.policies.approvalTimeoutMs(this.config.approvalTimeoutMs);
+    const expiresAt = new Date(Date.now() + timeoutMs);
 
     if (repeated) {
       const approval = await this.prisma.approvalRequest.create({

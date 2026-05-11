@@ -1,4 +1,5 @@
 import { ActionClassifierService } from '../policy/action-classifier.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApprovalsService } from './approvals.service';
 
@@ -16,13 +17,15 @@ describe('ApprovalsService', () => {
   const classifier = { classify: jest.fn() } as unknown as ActionClassifierService;
   const audit = { append: jest.fn() };
   const config = { approvalTimeoutMs: 300000 };
+  const policies = { approvalTimeoutMs: jest.fn(async (fallback: number) => fallback) } as unknown as PolicyLoaderService;
   const events = { emitEnvelopeToTask: jest.fn() };
-  const service = new ApprovalsService(prisma, classifier, audit as any, config as any, events as any);
+  const service = new ApprovalsService(prisma, classifier, audit as any, config as any, policies, events as any);
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers().setSystemTime(now);
     (prisma.approvalRequest.findFirst as jest.Mock).mockResolvedValue(null);
+    (policies.approvalTimeoutMs as jest.Mock).mockResolvedValue(config.approvalTimeoutMs);
   });
 
   afterEach(() => {
@@ -49,7 +52,8 @@ describe('ApprovalsService', () => {
       data: expect.objectContaining({
         status: 'pending',
         riskLevel: 'NEEDS_APPROVAL',
-        ruleMatched: 'fs.mutation'
+        ruleMatched: 'fs.mutation',
+        expiresAt: new Date('2026-05-11T12:05:00.000Z')
       })
     });
     expect(events.emitEnvelopeToTask).toHaveBeenCalledWith(
@@ -60,6 +64,28 @@ describe('ApprovalsService', () => {
       expect.objectContaining({ id: 'approval-1' }),
       expect.objectContaining({ sessionId: 'session-1', correlationId: 'action-1' })
     );
+  });
+
+  it('uses the policy-driven approval timeout for persisted expiry', async () => {
+    (policies.approvalTimeoutMs as jest.Mock).mockResolvedValue(1000);
+    (classifier.classify as jest.Mock).mockResolvedValue({
+      riskLevel: 'NEEDS_APPROVAL',
+      ruleMatched: 'fs.mutation',
+      rationale: 'file writes require approval'
+    });
+    (prisma.approvalRequest.create as jest.Mock).mockImplementation(async ({ data }) => ({ id: 'approval-1', ...data }));
+
+    await service.createFromAgentRequest('task-1', 'session-1', {
+      id: 'action-1',
+      actionType: 'fs.write_patch',
+      title: 'Patch file'
+    });
+
+    expect(prisma.approvalRequest.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        expiresAt: new Date('2026-05-11T12:00:01.000Z')
+      })
+    });
   });
 
   it('refuses blocked requests without surfacing an approvable card', async () => {

@@ -483,14 +483,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   }
 
   private async approvalTimeoutMs(): Promise<number> {
-    try {
-      const policy = await this.policies.load();
-      return policy.approval?.timeoutMs ?? this.config.approvalTimeoutMs;
-    } catch {
-      // If policy loading fails during timeout setup, keep the env fallback so
-      // pending approvals still expire rather than staying open indefinitely.
-      return this.config.approvalTimeoutMs;
-    }
+    return this.policies.approvalTimeoutMs(this.config.approvalTimeoutMs);
   }
 }
 
