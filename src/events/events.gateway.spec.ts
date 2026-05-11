@@ -24,11 +24,12 @@ describe('EventsGateway', () => {
       expect(client.disconnect).not.toHaveBeenCalled();
     });
 
-    it('allows all connections when no secret is configured', () => {
+    it('disconnects all connections when no secret is configured', () => {
+      // Absent secret → deny-all: prevents open WS access if env var is forgotten
       const gw = new EventsGateway(makeConfig(undefined));
       const client = { handshake: { auth: { token: 'anything' } }, disconnect: jest.fn() } as any;
       gw.handleConnection(client);
-      expect(client.disconnect).not.toHaveBeenCalled();
+      expect(client.disconnect).toHaveBeenCalledWith(true);
     });
   });
 

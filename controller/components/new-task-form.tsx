@@ -31,10 +31,11 @@ export function NewTaskForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label htmlFor="task-title" className="block text-sm font-medium text-gray-700 mb-1.5">
           Title <span className="text-gray-400 font-normal">(optional)</span>
         </label>
         <input
+          id="task-title"
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -43,10 +44,11 @@ export function NewTaskForm() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label htmlFor="task-prompt" className="block text-sm font-medium text-gray-700 mb-1.5">
           Prompt <span className="text-red-400">*</span>
         </label>
         <textarea
+          id="task-prompt"
           required
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}

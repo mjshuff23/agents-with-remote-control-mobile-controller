@@ -37,7 +37,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.text();
     throw new Error(`API ${init?.method ?? 'GET'} ${path} → ${res.status}: ${body}`);
   }
-  return res.json() as Promise<T>;
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export function listTasks(): Promise<{ tasks: Task[] }> {

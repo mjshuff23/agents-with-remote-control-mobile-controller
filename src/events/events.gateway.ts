@@ -23,7 +23,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
 
   handleConnection(client: Socket): void {
     const secret = this.config.controllerSecret;
-    if (secret && client.handshake.auth.token !== secret) {
+    if (!secret || client.handshake.auth.token !== secret) {
       client.disconnect(true);
     }
   }

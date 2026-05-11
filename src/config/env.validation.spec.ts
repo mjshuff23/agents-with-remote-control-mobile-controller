@@ -6,13 +6,15 @@ describe('validateEnv', () => {
     DATABASE_URL: 'file:./data/test.sqlite'
   };
 
-  it('accepts an optional CONTROLLER_SECRET', () => {
+  it('passes CONTROLLER_SECRET through when provided', () => {
     const result = validateEnv({ ...base, CONTROLLER_SECRET: 'my-secret' });
     expect(result['CONTROLLER_SECRET']).toBe('my-secret');
   });
 
-  it('sets CONTROLLER_SECRET to empty string when absent', () => {
+  it('sets CONTROLLER_SECRET to undefined when absent (gateway enforces auth)', () => {
     const result = validateEnv({ ...base });
-    expect(result['CONTROLLER_SECRET']).toBe('');
+    // CONTROLLER_SECRET is optional at config level; the WS gateway rejects
+    // all connections when the secret is falsy, so leaving it unset blocks WS entirely.
+    expect(result['CONTROLLER_SECRET']).toBeFalsy();
   });
 });

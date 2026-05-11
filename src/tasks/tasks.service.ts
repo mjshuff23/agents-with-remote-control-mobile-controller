@@ -43,7 +43,7 @@ export class TasksService {
       throw new ProblemException(HttpStatus.INTERNAL_SERVER_ERROR, 'Task Refresh Failed', `Task "${created.id}" could not be refreshed after startup.`);
     }
 
-    this.events?.emitToTask(task.id, 'task.started', { task, session });
+    this.events?.emitToTask(task.id, 'task.started', { taskId: task.id, task, session });
     return { task, session };
   }
 

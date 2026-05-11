@@ -34,11 +34,17 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     const socket = getSocket();
     socket.emit('subscribe', { taskId });
 
-    const onLog = (data: { type: string; content: string; sequence: number }) =>
-      ref.current.onLog?.(data);
-    const onStarted = (data: unknown) => ref.current.onStarted?.(data);
-    const onCompleted = (data: { exitCode: number; status: string }) =>
-      ref.current.onCompleted?.(data);
+    // Filter by taskId so events from a previous task don't leak into a new one
+    // during App Router transitions where old/new pages briefly coexist.
+    const onLog = (data: { taskId: string; type: string; content: string; sequence: number }) => {
+      if (data.taskId === taskId) ref.current.onLog?.(data);
+    };
+    const onStarted = (data: { taskId: string }) => {
+      if (data.taskId === taskId) ref.current.onStarted?.(data);
+    };
+    const onCompleted = (data: { taskId: string; exitCode: number; status: string }) => {
+      if (data.taskId === taskId) ref.current.onCompleted?.(data);
+    };
 
     socket.on('agent.log', onLog);
     socket.on('task.started', onStarted);

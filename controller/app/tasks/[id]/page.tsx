@@ -20,11 +20,19 @@ export default function TaskDetailPage() {
   const sessionIdRef = useRef<string>('');
 
   useEffect(() => {
+    // Reset all per-task state so navigating between tasks doesn't bleed data
+    seenSeqs.current.clear();
+    seqRef.current = 0;
+    sessionIdRef.current = '';
+    setLogs([]);
+    setTask(null);
+    setSession(null);
+
     getTask(id)
       .then(({ task, session, logs }) => {
         setTask(task);
         setSession(session);
-        if (session) sessionIdRef.current = session.id;
+        sessionIdRef.current = session?.id ?? '';
         setLogs(logs);
         if (logs.length > 0) {
           const maxSeq = Math.max(...logs.map((l) => l.sequence));
@@ -110,6 +118,11 @@ export default function TaskDetailPage() {
 
       {/* Action bar */}
       <div className="shrink-0 p-3 border-t bg-white space-y-2">
+        {actionError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {actionError}
+          </p>
+        )}
         {showInput && (
           <div className="flex gap-2">
             <input

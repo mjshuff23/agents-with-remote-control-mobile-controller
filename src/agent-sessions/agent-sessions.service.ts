@@ -97,7 +97,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       throw new ProblemException(HttpStatus.CONFLICT, 'Input Not Supported', 'The running agent does not accept live input.');
     }
     running.write(text);
-    await this.appendLog(session.id, 'system', `Input sent: ${text.slice(0, 100)}`);
+    await this.appendLog(session.id, 'system', `Input sent (${text.length} chars)`);
   }
 
   async stopTask(taskId: string): Promise<StopTaskResult> {
@@ -149,7 +149,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       });
       const taskId = this.sessionToTask.get(sessionId);
       if (taskId) {
-        this.events?.emitToTask(taskId, 'agent.log', { type, content, sequence });
+        this.events?.emitToTask(taskId, 'agent.log', { taskId, type, content, sequence });
       }
     });
 
@@ -220,6 +220,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       data: { status: finalTaskStatus }
     });
     this.events?.emitToTask(taskId, 'task.completed', {
+      taskId,
       exitCode,
       status: finalTaskStatus,
       signal

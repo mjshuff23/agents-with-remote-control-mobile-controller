@@ -18,7 +18,7 @@ Phases 1 and 2 are complete. The code in this repo currently ships:
 - A root-level NestJS REST API.
 - Prisma + SQLite persistence for `Task`, `AgentSession`, and `AgentLog`.
 - A single `CodexAdapter` that launches `codex exec --json --cd <repoPath> -` through `node-pty`.
-- REST endpoints: `POST /tasks`, `GET /tasks`, `GET /tasks/:id`, `POST /tasks/:id/stop`, `POST /tasks/:id/input`.
+- REST endpoints: `POST /tasks`, `GET /tasks`, `GET /tasks/:id`, `POST /tasks/:id/stop`.
 - Problem-details style JSON errors.
 
 **Phase 2 — WebSocket gateway + controller UI**

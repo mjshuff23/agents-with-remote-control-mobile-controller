@@ -162,10 +162,17 @@ describe('Tasks API', () => {
   });
 
   it('returns 400 when input text is empty', async () => {
-    await request(app.getHttpServer())
-      .post('/tasks/nonexistent-id/input')
+    const created = await request(app.getHttpServer())
+      .post('/tasks')
+      .send({ prompt: 'Run something', agent: 'codex' })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .post(`/tasks/${created.body.task.id}/input`)
       .send({ text: '' })
       .expect(400);
+
+    expect(res.body.detail).toMatch(/text/);
   });
 
   it('returns 404 when sending input to a non-existent task', async () => {
