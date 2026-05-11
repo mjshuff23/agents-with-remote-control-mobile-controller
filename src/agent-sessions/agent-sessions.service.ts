@@ -1,9 +1,10 @@
-import { HttpStatus, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { HttpStatus, Injectable, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { AgentSession, Task } from '@prisma/client';
 import { AgentsService } from '../agents/agents.service';
 import { AgentLogType, RunningAgentProcess } from '../agents/agent-adapter.interface';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
+import { EventsGateway } from '../events/events.gateway';
 import { PrismaService } from '../prisma/prisma.service';
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'stopped']);
@@ -18,11 +19,13 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private readonly runningProcesses = new Map<string, RunningAgentProcess>();
   private readonly nextLogSequences = new Map<string, number>();
   private readonly logWriteQueues = new Map<string, Promise<void>>();
+  private readonly sessionToTask = new Map<string, string>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly agents: AgentsService,
-    private readonly config: AppConfigService
+    private readonly config: AppConfigService,
+    @Optional() private readonly events?: EventsGateway
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -51,6 +54,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       });
 
       this.runningProcesses.set(session.id, runningProcess);
+      this.sessionToTask.set(session.id, task.id);
       await this.prisma.task.update({
         where: { id: task.id },
         data: { status: 'running' }
@@ -143,6 +147,10 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           content
         }
       });
+      const taskId = this.sessionToTask.get(sessionId);
+      if (taskId) {
+        this.events?.emitToTask(taskId, 'agent.log', { type, content, sequence });
+      }
     });
 
     this.logWriteQueues.set(sessionId, currentWrite);
@@ -152,6 +160,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private clearLogState(sessionId: string): void {
     this.nextLogSequences.delete(sessionId);
     this.logWriteQueues.delete(sessionId);
+    this.sessionToTask.delete(sessionId);
   }
 
   private async markSessionFailed(taskId: string, sessionId: string, message: string): Promise<void> {
@@ -209,6 +218,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.prisma.task.update({
       where: { id: taskId },
       data: { status: finalTaskStatus }
+    });
+    this.events?.emitToTask(taskId, 'task.completed', {
+      exitCode,
+      status: finalTaskStatus,
+      signal
     });
     this.clearLogState(sessionId);
   }

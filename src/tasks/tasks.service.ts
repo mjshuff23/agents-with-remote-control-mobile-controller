@@ -1,8 +1,9 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { AgentLog, AgentSession, Task } from '@prisma/client';
 import { AgentSessionsService, StopTaskResult } from '../agent-sessions/agent-sessions.service';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
+import { EventsGateway } from '../events/events.gateway';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 
@@ -22,7 +23,8 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agentSessions: AgentSessionsService,
-    private readonly config: AppConfigService
+    private readonly config: AppConfigService,
+    @Optional() private readonly events?: EventsGateway
   ) {}
 
   async createTask(input: CreateTaskDto): Promise<CreateTaskResult> {
@@ -41,6 +43,7 @@ export class TasksService {
       throw new ProblemException(HttpStatus.INTERNAL_SERVER_ERROR, 'Task Refresh Failed', `Task "${created.id}" could not be refreshed after startup.`);
     }
 
+    this.events?.emitToTask(task.id, 'task.started', { task, session });
     return { task, session };
   }
 
