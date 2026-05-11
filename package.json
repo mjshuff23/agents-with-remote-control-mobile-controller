@@ -71,6 +71,9 @@
     "node": ">=22"
   },
   "pnpm": {
+    "overrides": {
+      "@hono/node-server": "^1.19.13"
+    },
     "onlyBuiltDependencies": [
       "@nestjs/core",
       "@prisma/client",
