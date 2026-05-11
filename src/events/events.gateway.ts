@@ -6,13 +6,31 @@ import {
   WebSocketGateway,
   WebSocketServer
 } from '@nestjs/websockets';
+import { randomUUID } from 'crypto';
 import { Server, Socket } from 'socket.io';
 import { AppConfigService } from '../config/app-config.service';
+
+export type TaskEventKind = 'lifecycle' | 'log' | 'approval' | 'git' | 'diff' | 'test' | 'security' | 'controller';
+export type TaskEventSeverity = 'info' | 'warn' | 'error';
+
+export interface TaskEventEnvelope<TName extends string = string, TData = unknown> {
+  id: string;
+  seq: number;
+  taskId: string;
+  sessionId?: string;
+  name: TName;
+  kind: TaskEventKind;
+  severity: TaskEventSeverity;
+  correlationId?: string;
+  at: string;
+  data: TData;
+}
 
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' } })
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
   private readonly logger = new Logger(EventsGateway.name);
+  private readonly nextEventSequences = new Map<string, number>();
 
   @WebSocketServer()
   private server?: Server;
@@ -49,5 +67,35 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
 
   emitToTask(taskId: string, event: string, payload: unknown): void {
     this.server?.to(`task:${taskId}`).emit(event, payload);
+  }
+
+  emitEnvelopeToTask<TName extends string, TData>(
+    taskId: string,
+    name: TName,
+    kind: TaskEventKind,
+    severity: TaskEventSeverity,
+    data: TData,
+    options: { sessionId?: string; correlationId?: string } = {}
+  ): TaskEventEnvelope<TName, TData> {
+    const envelope: TaskEventEnvelope<TName, TData> = {
+      id: randomUUID(),
+      seq: this.nextEnvelopeSequence(taskId),
+      taskId,
+      sessionId: options.sessionId,
+      name,
+      kind,
+      severity,
+      correlationId: options.correlationId,
+      at: new Date().toISOString(),
+      data
+    };
+    this.emitToTask(taskId, name, envelope);
+    return envelope;
+  }
+
+  private nextEnvelopeSequence(taskId: string): number {
+    const next = (this.nextEventSequences.get(taskId) ?? 0) + 1;
+    this.nextEventSequences.set(taskId, next);
+    return next;
   }
 }

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Res } from '@nestjs/common';
 import { Response } from 'express';
+import { RunTestDto } from '../test-runs/dto/run-test.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
@@ -37,5 +38,22 @@ export class TasksController {
   async sendInput(@Param('id') id: string, @Body() body: SendInputDto) {
     await this.tasks.sendInput(id, body.text);
     return { accepted: true };
+  }
+
+  @Get(':id/approvals')
+  async listApprovals(@Param('id') id: string) {
+    return this.tasks.listApprovals(id);
+  }
+
+  @Post(':id/diff-summary')
+  @HttpCode(202)
+  async summarizeDiff(@Param('id') id: string) {
+    return this.tasks.summarizeDiff(id);
+  }
+
+  @Post(':id/test-runs')
+  @HttpCode(202)
+  async runTest(@Param('id') id: string, @Body() body: RunTestDto) {
+    return this.tasks.runTest(id, body.commandId);
   }
 }

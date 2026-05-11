@@ -30,6 +30,14 @@ const readNumber = (config: RawEnv, key: string, defaultValue: number): number =
   return parsed;
 };
 
+const readPositiveNumber = (config: RawEnv, key: string, defaultValue: number): number => {
+  const parsed = readNumber(config, key, defaultValue);
+  if (parsed <= 0) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+  return parsed;
+};
+
 const readBoolean = (config: RawEnv, key: string, defaultValue = false): boolean => {
   const value = config[key];
   if (value === undefined || value === null || value === '') {
@@ -90,6 +98,9 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_WSL_USER: readOptionalString(config, 'ARC_WSL_USER'),
     ARC_LOG_TAIL_LIMIT: readNumber(config, 'ARC_LOG_TAIL_LIMIT', 200),
     ARC_SHUTDOWN_GRACE_MS: readNumber(config, 'ARC_SHUTDOWN_GRACE_MS', 2000),
+    ARC_WORKTREE_ROOT: readOptionalString(config, 'ARC_WORKTREE_ROOT'),
+    ARC_POLICY_PATH: readString(config, 'ARC_POLICY_PATH', 'arc.config.json'),
+    ARC_APPROVAL_TIMEOUT_MS: readPositiveNumber(config, 'ARC_APPROVAL_TIMEOUT_MS', 300000),
     CONTROLLER_SECRET: readOptionalString(config, 'CONTROLLER_SECRET')
   };
 }

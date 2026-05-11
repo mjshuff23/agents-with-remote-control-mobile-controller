@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsService } from '../agents/agents.service';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentSessionsService } from './agent-sessions.service';
@@ -13,6 +14,11 @@ describe('AgentSessionsService', () => {
     status: 'queued',
     selectedAgent: 'codex',
     repoPath: '/repo',
+    worktreePath: '/repo',
+    branchName: 'agent/task-1-run-this-task',
+    baseRef: 'main',
+    baseCommit: 'abc123',
+    approvalMode: 'cooperative-gated',
     createdAt: new Date('2026-05-10T12:00:00.000Z'),
     updatedAt: new Date('2026-05-10T12:00:00.000Z')
   };
@@ -39,6 +45,10 @@ describe('AgentSessionsService', () => {
   const agents = {
     getAdapter: jest.fn(() => adapter)
   };
+  const approvals = {
+    createFromAgentRequest: jest.fn(),
+    resolve: jest.fn()
+  };
   const prisma = {
     task: {
       update: jest.fn()
@@ -46,6 +56,7 @@ describe('AgentSessionsService', () => {
     agentSession: {
       create: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn()
     },
@@ -55,7 +66,8 @@ describe('AgentSessionsService', () => {
     }
   };
   const config = {
-    shutdownGraceMs: 10
+    shutdownGraceMs: 10,
+    approvalTimeoutMs: 50
   };
 
   beforeEach(async () => {
@@ -78,7 +90,8 @@ describe('AgentSessionsService', () => {
         AgentSessionsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AgentsService, useValue: agents },
-        { provide: AppConfigService, useValue: config }
+        { provide: AppConfigService, useValue: config },
+        { provide: ApprovalsService, useValue: approvals }
       ]
     }).compile();
 
@@ -100,9 +113,10 @@ describe('AgentSessionsService', () => {
         taskId: task.id,
         sessionId: session.id,
         repoPath: '/repo',
-        prompt: 'Run this task'
+        prompt: expect.stringContaining('Run this task')
       })
     );
+    expect(adapter.startTask.mock.calls[0][0].prompt).toContain('ARC_ACTION_REQUEST');
     expect(prisma.agentSession.update).toHaveBeenCalledWith({
       where: { id: session.id },
       data: expect.objectContaining({

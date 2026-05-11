@@ -1,7 +1,21 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getTask, stopTask, sendInput, type Task, type Session, type LogEntry } from '../../../lib/api';
+import {
+  approveAction,
+  denyAction,
+  getTask,
+  runTest,
+  sendInput,
+  stopTask,
+  summarizeDiff,
+  type ApprovalRequest,
+  type GitChangeSummary,
+  type LogEntry,
+  type Session,
+  type Task,
+  type TestRunSummary
+} from '../../../lib/api';
 import { TaskLogPane } from '../../../components/task-log-pane';
 import { useTaskSocket } from '../../../lib/use-socket';
 
@@ -12,26 +26,38 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<Task | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [changeSummaries, setChangeSummaries] = useState<GitChangeSummary[]>([]);
+  const [testRuns, setTestRuns] = useState<TestRunSummary[]>([]);
   const [inputText, setInputText] = useState('');
   const [showInput, setShowInput] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [denyMessages, setDenyMessages] = useState<Record<string, string>>({});
   const seqRef = useRef(0);
   const seenSeqs = useRef(new Set<number>());
+  const seenEvents = useRef(new Set<string>());
   const sessionIdRef = useRef<string>('');
 
   useEffect(() => {
     // Reset all per-task state so navigating between tasks doesn't bleed data
     seenSeqs.current.clear();
+    seenEvents.current.clear();
     seqRef.current = 0;
     sessionIdRef.current = '';
     setLogs([]);
+    setApprovals([]);
+    setChangeSummaries([]);
+    setTestRuns([]);
     setTask(null);
     setSession(null);
 
     getTask(id)
-      .then(({ task, session, logs }) => {
+      .then(({ task, session, logs, approvals, changeSummaries, testRuns }) => {
         setTask(task);
         setSession(session);
+        setApprovals(approvals);
+        setChangeSummaries(changeSummaries);
+        setTestRuns(testRuns);
         sessionIdRef.current = session?.id ?? '';
         setLogs(logs);
         if (logs.length > 0) {
@@ -64,8 +90,65 @@ export default function TaskDetailPage() {
     onCompleted: (data) => {
       setTask((prev) => (prev ? { ...prev, status: data.status } : null));
       setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
+    },
+    onApprovalRequested: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      upsertApproval(event.data);
+    },
+    onApprovalResolved: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      upsertApproval(event.data);
+    },
+    onPolicyViolation: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      upsertApproval(event.data);
+      appendSyntheticLog('system', `Policy violation: ${event.data.title}`);
+    },
+    onDiffSummary: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      setChangeSummaries((prev) => [event.data, ...prev.filter((summary) => summary.id !== event.data.id)].slice(0, 10));
+    },
+    onTestStarted: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      appendSyntheticLog('system', `Test started: ${event.data.commandId}`);
+    },
+    onTestLog: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      appendSyntheticLog('system', `[${event.data.stream}] ${event.data.content}`);
+    },
+    onTestCompleted: (event) => {
+      if (seenEvents.current.has(event.id)) return;
+      seenEvents.current.add(event.id);
+      setTestRuns((prev) => [event.data, ...prev.filter((run) => run.id !== event.data.id)].slice(0, 10));
+      appendSyntheticLog('system', `Test ${event.data.status}: ${event.data.commandId}`);
     }
   });
+
+  function appendSyntheticLog(type: string, content: string) {
+    const sequence = seqRef.current + 1;
+    seqRef.current = sequence;
+    setLogs((prev) => [
+      ...prev,
+      {
+        id: `ui-${sequence}`,
+        sessionId: sessionIdRef.current,
+        type,
+        sequence,
+        content,
+        createdAt: new Date().toISOString()
+      }
+    ]);
+  }
+
+  function upsertApproval(approval: ApprovalRequest) {
+    setApprovals((prev) => [approval, ...prev.filter((item) => item.id !== approval.id)].slice(0, 50));
+  }
 
   async function handleStop() {
     setActionError(null);
@@ -89,7 +172,50 @@ export default function TaskDetailPage() {
     }
   }
 
-  const isLive = task?.status === 'running' || task?.status === 'starting';
+  async function handleApprove(approvalId: string) {
+    setActionError(null);
+    try {
+      const result = await approveAction(approvalId);
+      upsertApproval(result.approval);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Approval failed');
+    }
+  }
+
+  async function handleDeny(approvalId: string) {
+    setActionError(null);
+    try {
+      const result = await denyAction(approvalId, denyMessages[approvalId]);
+      upsertApproval(result.approval);
+      setDenyMessages((prev) => ({ ...prev, [approvalId]: '' }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Deny failed');
+    }
+  }
+
+  async function handleDiffSummary() {
+    setActionError(null);
+    try {
+      const summary = await summarizeDiff(id);
+      setChangeSummaries((prev) => [summary, ...prev.filter((item) => item.id !== summary.id)].slice(0, 10));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Diff summary failed');
+    }
+  }
+
+  async function handleRunTests() {
+    setActionError(null);
+    try {
+      const started = await runTest(id, 'root:test');
+      setTestRuns((prev) => [started, ...prev.filter((item) => item.id !== started.id)].slice(0, 10));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Test run failed');
+    }
+  }
+
+  const isLive = task?.status === 'running' || task?.status === 'starting' || task?.status === 'waiting_approval';
+  const pendingApprovals = approvals.filter((approval) => approval.status === 'pending');
+  const latestDiff = changeSummaries[0];
 
   if (!task) {
     return <div className="p-4 text-gray-400 text-sm">Loading…</div>;
@@ -110,6 +236,81 @@ export default function TaskDetailPage() {
           <p className="text-xs text-gray-400">{task.status} · {task.selectedAgent}</p>
         </div>
       </div>
+
+      {(pendingApprovals.length > 0 || latestDiff || testRuns.length > 0) && (
+        <div className="shrink-0 max-h-72 overflow-y-auto border-b bg-gray-50 p-3 space-y-3">
+          {pendingApprovals.map((approval) => {
+            const command = parseJson<string[]>(approval.commandJson, []);
+            const files = parseJson<string[]>(approval.filesJson, []);
+            return (
+              <div key={approval.id} className="border border-amber-200 bg-white rounded-lg p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{approval.title}</p>
+                    <p className="text-xs text-amber-700">{approval.actionType} · {approval.riskLevel}</p>
+                  </div>
+                  <span className="text-[11px] px-2 py-1 rounded bg-amber-100 text-amber-800 shrink-0">
+                    pending
+                  </span>
+                </div>
+                {approval.rationale && <p className="text-xs text-gray-600">{approval.rationale}</p>}
+                {command.length > 0 && <p className="text-xs font-mono text-gray-700 bg-gray-100 rounded px-2 py-1 break-all">{command.join(' ')}</p>}
+                {files.length > 0 && <p className="text-xs text-gray-500 truncate">{files.slice(0, 4).join(', ')}</p>}
+                <textarea
+                  value={denyMessages[approval.id] ?? ''}
+                  onChange={(e) => setDenyMessages((prev) => ({ ...prev, [approval.id]: e.target.value }))}
+                  placeholder="Optional denial message"
+                  rows={2}
+                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void handleApprove(approval.id)}
+                    className="flex-1 bg-green-600 text-white py-2 rounded text-xs font-semibold"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => void handleDeny(approval.id)}
+                    className="flex-1 border border-red-500 text-red-600 py-2 rounded text-xs font-semibold"
+                  >
+                    Deny
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {latestDiff && (
+            <div className="border border-blue-200 bg-white rounded-lg p-3">
+              <div className="flex justify-between text-sm font-semibold text-gray-900">
+                <span>Diff Summary</span>
+                <span>{latestDiff.filesChanged} files</span>
+              </div>
+              <p className="text-xs text-gray-500">
+                +{latestDiff.insertions} / -{latestDiff.deletions} · A{latestDiff.addedCount} M{latestDiff.modifiedCount} D{latestDiff.deletedCount} R{latestDiff.renamedCount}
+              </p>
+              {parseJson<string[]>(latestDiff.riskFlagsJson, []).length > 0 && (
+                <p className="mt-1 text-xs text-amber-700">
+                  {parseJson<string[]>(latestDiff.riskFlagsJson, []).join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {testRuns.slice(0, 3).map((run) => (
+            <div key={run.id} className="border border-gray-200 bg-white rounded-lg p-3">
+              <div className="flex justify-between text-sm font-semibold text-gray-900">
+                <span>{run.commandId}</span>
+                <span className={run.status === 'passed' ? 'text-green-700' : run.status === 'failed' ? 'text-red-700' : 'text-blue-700'}>
+                  {run.status}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">exit {run.exitCode ?? 'running'}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Log pane (takes all remaining space) */}
       <div className="flex-1 min-h-0 p-2">
@@ -149,18 +350,30 @@ export default function TaskDetailPage() {
           </div>
         )}
         {isLive && (
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setShowInput((s) => !s)}
-              className="flex-1 border border-blue-500 text-blue-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 active:scale-95 transition-all"
+              className="border border-blue-500 text-blue-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 active:scale-95 transition-all"
             >
               Continue
             </button>
             <button
               onClick={() => void handleStop()}
-              className="flex-1 border border-red-500 text-red-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-50 active:scale-95 transition-all"
+              className="border border-red-500 text-red-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-50 active:scale-95 transition-all"
             >
               Stop
+            </button>
+            <button
+              onClick={() => void handleDiffSummary()}
+              className="border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              Diff
+            </button>
+            <button
+              onClick={() => void handleRunTests()}
+              className="border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              Test
             </button>
           </div>
         )}
@@ -172,4 +385,13 @@ export default function TaskDetailPage() {
       </div>
     </div>
   );
+}
+
+function parseJson<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
 }

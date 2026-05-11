@@ -9,7 +9,7 @@ Source-of-truth diagrams for the project, authored as Mermaid so they render nat
 ```mermaid
 flowchart LR
   subgraph Mobile["Phone / Web Controller (PWA)"]
-    UI["Controller UI<br/>Dashboard · Tasks · Approvals · Logs"]
+    UI["Controller UI<br/>Dashboard · Tasks · Approvals · Diffs · Tests · Logs"]
   end
 
   subgraph Host["Local Host (Windows + WSL2)"]
@@ -20,7 +20,8 @@ flowchart LR
       Sessions["AgentSessionModule"]
       Adapters["AgentAdapterModule"]
       Git["GitModule (worktrees)"]
-      Gate["ApprovalGateModule"]
+      Policy["PolicyModule"]
+      Approvals["ApprovalsModule"]
       Notify["NotificationModule"]
       Sync["SyncModule"]
       Audit["AuditLogModule"]
@@ -29,8 +30,8 @@ flowchart LR
 
     subgraph WSL["WSL2 Runtime"]
       Codex["Codex CLI"]
-      Claude["Claude Code CLI"]
-      Gemini["Gemini CLI"]
+      Claude["Claude Code CLI<br/>(Phase 6)"]
+      Gemini["Gemini CLI<br/>(Phase 6)"]
       WT["Repo Worktrees<br/>../arc-task-NNN"]
     end
   end
@@ -56,22 +57,24 @@ flowchart LR
   Claude --> WT
   Gemini --> WT
   Git --> WT
-  Sessions --> Gate
-  Gate --> Notify
+  Sessions --> Policy
+  Sessions --> Approvals
+  Approvals --> Notify
   Notify -.->|"push / WS event"| UI
   Sessions --> Audit
   Tasks --> DB
   Sessions --> DB
-  Gate --> DB
+  Policy --> DB
+  Approvals --> DB
   Audit --> DB
-  Sync --> GH
-  Sync --> LN
-  Sync --> FG
-  Sync --> NT
-  Sync --> MCP
+  Sync -.-> GH
+  Sync -.-> LN
+  Sync -.-> FG
+  Sync -.-> NT
+  Sync -.-> MCP
 ```
 
-Phone and orchestrator are bidirectional over WebSocket (live logs, approval prompts), with REST for one-shot commands. Each CLI agent runs inside WSL2, scoped to its own worktree.
+Phone and orchestrator are bidirectional over WebSocket (live logs, approval prompts, diff/test summaries), with REST for one-shot commands. Phase 3 runs Codex inside a task-scoped worktree and leaves external sync dashed/deferred.
 
 ---
 
@@ -83,7 +86,7 @@ flowchart TD
   Create --> Worktree["GitModule:<br/>worktree add + branch"]
   Worktree --> Launch["AgentAdapter.startTask()"]
   Launch --> Stream["Stream stdout/stderr<br/>→ AgentLog + WS events"]
-  Stream --> Decision{"Agent action?"}
+  Stream --> Decision{"Agent action<br/>or review request?"}
   Decision -->|"SAFE"| Stream
   Decision -->|"NEEDS APPROVAL"| Prompt["Notify phone<br/>ApprovalRequest pending"]
   Decision -->|"BLOCKED"| Refuse["Refuse + audit"]
@@ -96,12 +99,8 @@ flowchart TD
   Forward --> Stream
   Stream --> Done{"Agent done?"}
   Done -->|"no"| Decision
-  Done -->|"yes"| Summary["GitChangeSummary"]
-  Summary --> SyncQ{"Phase 4+ sync?"}
-  SyncQ -->|"no"| End(["Task complete"])
-  SyncQ -->|"yes, approved"| Push["Commit · Push · Draft PR<br/>Update Linear · Notion"]
-  Push --> Cleanup["git worktree remove<br/>after PR merge"]
-  Cleanup --> End
+  Done -->|"yes"| Summary["GitChangeSummary<br/>+ TestRunSummary"]
+  Summary --> End(["Task complete<br/>local review only"])
 ```
 
 ---
@@ -143,9 +142,14 @@ erDiagram
   Task ||--o{ AgentSession : "has"
   Task ||--o{ ApprovalRequest : "produces"
   Task ||--o{ GitChangeSummary : "snapshots"
-  Task ||--o{ SyncEvent : "emits"
+  Task ||--o{ AuditLog : "audits"
+  Task ||--o{ TestRunSummary : "tests"
   AgentSession ||--o{ AgentLog : "writes"
   AgentSession ||--o{ ApprovalRequest : "raises"
+  AgentSession ||--o{ AuditLog : "audits"
+  AgentSession ||--o{ GitChangeSummary : "snapshots"
+  AgentSession ||--o{ TestRunSummary : "tests"
+  ApprovalRequest ||--o{ AuditLog : "records"
 
   Task {
     uuid id PK
@@ -156,6 +160,9 @@ erDiagram
     string repoPath
     string worktreePath
     string branchName
+    string baseRef
+    string baseCommit
+    string approvalMode
     datetime createdAt
     datetime updatedAt
   }
@@ -186,9 +193,27 @@ erDiagram
     text description
     string riskLevel
     string status
+    string ruleMatched
+    string decision
     datetime requestedAt
     datetime resolvedAt
+    datetime expiresAt
     text resolutionMessage
+  }
+
+  AuditLog {
+    uuid id PK
+    uuid taskId FK
+    uuid sessionId FK
+    uuid approvalRequestId FK
+    string kind
+    string actionType
+    string riskLevel
+    string ruleMatched
+    string decision
+    text message
+    text metadataJson
+    datetime createdAt
   }
 
   GitChangeSummary {
@@ -197,17 +222,26 @@ erDiagram
     int filesChanged
     int insertions
     int deletions
-    text summary
+    int addedCount
+    int modifiedCount
+    int deletedCount
+    int renamedCount
+    text riskFlagsJson
+    text topFilesJson
     datetime createdAt
   }
 
-  SyncEvent {
+  TestRunSummary {
     uuid id PK
     uuid taskId FK
-    string target
-    string action
+    uuid sessionId FK
+    string commandId
+    string commandJson
     string status
-    string externalUrl
+    int exitCode
+    text highlightsJson
+    datetime startedAt
+    datetime completedAt
     datetime createdAt
   }
 ```
@@ -224,7 +258,7 @@ sequenceDiagram
   participant O as Orchestrator
   participant G as GitModule
   participant A as Agent (Codex)
-  participant GH as GitHub
+  participant P as Policy/Approvals
 
   U->>C: New task: "Add pagination to /users"
   C->>O: POST /tasks
@@ -237,26 +271,21 @@ sequenceDiagram
     A-->>O: stdout / stderr
     O-->>C: WS agent.log
   end
-  A->>O: requestAction(git.commit)
-  O->>O: classify → NEEDS_APPROVAL
-  O-->>C: WS agent.requested_action
+  A->>O: ARC_ACTION_REQUEST(fs.write_patch)
+  O->>P: classify -> NEEDS_APPROVAL
+  P-->>O: ApprovalRequest pending
+  O-->>C: WS approval.requested
   C-->>U: Approval card
   U->>C: Approve
   C->>O: POST /approvals/:id/approve
-  O->>A: action approved
-  A->>G: git commit
-  A->>O: requestAction(git.push)
-  O-->>C: WS agent.requested_action
-  U->>C: Approve
-  C->>O: POST /approvals/:id/approve
-  A->>GH: git push
-  A->>O: requestAction(pr.openDraft)
-  O-->>C: WS agent.requested_action
-  U->>C: Approve
-  A->>GH: open draft PR
-  A-->>O: task complete + summary
+  O->>A: ARC_APPROVAL approved
+  A-->>O: task complete
+  O->>G: git diff summary
+  O-->>C: WS diff.summary
+  O->>O: run configured test command
+  O-->>C: WS test.started / test.log / test.completed
   O-->>C: WS task.completed
-  C-->>U: ✅ Draft PR ready for review
+  C-->>U: Local review ready
 ```
 
 ---
@@ -270,7 +299,6 @@ flowchart TD
   P --> TestFail["Tests fail"]
   P --> Hang["CLI process hangs<br/>or unresponsive"]
   P --> Conflict["Worktree conflict<br/>(merge / dirty state)"]
-  P --> SyncDown["External sync fails<br/>(GitHub/Linear API down)"]
   P --> Disconnect["Phone disconnects<br/>during approval window"]
 
   Dangerous --> Refuse["Refuse · audit · alert"]
@@ -279,7 +307,6 @@ flowchart TD
   Heartbeat -->|"yes"| Reap["Reap process<br/>mark session failed"]
   Heartbeat -->|"no"| Wait["Wait + show 'thinking'"]
   Conflict --> Pause["Pause agent<br/>request human merge decision"]
-  SyncDown --> Retry["Retry with backoff<br/>queue + flag SyncEvent"]
   Disconnect --> Hold["Hold approval pending<br/>expire after configurable window"]
   Hold --> Expired["Mark expired = denied"]
 
@@ -288,7 +315,6 @@ flowchart TD
   Reap --> Resume
   Wait --> Resume
   Pause --> Resume
-  Retry --> Resume
   Expired --> Resume
 ```
 

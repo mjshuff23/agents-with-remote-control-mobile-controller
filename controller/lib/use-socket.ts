@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import type { ApprovalRequest, GitChangeSummary, TaskEventEnvelope, TestRunSummary } from './api';
 
 type GlobalWithSocket = typeof globalThis & {
   __CONTROLLER_SOCKET__?: Socket;
@@ -63,6 +64,13 @@ export interface TaskSocketHandlers {
   onLog?: (data: { type: string; content: string; sequence: number }) => void;
   onStarted?: (data: unknown) => void;
   onCompleted?: (data: { exitCode: number; status: string }) => void;
+  onApprovalRequested?: (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => void;
+  onApprovalResolved?: (event: TaskEventEnvelope<'approval.resolved', ApprovalRequest>) => void;
+  onPolicyViolation?: (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => void;
+  onDiffSummary?: (event: TaskEventEnvelope<'diff.summary', GitChangeSummary>) => void;
+  onTestStarted?: (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => void;
+  onTestLog?: (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => void;
+  onTestCompleted?: (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => void;
 }
 
 export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): void {
@@ -97,15 +105,50 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
       const onCompleted = (data: { taskId: string; exitCode: number; status: string }) => {
         if (data.taskId === taskId) ref.current.onCompleted?.(data);
       };
+      const onApprovalRequested = (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => {
+        if (event.taskId === taskId) ref.current.onApprovalRequested?.(event);
+      };
+      const onApprovalResolved = (event: TaskEventEnvelope<'approval.resolved', ApprovalRequest>) => {
+        if (event.taskId === taskId) ref.current.onApprovalResolved?.(event);
+      };
+      const onPolicyViolation = (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => {
+        if (event.taskId === taskId) ref.current.onPolicyViolation?.(event);
+      };
+      const onDiffSummary = (event: TaskEventEnvelope<'diff.summary', GitChangeSummary>) => {
+        if (event.taskId === taskId) ref.current.onDiffSummary?.(event);
+      };
+      const onTestStarted = (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => {
+        if (event.taskId === taskId) ref.current.onTestStarted?.(event);
+      };
+      const onTestLog = (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => {
+        if (event.taskId === taskId) ref.current.onTestLog?.(event);
+      };
+      const onTestCompleted = (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => {
+        if (event.taskId === taskId) ref.current.onTestCompleted?.(event);
+      };
 
       socket.on('agent.log', onLog);
       socket.on('task.started', onStarted);
       socket.on('task.completed', onCompleted);
+      socket.on('approval.requested', onApprovalRequested);
+      socket.on('approval.resolved', onApprovalResolved);
+      socket.on('policy.violation', onPolicyViolation);
+      socket.on('diff.summary', onDiffSummary);
+      socket.on('test.started', onTestStarted);
+      socket.on('test.log', onTestLog);
+      socket.on('test.completed', onTestCompleted);
 
       cleanupListeners = () => {
         socket.off('agent.log', onLog);
         socket.off('task.started', onStarted);
         socket.off('task.completed', onCompleted);
+        socket.off('approval.requested', onApprovalRequested);
+        socket.off('approval.resolved', onApprovalResolved);
+        socket.off('policy.violation', onPolicyViolation);
+        socket.off('diff.summary', onDiffSummary);
+        socket.off('test.started', onTestStarted);
+        socket.off('test.log', onTestLog);
+        socket.off('test.completed', onTestCompleted);
         socket.emit('unsubscribe', { taskId });
       };
     });

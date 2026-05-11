@@ -4,6 +4,7 @@ import request = require('supertest');
 import { AppModule } from '../src/app.module';
 import { AGENT_ADAPTERS } from '../src/agents/agent-adapter.token';
 import { applyAppGlobals } from '../src/app-globals';
+import { GitWorktreeService } from '../src/git/git-worktree.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
 
@@ -14,6 +15,9 @@ describe('Tasks API', () => {
     name: 'codex' as const,
     startTask: jest.fn()
   };
+  const worktrees = {
+    createForTask: jest.fn()
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -22,6 +26,13 @@ describe('Tasks API', () => {
     process.env.ARC_HOST = '127.0.0.1';
 
     prisma = createInMemoryPrisma();
+    worktrees.createForTask.mockResolvedValue({
+      repoPath: '/repo',
+      worktreePath: '/repo/worktrees/task',
+      branchName: 'agent/task-demo',
+      baseRef: 'main',
+      baseCommit: 'abc123'
+    });
     adapter.startTask.mockImplementation(async (input) => {
       await input.onOutput({ type: 'stdout', content: 'started' });
       return {
@@ -37,6 +48,8 @@ describe('Tasks API', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      .overrideProvider(GitWorktreeService)
+      .useValue(worktrees)
       .overrideProvider(AGENT_ADAPTERS)
       .useValue([adapter])
       .compile();
@@ -64,7 +77,11 @@ describe('Tasks API', () => {
       prompt: 'Say hello',
       status: 'running',
       selectedAgent: 'codex',
-      repoPath: '/repo'
+      repoPath: '/repo/worktrees/task',
+      worktreePath: '/repo/worktrees/task',
+      branchName: 'agent/task-demo',
+      baseRef: 'main',
+      baseCommit: 'abc123'
     }));
     expect(response.body.session).toEqual(expect.objectContaining({
       agentName: 'codex',

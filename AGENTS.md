@@ -36,6 +36,8 @@ The current phase determines what is in-scope and what is out-of-scope. Linear i
 
 For Phase 3, keep the scope tight: isolate each task in a Git worktree, classify requested actions, create approval records, push approval prompts over the existing WebSocket path, and summarize diffs/tests before the human approves risky next steps.
 
+Phase 3 approval mode is `cooperative-gated` by default. Do not claim the orchestrator can perfectly intercept every CLI action unless a specific adapter hook proves that behavior in code.
+
 ---
 
 ## Safety constraints (read this carefully)
@@ -70,6 +72,32 @@ The orchestrator this repo is building enforces a three-tier safety model. **You
 - Modify global system config
 
 If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassified destructive action is unbounded.
+
+---
+
+## Cooperative approval protocol
+
+When native CLI approval hooks are unavailable, agents cooperate with the orchestrator using exactly one machine-readable stdout line:
+
+```text
+ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command | policy.violation","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"Short title","rationale":"Why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"One sentence"}
+```
+
+The orchestrator classifies the request with `arc.config.json`, creates an `ApprovalRequest` row when relevant, emits `approval.requested` or `policy.violation`, and replies over stdin:
+
+```text
+ARC_APPROVAL {"id":"<uuid>","decision":"approved | denied | expired | refused","message":"operator guidance","constraints":["..."]}
+```
+
+Agent rules:
+
+- If denied, do not retry the same request by paraphrasing it.
+- If expired, treat it as denied.
+- If refused or `BLOCKED`, do not ask again.
+- If approved, execute only the exact approved action inside the task worktree.
+- After mutating actions, produce or allow a diff summary.
+
+The controller exposes approvals on the task detail page. Diffs and configured test runs are summaries for local review, not permission to commit, push, PR, deploy, or sync external tools.
 
 ---
 
@@ -139,6 +167,15 @@ pnpm test
 pnpm test:e2e
 pnpm typecheck
 pnpm build
+```
+
+If `pnpm` is unavailable in the current shell, root checks can run through npm scripts:
+
+```bash
+npm test
+npm run test:e2e
+npm run typecheck
+npm run build
 ```
 
 Controller UI:

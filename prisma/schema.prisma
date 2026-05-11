@@ -8,31 +8,44 @@ datasource db {
 }
 
 model Task {
-  id            String         @id @default(uuid())
-  title         String?
-  prompt        String
-  status        String         @default("queued")
-  selectedAgent String
-  repoPath      String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  sessions      AgentSession[]
+  id              String             @id @default(uuid())
+  title           String?
+  prompt          String
+  status          String             @default("queued")
+  selectedAgent   String
+  repoPath        String
+  worktreePath    String?
+  branchName      String?
+  baseRef         String?
+  baseCommit      String?
+  approvalMode    String             @default("cooperative-gated")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  sessions        AgentSession[]
+  approvals       ApprovalRequest[]
+  auditLogs       AuditLog[]
+  changeSummaries GitChangeSummary[]
+  testRuns        TestRunSummary[]
 }
 
 model AgentSession {
-  id                String     @id @default(uuid())
+  id                String             @id @default(uuid())
   taskId            String
-  task              Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task              Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
   agentName         String
-  status            String     @default("starting")
+  status            String             @default("starting")
   externalSessionId String?
   startedAt         DateTime?
   completedAt       DateTime?
   exitCode          Int?
   errorMessage      String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   logs              AgentLog[]
+  approvals         ApprovalRequest[]
+  auditLogs         AuditLog[]
+  changeSummaries   GitChangeSummary[]
+  testRuns          TestRunSummary[]
 
   @@index([taskId])
   @@index([status])
@@ -49,4 +62,99 @@ model AgentLog {
 
   @@unique([sessionId, sequence])
   @@index([sessionId, sequence])
+}
+
+model ApprovalRequest {
+  id               String        @id @default(uuid())
+  taskId           String
+  task             Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId        String?
+  session          AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  actionRequestId  String
+  actionType       String
+  riskLevel        String
+  title            String
+  rationale        String?
+  commandJson      String?
+  filesJson        String?
+  expectedEffect   String?
+  status           String        @default("pending")
+  ruleMatched      String?
+  decision         String?
+  decisionMessage  String?
+  correlationId    String?
+  requestedAt      DateTime      @default(now())
+  resolvedAt       DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  auditLogs        AuditLog[]
+
+  @@unique([taskId, actionRequestId])
+  @@index([taskId, status])
+  @@index([sessionId])
+}
+
+model AuditLog {
+  id                String           @id @default(uuid())
+  taskId            String?
+  task              Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  sessionId         String?
+  session           AgentSession?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  approvalRequestId String?
+  approvalRequest   ApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+  kind              String
+  actionType        String?
+  riskLevel         String?
+  ruleMatched       String?
+  decision          String?
+  message           String
+  metadataJson      String?
+  createdAt         DateTime         @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([approvalRequestId])
+}
+
+model GitChangeSummary {
+  id              String        @id @default(uuid())
+  taskId          String
+  task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId       String?
+  session         AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  statusText      String
+  filesChanged    Int           @default(0)
+  insertions      Int           @default(0)
+  deletions       Int           @default(0)
+  addedCount      Int           @default(0)
+  modifiedCount   Int           @default(0)
+  deletedCount    Int           @default(0)
+  renamedCount    Int           @default(0)
+  riskFlagsJson   String        @default("[]")
+  topFilesJson    String        @default("[]")
+  createdAt       DateTime      @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+model TestRunSummary {
+  id            String        @id @default(uuid())
+  taskId        String
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId     String?
+  session       AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  commandId     String
+  commandJson   String
+  status        String
+  exitCode      Int?
+  highlightsJson String      @default("[]")
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([taskId, createdAt])
+  @@index([sessionId, createdAt])
 }

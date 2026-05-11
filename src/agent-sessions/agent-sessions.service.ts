@@ -2,12 +2,16 @@ import { HttpStatus, Injectable, OnApplicationBootstrap, Optional } from '@nestj
 import { AgentSession, Task } from '@prisma/client';
 import { AgentsService } from '../agents/agents.service';
 import { AgentLogType, RunningAgentProcess } from '../agents/agent-adapter.interface';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
+import { ApprovalDecision, AgentActionRequest } from '../policy/policy.types';
 import { PrismaService } from '../prisma/prisma.service';
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'stopped']);
+const ACTION_REQUEST_PREFIX = 'ARC_ACTION_REQUEST';
+const APPROVAL_RESPONSE_PREFIX = 'ARC_APPROVAL';
 
 export interface StopTaskResult {
   accepted: boolean;
@@ -20,11 +24,15 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private readonly nextLogSequences = new Map<string, number>();
   private readonly logWriteQueues = new Map<string, Promise<void>>();
   private readonly sessionToTask = new Map<string, string>();
+  private readonly protocolBuffers = new Map<string, string>();
+  private readonly approvalTimeouts = new Map<string, NodeJS.Timeout>();
+  private readonly approvalTimeoutSessions = new Map<string, string>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly agents: AgentsService,
     private readonly config: AppConfigService,
+    private readonly approvals: ApprovalsService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -48,8 +56,15 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         taskId: task.id,
         sessionId: session.id,
         repoPath: task.repoPath,
-        prompt: task.prompt,
-        onOutput: async (event) => this.appendLog(session.id, event.type, event.content),
+        worktreePath: task.worktreePath ?? undefined,
+        branchName: task.branchName ?? undefined,
+        prompt: this.buildCooperativePrompt(task),
+        onOutput: async (event) => {
+          await this.appendLog(session.id, event.type, event.content);
+          if (event.type === 'stdout') {
+            await this.handleProtocolOutput(task.id, session.id, event.content);
+          }
+        },
         onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
       });
 
@@ -98,6 +113,23 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
     running.write(text);
     await this.appendLog(session.id, 'system', `Input sent (${text.length} chars)`);
+  }
+
+  async resolveApproval(approvalId: string, decision: Exclude<ApprovalDecision, 'auto_allow' | 'refused'>, message?: string): Promise<{ approval: unknown }> {
+    const approval = await this.approvals.resolve(approvalId, decision, message);
+    this.clearApprovalTimeout(approval.id);
+    await this.writeApprovalResponse(approval.sessionId, {
+      id: approval.actionRequestId,
+      decision: approval.decision ?? decision,
+      message: approval.decisionMessage ?? message ?? '',
+      constraints: approval.decision === 'approved' ? ['Execute only the exact approved action in this task worktree.'] : []
+    });
+
+    if (approval.sessionId && ['approved', 'denied', 'expired'].includes(approval.status)) {
+      await this.resumeIfWaiting(approval.taskId, approval.sessionId);
+    }
+
+    return { approval };
   }
 
   async stopTask(taskId: string): Promise<StopTaskResult> {
@@ -161,6 +193,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     this.nextLogSequences.delete(sessionId);
     this.logWriteQueues.delete(sessionId);
     this.sessionToTask.delete(sessionId);
+    this.protocolBuffers.delete(sessionId);
   }
 
   private async markSessionFailed(taskId: string, sessionId: string, message: string): Promise<void> {
@@ -198,6 +231,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
   private async completeFromExit(taskId: string, sessionId: string, exitCode: number, signal?: string): Promise<void> {
     this.runningProcesses.delete(sessionId);
+    this.clearSessionApprovalTimeouts(sessionId);
     const current = await this.prisma.agentSession.findFirst({ where: { id: sessionId } });
     const wasStopping = current?.status === 'stopping';
     const finalSessionStatus = wasStopping ? 'stopped' : exitCode === 0 ? 'completed' : 'failed';
@@ -273,5 +307,153 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private buildCooperativePrompt(task: Task): string {
+    return [
+      'You are running under Agents With Remote Control Mobile Controller Phase 3.',
+      `Task id: ${task.id}`,
+      `Worktree: ${task.worktreePath ?? task.repoPath}`,
+      `Branch: ${task.branchName ?? 'unknown'}`,
+      '',
+      'Safety contract:',
+      '- Work only inside the task worktree.',
+      '- Do not read secrets such as .env, *.pem, *.key, id_*, or ~/.ssh files.',
+      '- Do not commit, push, open PRs, deploy, modify global config, or run internet-piped shell scripts.',
+      '- When an action may mutate files, install packages, run migrations, write git state, or execute an unknown shell command, print exactly one machine-readable line before doing it:',
+      'ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | test.run | shell.command | policy.violation","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"short title","rationale":"why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"one sentence"}',
+      '- Wait for ARC_APPROVAL on stdin. If denied or expired, do not retry the same action by paraphrasing it. If refused or BLOCKED, do not ask again.',
+      '- If approved, do only the exact approved action inside the stated constraints.',
+      '- After mutating actions, allow the orchestrator to capture diff and test summaries.',
+      '',
+      'User task:',
+      task.prompt
+    ].join('\n');
+  }
+
+  private async handleProtocolOutput(taskId: string, sessionId: string, content: string): Promise<void> {
+    const lines = this.extractProtocolLines(sessionId, content);
+    for (const line of lines) {
+      if (!line.startsWith(ACTION_REQUEST_PREFIX)) {
+        continue;
+      }
+      try {
+        const request = JSON.parse(line.slice(ACTION_REQUEST_PREFIX.length).trim()) as AgentActionRequest;
+        const result = await this.approvals.createFromAgentRequest(taskId, sessionId, request);
+        if (result.decision) {
+          await this.writeApprovalResponse(sessionId, {
+            id: request.id,
+            decision: result.decision === 'auto_allow' ? 'approved' : result.decision,
+            message: result.responseMessage ?? '',
+            constraints: result.decision === 'auto_allow' || result.decision === 'approved'
+              ? ['Execute only the exact approved action in this task worktree.']
+              : []
+          });
+        } else {
+          await this.markWaitingForApproval(taskId, sessionId);
+          this.scheduleApprovalExpiry(result.approval.id, sessionId);
+        }
+      } catch (error) {
+        await this.appendLog(sessionId, 'system', `Invalid ARC_ACTION_REQUEST ignored: ${this.errorMessage(error)}`);
+      }
+    }
+  }
+
+  private extractProtocolLines(sessionId: string, content: string): string[] {
+    const buffered = (this.protocolBuffers.get(sessionId) ?? '') + content;
+    const parts = buffered.split(/\r?\n/);
+    const last = parts.pop() ?? '';
+    const complete = parts.map((line) => line.trim()).filter(Boolean);
+
+    if (last.trim().startsWith(ACTION_REQUEST_PREFIX)) {
+      try {
+        JSON.parse(last.trim().slice(ACTION_REQUEST_PREFIX.length).trim());
+        complete.push(last.trim());
+        this.protocolBuffers.set(sessionId, '');
+        return complete;
+      } catch {
+        // Keep partial JSON buffered until more bytes arrive.
+      }
+    }
+
+    this.protocolBuffers.set(sessionId, last.slice(-20000));
+    return complete;
+  }
+
+  private async markWaitingForApproval(taskId: string, sessionId: string): Promise<void> {
+    await this.prisma.agentSession.update({
+      where: { id: sessionId },
+      data: { status: 'waiting_approval' }
+    });
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { status: 'waiting_approval' }
+    });
+  }
+
+  private async resumeIfWaiting(taskId: string, sessionId: string): Promise<void> {
+    const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
+    if (session?.status !== 'waiting_approval') {
+      return;
+    }
+    await this.prisma.agentSession.update({
+      where: { id: sessionId },
+      data: { status: 'running' }
+    });
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { status: 'running' }
+    });
+  }
+
+  private async writeApprovalResponse(sessionId: string | null, payload: { id: string; decision: string; message: string; constraints: string[] }): Promise<void> {
+    if (!sessionId) {
+      return;
+    }
+    const running = this.runningProcesses.get(sessionId);
+    if (!running?.write) {
+      await this.appendLog(sessionId, 'system', `Approval response could not be sent; session has no writable process`);
+      return;
+    }
+    running.write(`${APPROVAL_RESPONSE_PREFIX} ${JSON.stringify(payload)}`);
+    await this.appendLog(sessionId, 'system', `Approval ${payload.decision} sent for ${payload.id}`);
+  }
+
+  private scheduleApprovalExpiry(approvalId: string, sessionId: string): void {
+    this.clearApprovalTimeout(approvalId);
+    const timeout = setTimeout(() => {
+      void this.expireApproval(approvalId, sessionId);
+    }, this.config.approvalTimeoutMs).unref();
+    this.approvalTimeouts.set(approvalId, timeout);
+    this.approvalTimeoutSessions.set(approvalId, sessionId);
+  }
+
+  private async expireApproval(approvalId: string, sessionId: string): Promise<void> {
+    this.clearApprovalTimeout(approvalId);
+    const approval = await this.approvals.resolve(approvalId, 'expired', 'Approval timed out; expired approvals are denied.');
+    await this.writeApprovalResponse(sessionId, {
+      id: approval.actionRequestId,
+      decision: 'expired',
+      message: 'Approval timed out; expired approvals are denied.',
+      constraints: []
+    });
+    await this.resumeIfWaiting(approval.taskId, sessionId);
+  }
+
+  private clearApprovalTimeout(approvalId: string): void {
+    const timeout = this.approvalTimeouts.get(approvalId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.approvalTimeouts.delete(approvalId);
+      this.approvalTimeoutSessions.delete(approvalId);
+    }
+  }
+
+  private clearSessionApprovalTimeouts(sessionId: string): void {
+    for (const [approvalId, timeoutSessionId] of this.approvalTimeoutSessions) {
+      if (timeoutSessionId === sessionId) {
+        this.clearApprovalTimeout(approvalId);
+      }
+    }
   }
 }
