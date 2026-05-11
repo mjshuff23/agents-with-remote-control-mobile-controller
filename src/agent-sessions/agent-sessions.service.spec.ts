@@ -269,4 +269,30 @@ describe('AgentSessionsService', () => {
       data: { status: 'running' }
     });
   });
+
+  it('keeps the session waiting while another approval is still pending', async () => {
+    approvals.resolve.mockResolvedValue({
+      id: 'approval-1',
+      taskId: task.id,
+      sessionId: session.id,
+      actionRequestId: 'action-1',
+      decision: 'approved',
+      decisionMessage: null,
+      status: 'approved'
+    });
+    approvals.hasPendingForSession.mockResolvedValue(true);
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'waiting_approval' });
+
+    await service.resolveApproval('approval-1', 'approved');
+
+    expect(approvals.hasPendingForSession).toHaveBeenCalledWith(session.id);
+    expect(prisma.agentSession.update).not.toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { status: 'running' }
+    });
+    expect(prisma.task.update).not.toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: 'running' }
+    });
+  });
 });
