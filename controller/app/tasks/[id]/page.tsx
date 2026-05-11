@@ -244,6 +244,23 @@ export default function TaskDetailPage() {
 
   const isLive = task?.status === 'running' || task?.status === 'starting' || task?.status === 'waiting_approval';
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending');
+
+  // Safety-net poll: if the task is waiting for approval but the UI has no
+  // pending approval cards, the WS event was likely missed (network transition,
+  // page already open when approval fired). Re-fetch until one appears.
+  useEffect(() => {
+    if (task?.status !== 'waiting_approval' || pendingApprovals.length > 0) return;
+    const intervalId = setInterval(() => {
+      void getTask(id)
+        .then(({ approvals: fresh }) => {
+          fresh.forEach((a) => {
+            setApprovals((prev) => [a, ...prev.filter((x) => x.id !== a.id)].slice(0, 50));
+          });
+        })
+        .catch(() => {});
+    }, 3_000);
+    return () => clearInterval(intervalId);
+  }, [task?.status, pendingApprovals.length, id]);
   const latestDiff = changeSummaries[0];
 
   if (!task) {

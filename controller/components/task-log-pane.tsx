@@ -83,6 +83,7 @@ export function TaskLogPane({ logs, autoScroll = true }: Props) {
     count: logs.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 20,
+    measureElement: (el) => el.getBoundingClientRect().height,
     overscan: 30
   });
 
@@ -107,6 +108,8 @@ export function TaskLogPane({ logs, autoScroll = true }: Props) {
           return (
             <div
               key={item.key}
+              ref={virtualizer.measureElement}
+              data-index={item.index}
               style={{
                 position: 'absolute',
                 top: 0,
