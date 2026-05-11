@@ -102,7 +102,7 @@ interface AgentAdapter {
 
 **Why this shape:**
 - The orchestrator never talks directly to a specific agent — it goes through the adapter.
-- `CodexAdapter` currently launches `codex exec --json --cd <repoPath> -` through `node-pty`.
+- `CodexAdapter` currently launches `codex exec --ignore-user-config --json --cd <repoPath> -` through `node-pty` by default, using `ARC_CODEX_IGNORE_USER_CONFIG=true` to avoid user-configured MCP/OAuth/plugin side effects in local Phase 3 runs.
 - Adding Claude/Gemini in Phase 6 is "implement the interface, register the adapter," not a refactor.
 
 ---

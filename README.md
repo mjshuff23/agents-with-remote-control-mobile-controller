@@ -230,6 +230,7 @@ pnpm prisma:migrate
 Edit `.env` before running if `ARC_REPO_PATH` should point somewhere other than this checkout.
 Set `ARC_WORKTREE_ROOT` when you want task worktrees somewhere specific; otherwise the orchestrator uses a sibling `worktrees/` directory beside `ARC_REPO_PATH`.
 Set `ARC_TEST_COMMAND_TIMEOUT_MS` to bound configured test runs globally; individual `arc.config.json` test commands may override it with `timeoutMs`.
+`ARC_CODEX_IGNORE_USER_CONFIG=true` is the recommended Phase 3 default. It adds `--ignore-user-config` to ARC-launched `codex exec` runs so user-configured MCP/OAuth/plugin side effects do not leak into local task logs; Codex auth still comes from `CODEX_HOME`.
 
 Run the orchestrator:
 

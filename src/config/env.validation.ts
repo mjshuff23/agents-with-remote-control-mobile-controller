@@ -67,7 +67,16 @@ const readCodexArgs = (config: RawEnv): string[] => {
     throw new Error('ARC_CODEX_ARGS_JSON must be a JSON string array');
   }
 
-  return parsed;
+  const args = [...(parsed as string[])];
+  if (
+    readBoolean(config, 'ARC_CODEX_IGNORE_USER_CONFIG', true) &&
+    args[0] === 'exec' &&
+    !args.includes('--ignore-user-config')
+  ) {
+    args.splice(1, 0, '--ignore-user-config');
+  }
+
+  return args;
 };
 
 export function validateEnv(config: RawEnv): Record<string, unknown> {
@@ -90,6 +99,7 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_PORT: readNumber(config, 'ARC_PORT', 3000),
     ARC_REPO_PATH: readString(config, 'ARC_REPO_PATH'),
     ARC_RUNNER_MODE: runnerMode,
+    ARC_CODEX_IGNORE_USER_CONFIG: readBoolean(config, 'ARC_CODEX_IGNORE_USER_CONFIG', true),
     ARC_CODEX_COMMAND: readString(config, 'ARC_CODEX_COMMAND', 'codex'),
     ARC_CODEX_ARGS: readCodexArgs(config),
     ARC_CODEX_ENV_KEYS: readStringList(config, 'ARC_CODEX_ENV_KEYS'),
