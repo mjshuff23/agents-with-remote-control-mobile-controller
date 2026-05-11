@@ -53,3 +53,10 @@ worktrees/
 .cache/
 .tmp/
 tmp/
+
+# Local lockfiles (controller uses its own pnpm install, not part of root workspace)
+controller/pnpm-lock.yaml
+
+# Generated / local docs
+docs/superpowers/
+project_structure.txt

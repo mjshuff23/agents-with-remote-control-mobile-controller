@@ -1,5 +1,7 @@
 export type RunnerMode = 'local' | 'wsl';
 
+export const DEFAULT_DATABASE_URL = 'file:./prisma/data/arc.sqlite';
+
 type RawEnv = Record<string, unknown>;
 
 const readString = (config: RawEnv, key: string, defaultValue?: string): string => {
@@ -94,7 +96,7 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
 
   return {
     ...config,
-    DATABASE_URL: readString(config, 'DATABASE_URL', 'file:./data/arc.sqlite'),
+    DATABASE_URL: readString(config, 'DATABASE_URL', DEFAULT_DATABASE_URL),
     ARC_HOST: host,
     ARC_PORT: readNumber(config, 'ARC_PORT', 3000),
     ARC_REPO_PATH: readString(config, 'ARC_REPO_PATH'),
