@@ -8,10 +8,10 @@
 
 ## Summary
 
-| Package | Context | CVE | CVSS | Severity | Action |
-|---------|---------|-----|------|----------|--------|
-| `@hono/node-server` | root → `prisma>@prisma/dev` | CVE-2026-39406 | 5.3 | Moderate | **Patched** via pnpm override `^1.19.13` → resolved 1.19.14 |
-| `postcss` | controller → `next` | CVE-2026-41305 | 6.1 | Moderate | **Patched** via pnpm override `>=8.5.10` → resolved 8.5.14 |
+| Package             | CVE            | CVSS | Severity | Fix                                                  |
+|---------------------|----------------|------|----------|------------------------------------------------------|
+| `@hono/node-server` | CVE-2026-39406 | 5.3  | Moderate | `@prisma/dev>@hono/node-server: ^1.19.13` -> 1.19.14 |
+| `postcss`           | CVE-2026-41305 | 6.1  | Moderate | `next>postcss: ^8.5.10` -> 8.5.14                    |
 
 No critical or high vulnerabilities found in either workspace.
 Post-patch: `pnpm audit` reports **0 vulnerabilities** in both root and controller.
@@ -46,7 +46,7 @@ Post-patch: `pnpm audit` reports **0 vulnerabilities** in both root and controll
 - **Path:** `prisma` (devDep) → `@prisma/dev` → `@hono/node-server`
 - **Description:** `serveStatic` does not normalise repeated slashes (`//`) in request paths, allowing middleware registered on `/admin/*` to be bypassed by requesting `//admin/secret.txt`.
 - **Exploitability here:** None. `@hono/node-server` is a transitive dependency of the Prisma CLI's internal `@prisma/dev` tooling package — it is not loaded at runtime by the NestJS app and `serveStatic` is never called.
-- **Fix:** `pnpm.overrides` in root `package.json` pins `@hono/node-server` to `^1.19.13`. Resolved to 1.19.14.
+- **Fix:** Path-specific override `"@prisma/dev>@hono/node-server": "^1.19.13"` in root `package.json`. Resolved to 1.19.14. Scoped to `@prisma/dev` so a future direct dep on `@hono/node-server` would not inherit the pin.
 
 ### CVE-2026-41305 — `postcss` XSS via unescaped `</style>`
 
@@ -55,7 +55,7 @@ Post-patch: `pnpm audit` reports **0 vulnerabilities** in both root and controll
 - **Path:** `next` → `postcss@8.4.31`
 - **Description:** PostCSS does not escape `</style>` sequences when stringifying CSS ASTs. If user-submitted CSS is parsed and re-stringified for embedding in HTML `<style>` tags, the sequence breaks out of the style context, enabling XSS.
 - **Exploitability here:** None. PostCSS is used as a **build-time** tool by Next.js (Tailwind compilation, autoprefixer). We do not accept user-submitted CSS strings and embed them in HTML at runtime via PostCSS.
-- **Fix:** `pnpm.overrides` in `controller/package.json` pins `postcss` to `>=8.5.10`. Resolved to 8.5.14 (already present in the lockfile via `@tailwindcss/postcss`; this override deduplicates `next`'s older copy).
+- **Fix:** Path-specific override `"next>postcss": "^8.5.10"` in `controller/package.json`. Resolved to 8.5.14 (already present in the lockfile via `@tailwindcss/postcss`; this override deduplicates `next`'s older copy without affecting any future direct `postcss` dep).
 
 ---
 

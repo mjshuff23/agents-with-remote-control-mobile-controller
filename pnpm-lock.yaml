@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@hono/node-server': ^1.19.13
+  '@prisma/dev>@hono/node-server': ^1.19.13
 
 importers:
 
