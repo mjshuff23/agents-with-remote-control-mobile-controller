@@ -29,8 +29,9 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   @SubscribeMessage('subscribe')
-  subscribe(client: Socket, payload: { taskId: string }): void {
+  subscribe(client: Socket, payload: { taskId: string }): { ok: true } {
     client.join(`task:${payload.taskId}`);
+    return { ok: true };
   }
 
   @SubscribeMessage('unsubscribe')

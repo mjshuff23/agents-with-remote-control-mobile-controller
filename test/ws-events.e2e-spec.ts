@@ -19,7 +19,7 @@ describe('WebSocket events', () => {
   const adapter = { name: 'codex' as const, startTask: jest.fn() };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.restoreAllMocks();
 
     // Delay the process exit so the client can subscribe before task.completed fires
     adapter.startTask.mockImplementation(async (input) => {
@@ -61,7 +61,10 @@ describe('WebSocket events', () => {
     const taskId: string = createRes.body.task.id;
 
     socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET } });
-    socket.emit('subscribe', { taskId });
+
+    // Wait for ack so we know the server has joined the room before the
+    // 200ms timer fires task.completed — eliminates the subscribe/complete race.
+    await socket.emitWithAck('subscribe', { taskId });
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('timeout: task.completed not received')), 5000);
