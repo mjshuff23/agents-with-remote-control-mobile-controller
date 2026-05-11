@@ -79,6 +79,9 @@ export class TestRunnerService {
 
     let child: ChildProcessWithoutNullStreams;
     try {
+      // SafeSpawnCommand comes from arc.config.json after command/cwd validation;
+      // shell stays disabled so commandId never becomes shell text.
+      // nosemgrep: javascript.lang.security.detect-child-process
       child = spawn(safeCommand.bin, safeCommand.args, { cwd, shell: false, env: safeTestEnv() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
