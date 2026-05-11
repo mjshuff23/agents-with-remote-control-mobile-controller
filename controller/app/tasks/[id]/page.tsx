@@ -35,7 +35,6 @@ export default function TaskDetailPage() {
   const [testCommands, setTestCommands] = useState<TestCommandConfig[]>([]);
   const [selectedTestCommandId, setSelectedTestCommandId] = useState('');
   const [inputText, setInputText] = useState('');
-  const [showInput, setShowInput] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [denyMessages, setDenyMessages] = useState<Record<string, string>>({});
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
@@ -79,6 +78,26 @@ export default function TaskDetailPage() {
       })
       .catch(console.error);
   }, [id]);
+
+  // Re-sync task state after a socket reconnect or tab visibility restore.
+  // Events emitted while the socket was disconnected are permanently lost,
+  // so we re-fetch from REST and merge any missed data.
+  function resyncTask() {
+    void getTask(id)
+      .then(({ task: t, session: s, logs: freshLogs, approvals: fresh }) => {
+        setTask(t);
+        setSession(s);
+        setLogs((prev) => {
+          const known = new Set(prev.map((l) => l.sequence));
+          const missed = freshLogs.filter((l) => !known.has(l.sequence));
+          missed.forEach((l) => seenSeqs.current.add(l.sequence));
+          if (missed.length === 0) return prev;
+          return [...prev, ...missed].sort((a, b) => a.sequence - b.sequence);
+        });
+        setApprovals(fresh);
+      })
+      .catch(() => {});
+  }
 
   useTaskSocket(id, {
     onLog: (data) => {
@@ -138,8 +157,21 @@ export default function TaskDetailPage() {
       seenEvents.current.add(event.id);
       setTestRuns((prev) => [event.data, ...prev.filter((run) => run.id !== event.data.id)].slice(0, 10));
       appendSyntheticLog('system', `Test ${event.data.status}: ${event.data.commandId}`);
-    }
+    },
+    onReconnected: resyncTask
   });
+
+  // Re-sync when the tab/app becomes visible again (mobile backgrounding
+  // can silently drop the WebSocket and we miss events while hidden).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') resyncTask();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  // resyncTask captures stable refs; id is the only meaningful dependency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   function appendSyntheticLog(type: string, content: string) {
     const sequence = seqRef.current + 1;
@@ -177,7 +209,6 @@ export default function TaskDetailPage() {
     try {
       await sendInput(id, inputText.trim());
       setInputText('');
-      setShowInput(false);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Send failed');
     }
@@ -373,72 +404,60 @@ export default function TaskDetailPage() {
             {actionError}
           </p>
         )}
-        {showInput && (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleSendInput(); }}
-              placeholder="Type input for the agent…"
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
-            <button
-              onClick={() => void handleSendInput()}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold"
-            >
-              Send
-            </button>
-            <button
-              onClick={() => setShowInput(false)}
-              className="text-gray-400 px-2 py-2 text-sm"
-            >
-              ✕
-            </button>
-          </div>
-        )}
         {isLive && (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setShowInput((s) => !s)}
-              className="border border-blue-500 text-blue-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 active:scale-95 transition-all"
-            >
-              Continue
-            </button>
-            <button
-              onClick={() => void handleStop()}
-              className="border border-red-500 text-red-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-50 active:scale-95 transition-all"
-            >
-              Stop
-            </button>
-            <button
-              onClick={() => void handleDiffSummary()}
-              className="border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 active:scale-95 transition-all"
-            >
-              Diff
-            </button>
-            <button
-              onClick={() => void handleRunTests()}
-              disabled={!selectedTestCommandId}
-              className="border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 active:scale-95 transition-all"
-            >
-              Test
-            </button>
-            {testCommands.length > 1 && (
-              <select
-                value={selectedTestCommandId}
-                onChange={(e) => setSelectedTestCommandId(e.target.value)}
-                className="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+          <>
+            {/* Terminal-style input — always visible while the task is running */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleSendInput(); }}
+                placeholder="Send input to agent…"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={() => void handleSendInput()}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold active:scale-95 transition-transform"
               >
-                {testCommands.map((command) => (
-                  <option key={command.id} value={command.id}>
-                    {command.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+                Send
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => void handleStop()}
+                className="border border-red-500 text-red-600 py-2 rounded-lg text-xs font-semibold hover:bg-red-50 active:scale-95 transition-all"
+              >
+                Stop
+              </button>
+              <button
+                onClick={() => void handleDiffSummary()}
+                className="border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 active:scale-95 transition-all"
+              >
+                Diff
+              </button>
+              <button
+                onClick={() => void handleRunTests()}
+                disabled={!selectedTestCommandId}
+                className="border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-40"
+              >
+                Test
+              </button>
+              {testCommands.length > 1 && (
+                <select
+                  value={selectedTestCommandId}
+                  onChange={(e) => setSelectedTestCommandId(e.target.value)}
+                  className="col-span-3 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                >
+                  {testCommands.map((command) => (
+                    <option key={command.id} value={command.id}>
+                      {command.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </>
         )}
         {!isLive && (
           <p className="text-center text-xs text-gray-400 py-1">
