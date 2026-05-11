@@ -163,4 +163,24 @@ describe('CodexAdapter', () => {
     expect(spawn.mock.calls[0][2].env).not.toHaveProperty('DATABASE_URL');
     expect(spawn.mock.calls[0][2].env).not.toHaveProperty('GH_TOKEN');
   });
+
+  it('write() sends text followed by \\r to the PTY', async () => {
+    const process = createPtyProcess();
+    spawn.mockReturnValue(process);
+    const adapter = new CodexAdapter(createConfig() as any);
+
+    const running = await adapter.startTask({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      repoPath: '/home/user/repo',
+      prompt: 'hello',
+      onOutput: jest.fn(),
+      onExit: jest.fn()
+    });
+
+    process.write.mockClear(); // clear calls from writePrompt
+    expect(running.write).toBeDefined();
+    running.write!('some input');
+    expect(process.write).toHaveBeenCalledWith('some input\r');
+  });
 });

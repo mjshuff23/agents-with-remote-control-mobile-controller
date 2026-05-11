@@ -113,3 +113,78 @@ pnpm build
 ```
 
 The e2e suite mocks the adapter so CI and local verification do not require WSL or a real Codex login. The real process path is intentionally covered by the manual smoke test above.
+
+---
+
+## Phase 2 — WebSocket Gateway + Controller UI
+
+Phase 2 adds a socket.io WebSocket gateway to the NestJS orchestrator and a Next.js mobile-first controller UI. Clients subscribe to per-task rooms and receive live `agent.log` and `task.completed` events without polling. A `POST /tasks/:id/input` endpoint lets the controller write to the agent's PTY stdin.
+
+Canonical scope is Linear `TSH-78`.
+
+### Phase 2 Scope
+
+In scope:
+
+- `EventsGateway` (socket.io) with `CONTROLLER_SECRET` bearer-token auth on the WS handshake.
+- Per-task rooms (`task:<id>`); server-side `emitToTask` helper used by both services.
+- Three event types: `task.started`, `agent.log`, `task.completed`.
+- `POST /tasks/:id/input` (202 Accepted) — writes `text + '\r'` to the PTY; rejected with 409 if the process doesn't support stdin.
+- `write?(text: string): void` added as an optional method on `RunningAgentProcess`; `CodexAdapter` implements it.
+- Next.js 15 App Router controller in `controller/` proxied to the orchestrator via `next.config.ts` rewrites (port 3001 → 3000).
+- Three pages: Dashboard (task list, 5s polling), New Task (prompt form), Task Detail (virtual log pane + live WS stream, Continue/Stop actions).
+- `useTaskSocket` hook wraps a module-level socket singleton; deduplication via sequence-based `seenSeqs: Set<number>`.
+
+Deferred:
+
+- Git worktrees, approval gates, diffs — Phase 3.
+- External sync (GitHub, Linear, etc.) — Phase 4+.
+
+### Runtime Contract Additions
+
+#### `POST /tasks/:id/input`
+
+```json
+{ "text": "y\n" }
+```
+
+Returns `202 Accepted` with `{ "accepted": true }` on success. Returns `409 Conflict` if no live session is attached or the agent process doesn't support stdin.
+
+#### WebSocket protocol
+
+Connect with `{ auth: { token: CONTROLLER_SECRET } }`. Unauthenticated connections are immediately disconnected.
+
+After connecting, subscribe to a task room:
+
+```text
+emit('subscribe', { taskId: '<id>' })   // → ack { ok: true }
+```
+
+Events pushed by the server:
+
+- `task.started` — `{ task, session }` — fired after `POST /tasks` creates a session
+- `agent.log` — `{ type, content, sequence }` — for each log line appended
+- `task.completed` — `{ exitCode, status, signal }` — when the process exits
+
+The `sequence` field matches `AgentLog.sequence` in the REST response, enabling deduplication when clients request history via `GET /tasks/:id` and then switch to WS streaming.
+
+### Phase 2 Smoke Test
+
+With both services running (`pnpm start:dev` + `cd controller && pnpm dev`):
+
+1. Open `http://localhost:3001` in a mobile browser.
+2. Tap **New Task**, enter a prompt, tap **Start Task**.
+3. The Task Detail page should appear and stream agent output live (no page refresh required).
+4. Tap **Continue** to send a line of text to the agent stdin.
+5. Tap **Stop** to send a stop signal; status should change to `stopping` then `stopped`.
+
+### Phase 2 Verification
+
+Automated checks (run from repo root):
+
+```bash
+pnpm test           # unit tests (includes agent-sessions, tasks, events gateway)
+pnpm test:e2e       # e2e suite (includes WS auth + task.completed delivery)
+pnpm typecheck      # root NestJS types
+cd controller && node_modules/.bin/tsc --noEmit   # controller Next.js types
+```

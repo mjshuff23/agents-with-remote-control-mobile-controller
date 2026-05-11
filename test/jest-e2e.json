@@ -12,5 +12,6 @@
   "setupFiles": [
     "<rootDir>/test/setup-env.ts"
   ],
-  "testEnvironment": "node"
+  "testEnvironment": "node",
+  "forceExit": true
 }

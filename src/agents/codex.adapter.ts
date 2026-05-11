@@ -82,6 +82,9 @@ export class CodexAdapter implements AgentAdapter {
             // Process already exited.
           }
         }, this.config.shutdownGraceMs).unref();
+      },
+      write: (text: string) => {
+        ptyProcess.write(text + '\r');
       }
     };
   }

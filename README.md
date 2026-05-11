@@ -2,7 +2,7 @@
 
 > Local-first agent orchestration: control CLI coding agents (Codex, Claude Code, Gemini) from your phone, with approval gates and Git worktree isolation.
 
-**Status:** Phase 1 backend scaffold is implemented. Current work is the local orchestrator + single Codex CLI runner; phone UI, approval gates, worktrees, and external sync are later phases.
+**Status:** Phase 2 complete. The local orchestrator runs with a socket.io WebSocket gateway and a Next.js mobile-first controller UI. You can start tasks, watch live agent output stream in real time, send input to the agent, and stop tasks — all from a phone browser. Phase 3 (worktree isolation + approval gates) is next.
 
 ---
 
@@ -12,22 +12,30 @@ Run AI coding agents on your PC. Control them from your phone. The agent works i
 
 ## Current implementation scope
 
-Phase 1 is intentionally narrower than the end-state architecture. The code in this repo currently ships:
+Phases 1 and 2 are complete. The code in this repo currently ships:
 
+**Phase 1 — Local orchestrator**
 - A root-level NestJS REST API.
 - Prisma + SQLite persistence for `Task`, `AgentSession`, and `AgentLog`.
 - A single `CodexAdapter` that launches `codex exec --json --cd <repoPath> -` through `node-pty`.
-- REST endpoints for task creation, listing, inspection, and stop requests.
+- REST endpoints: `POST /tasks`, `GET /tasks`, `GET /tasks/:id`, `POST /tasks/:id/stop`.
 - Problem-details style JSON errors.
+
+**Phase 2 — WebSocket gateway + controller UI**
+- socket.io WebSocket gateway at the orchestrator root with `CONTROLLER_SECRET` bearer auth.
+- Per-task rooms (`task:<id>`); the server emits `task.started`, `agent.log`, and `task.completed` as they happen.
+- `POST /tasks/:id/input` REST endpoint that writes to the agent PTY stdin (requires the agent to support interactive input).
+- Next.js 15 App Router controller UI in `controller/` (port 3001), proxied to the orchestrator via `next.config.ts` rewrites.
+- Three pages: Dashboard (task list, 5s polling), New Task (prompt form), Task Detail (virtual log pane + live WebSocket updates, Continue/Stop actions).
+- Sequence-based log deduplication so REST history and live WS stream don't produce duplicates.
 
 Deferred until later phases:
 
-- WebSockets and the mobile/web controller UI.
 - Git worktree creation, approval gates, diffs, and audit policy tables.
 - GitHub, Linear, Notion, Figma, MCP sync, and draft PR automation.
 - Claude Code, Gemini, and multi-agent workflows.
 
-See [`PLAN.md`](PLAN.md) for the Phase 1 handoff contract and manual smoke test.
+See [`PLAN.md`](PLAN.md) for phase handoff contracts and manual smoke tests.
 
 ---
 
@@ -115,9 +123,11 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 - Git worktree operations in Phase 3
 
 **Frontend (controller)**
-- Next.js (App Router) or React+Vite, mobile-first
+- Next.js 15 (App Router), mobile-first, runs on port 3001
+- Tailwind CSS for styling
+- socket.io-client for live WS updates; `@tanstack/react-virtual` for virtualized log rendering
 - PWA later
-- Local LAN-only auth to start; harden later
+- Local LAN-only auth via `CONTROLLER_SECRET` header; harden later
 
 **Runtime**
 - Windows host
@@ -153,7 +163,12 @@ Every approval and denial is recorded in an audit log. Full taxonomy and rationa
 
 ## Communication transport
 
-Phase 1 is **REST only**. The end-state architecture uses WebSockets for bidirectional controller ↔ orchestrator updates, but that starts in Phase 2. Long polling is client-initiated and not full duplex, so it's intentionally avoided as the primary architecture.
+The orchestrator exposes both REST and WebSocket (socket.io) transports.
+
+- **REST** — one-shot commands: create task, list tasks, inspect task, stop task, send input.
+- **WebSocket** — live push for streaming log output and task lifecycle events (`task.started`, `agent.log`, `task.completed`). Clients authenticate by passing `CONTROLLER_SECRET` as the `auth.token` on the socket.io handshake. After connecting, clients join per-task rooms with `emit('subscribe', { taskId })`.
+
+Long polling is intentionally avoided as a primary transport — it is client-initiated and not full-duplex.
 
 ---
 
@@ -204,17 +219,25 @@ Run the orchestrator:
 pnpm start:dev
 ```
 
-Start a task:
+In a separate terminal, run the controller UI:
 
 ```bash
+cd controller
+pnpm install
+pnpm dev          # http://localhost:3001
+```
+
+The controller UI proxies API calls to the orchestrator at `http://127.0.0.1:3000`. Open `http://localhost:3001` in a browser (or on your phone via LAN IP) to start and monitor tasks.
+
+You can also use the REST API directly:
+
+```bash
+# Start a task
 curl -i -X POST http://127.0.0.1:3000/tasks \
   -H 'Content-Type: application/json' \
   -d '{"prompt":"Say hello from Codex and then stop.","agent":"codex","title":"Smoke test"}'
-```
 
-Inspect it:
-
-```bash
+# Inspect it
 curl http://127.0.0.1:3000/tasks/<task-id>
 ```
 

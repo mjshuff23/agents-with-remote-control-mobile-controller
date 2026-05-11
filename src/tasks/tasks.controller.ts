@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
 
 @Controller('tasks')
@@ -29,5 +30,12 @@ export class TasksController {
     const result = await this.tasks.stopTask(id);
     response.status(result.accepted ? 202 : 200);
     return result;
+  }
+
+  @Post(':id/input')
+  @HttpCode(202)
+  async sendInput(@Param('id') id: string, @Body() body: SendInputDto) {
+    await this.tasks.sendInput(id, body.text);
+    return { accepted: true };
   }
 }
