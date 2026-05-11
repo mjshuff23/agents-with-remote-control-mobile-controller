@@ -8,13 +8,14 @@ If you are an AI agent reading this: this file is your briefing. The human runni
 
 ## What this repo is
 
-A local-first orchestration system that lets a human run CLI coding agents (you, basically) from their PC and control them from their phone. Yes, you may end up writing your own future supervisor. Take it seriously.
+A local-first orchestration system that lets a human run CLI coding agents from their PC and control them from their phone. Yes, you may end up writing your own future supervisor. Take it seriously.
 
 Read these in order:
 1. [`README.md`](./README.md) — high-level intent and phased plan
-2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
-3. [`docs/SAFETY.md`](./docs/SAFETY.md) — what you can and cannot do
-4. [`docs/diagrams.md`](./docs/diagrams.md) — canonical diagrams
+2. [`PLAN.md`](./PLAN.md) — phase-by-phase runtime contracts and smoke tests
+3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
+4. [`docs/SAFETY.md`](./docs/SAFETY.md) — what you can and cannot do
+5. [`docs/diagrams.md`](./docs/diagrams.md) — canonical diagrams
 
 ---
 
@@ -24,14 +25,16 @@ The current phase determines what is in-scope and what is out-of-scope. Linear i
 
 | Phase | Linear | Status |
 |---|---|---|
-| 1 | [TSH-77](https://linear.app/michaelshuff/issue/TSH-77) | Active focus |
-| 2 | [TSH-78](https://linear.app/michaelshuff/issue/TSH-78) | Deferred until Phase 1 ships |
-| 3 | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | Deferred |
+| 1 | [TSH-77](https://linear.app/michaelshuff/issue/TSH-77) | Complete — local REST orchestrator + Codex runner |
+| 2 | [TSH-78](https://linear.app/michaelshuff/issue/TSH-78) | Complete — WebSocket gateway + controller UI |
+| 3 | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | Next active focus — worktree isolation + approval gates |
 | 4 | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | Deferred |
 | 5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | Deferred |
 | 6 | [TSH-82](https://linear.app/michaelshuff/issue/TSH-82) | Deferred |
 
 **Do not** implement work from a later phase while an earlier phase is open. If the work obviously belongs to a later phase, stop and ask.
+
+For Phase 3, keep the scope tight: isolate each task in a Git worktree, classify requested actions, create approval records, push approval prompts over the existing WebSocket path, and summarize diffs/tests before the human approves risky next steps.
 
 ---
 
@@ -73,23 +76,24 @@ If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassi
 ## Conventions
 
 ### Branches
-- Feature: `agent/<linear-id>-<slug>` (e.g., `agent/tsh-77-bootstrap-orchestrator`)
-- Docs: `docs/<slug>` (e.g., `docs/initial-system-design`)
-- Never commit directly to `main` — always go through a PR.
+- Feature: `agent/<linear-id>-<slug>` (e.g., `agent/tsh-79-worktree-approval-gates`)
+- Docs: `docs/<slug>` (e.g., `docs/phase-3-handoff-cleanup`)
+- Never commit directly to `main` unless the human explicitly asks for a direct docs-only update. Prefer a PR.
 
 ### Commits
 - Imperative mood ("Add X", "Fix Y", not "Added").
-- Reference Linear issue ID in body when relevant: `Refs: TSH-77`.
+- Reference Linear issue ID in body when relevant: `Refs: TSH-79`.
 - Small, focused commits. Don't pile unrelated changes into one.
 
 ### Code
 - TypeScript everywhere on the orchestrator and controller.
 - NestJS modules map 1:1 to source folders.
-- One adapter per agent. Adapters implement the interface in `docs/ARCHITECTURE.md`.
+- One adapter per agent. Adapters implement the runtime interface in `src/agents/agent-adapter.interface.ts` and keep the architecture docs in sync.
 
 ### Tests
-- Tests live next to the code (`module.ts` + `module.spec.ts`).
-- Phase 1 ships happy-path tests; Phase 3 grows test coverage as the approval gate matures.
+- Tests live next to the code (`module.ts` + `module.spec.ts`) or in `test/` for e2e/integration coverage.
+- Phase 1 and Phase 2 have automated tests for the REST service layer, WebSocket gateway, input endpoint, and Codex PTY behavior.
+- Phase 3 should add deterministic tests around worktree creation, policy classification, approval lifecycle, blocked actions, and WebSocket approval prompts.
 - Tests must be deterministic and isolated. A test that hits production endpoints is **NEEDS_APPROVAL**, not a real test.
 
 ### Docs
@@ -102,9 +106,9 @@ If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassi
 ## Working with Linear
 
 Every meaningful task should be linked to a Linear issue. The Linear issue ID belongs in:
-- The PR title (e.g., `[TSH-77] Bootstrap NestJS orchestrator`)
-- The branch name (`agent/tsh-77-...`)
-- The commit body (`Refs: TSH-77`)
+- The PR title (e.g., `[TSH-79] Add worktree isolation and approval gates`)
+- The branch name (`agent/tsh-79-...`)
+- The commit body (`Refs: TSH-79`)
 
 Sub-tasks of a phase issue are tracked as Linear sub-issues with `parent` set to the phase issue.
 
@@ -112,7 +116,7 @@ Sub-tasks of a phase issue are tracked as Linear sub-issues with `parent` set to
 
 ## Working with GitHub
 
-Use `gh` CLI for everything GitHub-related. Authentication is already configured.
+Use `gh` CLI for everything GitHub-related when working locally. Authentication is already configured.
 
 - Create issues: `gh issue create ...`
 - Open PRs: `gh pr create --draft ...` (always draft until tests + lint pass)
@@ -124,9 +128,36 @@ Use `gh` CLI for everything GitHub-related. Authentication is already configured
 
 ## Build / test commands
 
-> Phase 1 has not landed yet. This section will document `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm lint` once the orchestrator scaffold exists.
+Root orchestrator:
 
-For now: there is no build step. Edits are docs-only.
+```bash
+pnpm install
+pnpm prisma:generate
+pnpm prisma:migrate
+pnpm start:dev
+pnpm test
+pnpm test:e2e
+pnpm typecheck
+pnpm build
+```
+
+Controller UI:
+
+```bash
+cd controller
+pnpm install
+pnpm dev
+node_modules/.bin/tsc --noEmit
+```
+
+Useful local smoke path:
+
+1. Start the orchestrator on `127.0.0.1:3000`.
+2. Start the controller on `localhost:3001`.
+3. Create a task from the controller.
+4. Confirm live logs arrive over WebSocket.
+5. Send input with Continue.
+6. Stop the task and confirm terminal status updates.
 
 ---
 
