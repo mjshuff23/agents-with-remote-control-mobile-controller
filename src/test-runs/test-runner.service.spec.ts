@@ -49,6 +49,23 @@ describe('TestRunnerService', () => {
     expect(prisma.testRunSummary.create).not.toHaveBeenCalled();
   });
 
+  it('surfaces missing worktree directories as typed conflicts', async () => {
+    prisma.task.findUnique.mockResolvedValue({
+      id: 'task-1',
+      worktreePath: path.join(worktreePath, 'missing')
+    });
+    policies.getTestCommand.mockResolvedValue({
+      id: 'unit',
+      label: 'Unit',
+      command: ['node', '-e', 'console.log("ok")']
+    });
+
+    await expect(service.runTaskCommand('task-1', 'unit')).rejects.toMatchObject({
+      response: { status: 409 }
+    });
+    expect(prisma.testRunSummary.create).not.toHaveBeenCalled();
+  });
+
   it('rejects configured test commands that resolve outside the worktree', async () => {
     policies.getTestCommand.mockResolvedValue({
       id: 'escape',

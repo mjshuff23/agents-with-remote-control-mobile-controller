@@ -125,6 +125,15 @@ export interface TaskEventEnvelope<TName extends string = string, TData = unknow
   data: TData;
 }
 
+export interface TaskDetailsResponse {
+  task: Task;
+  session: Session | null;
+  logs: LogEntry[];
+  approvals: ApprovalRequest[];
+  changeSummaries: GitChangeSummary[];
+  testRuns: TestRunSummary[];
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);
   if (!res.ok) {
@@ -140,7 +149,7 @@ export function listTasks(): Promise<{ tasks: Task[] }> {
   return apiFetch('/tasks');
 }
 
-export function getTask(id: string): Promise<{ task: Task; session: Session | null; logs: LogEntry[]; approvals: ApprovalRequest[]; changeSummaries: GitChangeSummary[]; testRuns: TestRunSummary[] }> {
+export function getTask(id: string): Promise<TaskDetailsResponse> {
   return apiFetch(`/tasks/${id}`);
 }
 
@@ -176,7 +185,7 @@ export function approveAction(id: string, message?: string): Promise<{ approval:
   return apiFetch(`/approvals/${id}/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message })
+    body: message === undefined ? undefined : JSON.stringify({ message })
   });
 }
 
@@ -184,7 +193,7 @@ export function denyAction(id: string, message?: string): Promise<{ approval: Ap
   return apiFetch(`/approvals/${id}/deny`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message })
+    body: message === undefined ? undefined : JSON.stringify({ message })
   });
 }
 

@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { LogEntry } from '../lib/api';
 
 // Strip ANSI/VT escape codes emitted by the PTY
-const ANSI_RE = /\x1b\[[0-9;]*[mGKHF]/g;
+const ANSI_RE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g;
 function stripAnsi(s: string): string { return s.replace(ANSI_RE, ''); }
 
 type CodexEvent =

@@ -96,9 +96,8 @@ function slugify(input: string): string {
   const slug = input
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
     .slice(0, 40)
-    .replace(/-+$/g, '');
+    .replace(/^-+|-+$/g, '');
   return slug || 'task';
 }
 

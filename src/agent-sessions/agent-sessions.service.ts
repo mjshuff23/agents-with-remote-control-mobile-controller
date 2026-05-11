@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, OnApplicationBootstrap, Optional } from '@nestjs/common';
-import { AgentSession, Task } from '@prisma/client';
+import { AgentSession, ApprovalRequest, Task } from '@prisma/client';
 import { AgentsService } from '../agents/agents.service';
 import { AgentLogType, RunningAgentProcess } from '../agents/agent-adapter.interface';
 import { ApprovalsService } from '../approvals/approvals.service';
@@ -118,7 +118,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(session.id, 'system', `Input sent (${text.length} chars)`);
   }
 
-  async resolveApproval(approvalId: string, decision: Exclude<ApprovalDecision, 'auto_allow' | 'refused'>, message?: string): Promise<{ approval: unknown }> {
+  async resolveApproval(
+    approvalId: string,
+    decision: Extract<ApprovalDecision, 'approved' | 'denied'>,
+    message?: string
+  ): Promise<{ approval: ApprovalRequest }> {
     const approval = await this.approvals.resolve(approvalId, decision, message);
     this.clearApprovalTimeout(approval.id);
     await this.writeApprovalResponse(approval.sessionId, {
@@ -354,6 +358,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           });
         } else {
           await this.markWaitingForApproval(taskId, sessionId);
+          await this.resumeIfWaiting(taskId, sessionId);
           void this.scheduleApprovalExpiry(result.approval.id, sessionId).catch(async (error) => {
             await this.appendLog(sessionId, 'system', `Approval expiry scheduling failed: ${this.errorMessage(error)}`);
           });

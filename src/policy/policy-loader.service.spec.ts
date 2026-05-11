@@ -49,6 +49,35 @@ describe('PolicyLoaderService', () => {
     await expect(service.load()).rejects.toThrow('bad.rule');
   });
 
+  it('rejects policy rules without stable ids', async () => {
+    await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
+      version: 1,
+      policy: {
+        safe: [{ actionTypes: ['test.run'], rationale: 'Missing id.' }],
+        needsApproval: [],
+        blocked: []
+      },
+      testCommands: [{ id: 'root:test', label: 'Test', command: ['pnpm', 'test'] }]
+    }));
+
+    await expect(service.load()).rejects.toThrow('Policy rule id must be a non-empty string');
+  });
+
+  it('rejects test commands without string ids and labels', async () => {
+    await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
+      version: 1,
+      policy: {
+        safe: [{ id: 'safe.test', actionTypes: ['test.run'], rationale: 'Test.' }],
+        needsApproval: [],
+        blocked: []
+      },
+      testCommands: [{ id: 7, label: '', command: ['pnpm', 'test'] }]
+    }));
+
+    await expect(service.load()).rejects.toThrow('id, label');
+  });
+
+
   it('rejects invalid test command timeout values', async () => {
     await writeFile(path.join(tmp, 'arc.config.json'), JSON.stringify({
       version: 1,

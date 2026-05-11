@@ -52,7 +52,6 @@ export function NewTaskForm() {
         </label>
         <textarea
           id="task-prompt"
-          required
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={7}

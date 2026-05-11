@@ -22,6 +22,8 @@ import {
 import { TaskLogPane } from '../../../components/task-log-pane';
 import { useTaskSocket } from '../../../lib/use-socket';
 
+const EVENT_DEDUPE_LIMIT = 500;
+
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -39,6 +41,7 @@ export default function TaskDetailPage() {
   const [denyMessages, setDenyMessages] = useState<Record<string, string>>({});
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
   const seqRef = useRef(0);
+  const syntheticSeqRef = useRef(-1);
   const seenSeqs = useRef(new Set<number>());
   const seenEvents = useRef(new Set<string>());
   const sessionIdRef = useRef<string>('');
@@ -48,6 +51,7 @@ export default function TaskDetailPage() {
     seenSeqs.current.clear();
     seenEvents.current.clear();
     seqRef.current = 0;
+    syntheticSeqRef.current = -1;
     sessionIdRef.current = '';
     setLogs([]);
     setApprovals([]);
@@ -83,18 +87,26 @@ export default function TaskDetailPage() {
   // Events emitted while the socket was disconnected are permanently lost,
   // so we re-fetch from REST and merge any missed data.
   function resyncTask() {
-    void getTask(id)
-      .then(({ task: t, session: s, logs: freshLogs, approvals: fresh }) => {
+    void Promise.all([getTask(id), listTestCommands(id)])
+      .then(([{ task: t, session: s, logs: freshLogs, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns }, commands]) => {
         setTask(t);
         setSession(s);
         setLogs((prev) => {
-          const known = new Set(prev.map((l) => l.sequence));
+          const known = new Set(prev.filter(isServerLog).map((l) => l.sequence));
           const missed = freshLogs.filter((l) => !known.has(l.sequence));
           missed.forEach((l) => seenSeqs.current.add(l.sequence));
           if (missed.length === 0) return prev;
-          return [...prev, ...missed].sort((a, b) => a.sequence - b.sequence);
+          return [...prev, ...missed].sort(compareLogs);
         });
         setApprovals(fresh);
+        setChangeSummaries(freshSummaries.map(normalizeStoredDiffSummary));
+        setTestRuns(freshRuns);
+        setTestCommands(commands.testCommands);
+        setSelectedTestCommandId((current) =>
+          commands.testCommands.some((command) => command.id === current)
+            ? current
+            : commands.testCommands[0]?.id ?? ''
+        );
       })
       .catch(() => {});
   }
@@ -122,39 +134,32 @@ export default function TaskDetailPage() {
       setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
     },
     onApprovalRequested: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       upsertApproval(event.data);
     },
     onApprovalResolved: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       upsertApproval(event.data);
     },
     onPolicyViolation: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       upsertApproval(event.data);
       appendSyntheticLog('system', `Policy violation: ${event.data.title}`);
     },
     onDiffSummary: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       setChangeSummaries((prev) => [event.data, ...prev.filter((summary) => summary.id !== event.data.id)].slice(0, 10));
     },
     onTestStarted: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       appendSyntheticLog('system', `Test started: ${event.data.commandId}`);
     },
     onTestLog: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       appendSyntheticLog('system', `[${event.data.stream}] ${event.data.content}`);
     },
     onTestCompleted: (event) => {
-      if (seenEvents.current.has(event.id)) return;
-      seenEvents.current.add(event.id);
+      if (markEventSeen(event.id)) return;
       setTestRuns((prev) => [event.data, ...prev.filter((run) => run.id !== event.data.id)].slice(0, 10));
       appendSyntheticLog('system', `Test ${event.data.status}: ${event.data.commandId}`);
     },
@@ -173,9 +178,23 @@ export default function TaskDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  function markEventSeen(eventId: string): boolean {
+    if (seenEvents.current.has(eventId)) {
+      return true;
+    }
+    seenEvents.current.add(eventId);
+    if (seenEvents.current.size > EVENT_DEDUPE_LIMIT) {
+      const oldest = seenEvents.current.values().next().value;
+      if (oldest) {
+        seenEvents.current.delete(oldest);
+      }
+    }
+    return false;
+  }
+
   function appendSyntheticLog(type: string, content: string) {
-    const sequence = seqRef.current + 1;
-    seqRef.current = sequence;
+    const sequence = syntheticSeqRef.current;
+    syntheticSeqRef.current -= 1;
     setLogs((prev) => [
       ...prev,
       {
@@ -495,4 +514,16 @@ function parseJson<T>(value: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function isServerLog(log: LogEntry): boolean {
+  return log.sequence > 0;
+}
+
+function compareLogs(a: LogEntry, b: LogEntry): number {
+  const byTime = Date.parse(a.createdAt) - Date.parse(b.createdAt);
+  if (byTime !== 0 && !Number.isNaN(byTime)) {
+    return byTime;
+  }
+  return a.sequence - b.sequence;
 }

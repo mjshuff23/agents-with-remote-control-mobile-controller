@@ -37,7 +37,12 @@ export class TestRunnerService {
       where: { taskId },
       orderBy: { createdAt: 'desc' }
     });
-    const worktreePath = realpathSync(path.resolve(task.worktreePath));
+    let worktreePath: string;
+    try {
+      worktreePath = realpathSync(path.resolve(task.worktreePath));
+    } catch {
+      throw new ProblemException(HttpStatus.CONFLICT, 'Worktree Missing', `Task "${taskId}" worktree path does not exist.`);
+    }
     const candidateCwd = command.cwd ? path.resolve(worktreePath, command.cwd) : worktreePath;
     const cwd = existsSync(candidateCwd) ? realpathSync(candidateCwd) : candidateCwd;
     if (!isInside(worktreePath, cwd)) {

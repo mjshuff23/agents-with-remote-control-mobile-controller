@@ -61,8 +61,15 @@ export class PolicyLoaderService {
       this.validateRule(rule);
     }
     for (const testCommand of config.testCommands) {
-      if (!testCommand.id || !Array.isArray(testCommand.command) || testCommand.command.length === 0) {
-        throw new Error('Each test command must include id and a non-empty command array');
+      if (
+        typeof testCommand.id !== 'string' ||
+        testCommand.id.trim().length === 0 ||
+        typeof testCommand.label !== 'string' ||
+        testCommand.label.trim().length === 0 ||
+        !Array.isArray(testCommand.command) ||
+        testCommand.command.length === 0
+      ) {
+        throw new Error('Each test command must include id, label, and a non-empty command array');
       }
       if (testCommand.command.some((part) => typeof part !== 'string' || part.length === 0)) {
         throw new Error(`Test command "${testCommand.id}" command entries must be non-empty strings`);
@@ -80,6 +87,9 @@ export class PolicyLoaderService {
   }
 
   private validateRule(rule: PolicyRule): void {
+    if (typeof rule.id !== 'string' || rule.id.trim().length === 0) {
+      throw new Error('Policy rule id must be a non-empty string');
+    }
     const hasMatcher =
       hasValues(rule.actionTypes) ||
       hasValues(rule.commandIds) ||

@@ -78,7 +78,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       cols: 120,
       rows: 30,
       cwd,
-      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+      env: { PATH: process.env.PATH ?? '', ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '' }
     });
 
     ptyProcess.onData((content) => { void input.onOutput({ type: 'stdout', content }); });

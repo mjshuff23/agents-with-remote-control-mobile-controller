@@ -86,7 +86,7 @@ describe('Phase 3 local safety loop', () => {
 
     const configSvc = moduleRef.get(AppConfigService);
     jest.spyOn(configSvc, 'controllerSecret', 'get').mockReturnValue(TEST_SECRET);
-    jest.spyOn(configSvc, 'approvalTimeoutMs', 'get').mockReturnValue(1000);
+    jest.spyOn(configSvc, 'approvalTimeoutMs', 'get').mockReturnValue(10000);
 
     app = moduleRef.createNestApplication();
     app.useWebSocketAdapter(new IoAdapter(app));
@@ -127,9 +127,9 @@ describe('Phase 3 local safety loop', () => {
     const event = await eventPromise;
     expect(event.data.status).toBe('pending');
 
-    const denied = await request(app.getHttpServer())
-      .post(`/approvals/${event.data.id}/deny`)
-      .set('X-Controller-Secret', TEST_SECRET)
+    const denied = await authed(
+      request(app.getHttpServer()).post(`/approvals/${event.data.id}/deny`)
+    )
       .send({ message: 'Not this way' })
       .expect(202);
 
@@ -173,9 +173,7 @@ describe('Phase 3 local safety loop', () => {
         resolve(payload);
       });
     });
-    await request(app.getHttpServer())
-      .post(`/tasks/${created.body.task.id}/test-runs`)
-      .set('X-Controller-Secret', TEST_SECRET)
+    await authed(request(app.getHttpServer()).post(`/tasks/${created.body.task.id}/test-runs`))
       .send({ commandId: 'unit' })
       .expect(202);
 

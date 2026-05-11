@@ -139,7 +139,10 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     // lost on every disconnect, so this must be repeated on every reconnect.
     const joinRoom = () => {
       if (!active) return;
-      void socket.emitWithAck('subscribe', { taskId }).catch(() => {});
+      void socket
+        .timeout(5_000)
+        .emitWithAck('subscribe', { taskId })
+        .catch(() => {});
     };
 
     // Re-subscribe on every connect event (initial + reconnects).

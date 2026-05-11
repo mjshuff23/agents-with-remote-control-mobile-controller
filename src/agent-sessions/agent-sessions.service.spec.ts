@@ -237,4 +237,34 @@ describe('AgentSessionsService', () => {
     expect((service as any).nextLogSequences.has(session.id)).toBe(false);
     expect((service as any).logWriteQueues.has(session.id)).toBe(false);
   });
+
+  it('reconciles waiting approval state if an approval resolves before waiting is persisted', async () => {
+    const pendingApproval = {
+      id: 'approval-1',
+      actionRequestId: 'action-1'
+    };
+    approvals.createFromAgentRequest.mockResolvedValue({ approval: pendingApproval });
+    approvals.hasPendingForSession.mockResolvedValue(false);
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'waiting_approval' });
+
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+    await startInput.onOutput({
+      type: 'stdout',
+      content: 'ARC_ACTION_REQUEST {"id":"action-1","actionType":"fs.write_patch","title":"Patch file"}\n'
+    });
+
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { status: 'waiting_approval' }
+    });
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { status: 'running' }
+    });
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: 'running' }
+    });
+  });
 });

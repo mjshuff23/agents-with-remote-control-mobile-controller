@@ -149,8 +149,12 @@ function shellCommandText(argv: string[]): string | undefined {
   if (shellIndex === -1) {
     return undefined;
   }
-  const commandFlagIndex = argv.findIndex((token, index) => index > shellIndex && ['-c', '-lc'].includes(token));
+  const commandFlagIndex = argv.findIndex((token, index) => index > shellIndex && isShellCommandFlag(token));
   return commandFlagIndex === -1 ? undefined : argv[commandFlagIndex + 1];
+}
+
+function isShellCommandFlag(token: string): boolean {
+  return token === '--command' || /^-[a-z]*c[a-z]*$/.test(token);
 }
 
 function tokenizeShellCommandText(text: string): string[] {

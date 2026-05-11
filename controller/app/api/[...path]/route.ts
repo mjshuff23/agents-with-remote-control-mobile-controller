@@ -38,6 +38,14 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+export async function HEAD(request: NextRequest, context: RouteContext) {
+  return proxyToBackend(request, context);
+}
+
+export async function OPTIONS(request: NextRequest, context: RouteContext) {
+  return proxyToBackend(request, context);
+}
+
 async function proxyToBackend(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3000';
   const { path = [] } = await context.params;
@@ -56,7 +64,8 @@ async function proxyToBackend(request: NextRequest, context: RouteContext): Prom
     method,
     headers,
     body: method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer(),
-    redirect: 'manual'
+    redirect: 'manual',
+    signal: AbortSignal.timeout(30_000)
   });
 
   return new NextResponse(response.body, {

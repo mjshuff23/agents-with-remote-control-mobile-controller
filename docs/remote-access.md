@@ -18,12 +18,14 @@ Tailscale creates an encrypted mesh VPN between your devices. Install it on your
 **Run the services:**
 
 Update `.env`:
+
 ```bash
 ARC_HOST=0.0.0.0
 ARC_ALLOW_PUBLIC_BIND=true
 ```
 
 Update `controller/.env.local`:
+
 ```bash
 # NEXT_PUBLIC_WS_URL — used by the phone's browser to open the WebSocket.
 # Must be the external IP/hostname, since the browser connects from outside WSL2.
