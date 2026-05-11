@@ -1,7 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentSessionsService } from '../agent-sessions/agent-sessions.service';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { AppConfigService } from '../config/app-config.service';
+import { GitDiffService } from '../git/git-diff.service';
+import { GitWorktreeService } from '../git/git-worktree.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
+import { TestRunnerService } from '../test-runs/test-runner.service';
 import { TasksService } from './tasks.service';
 
 describe('TasksService', () => {
@@ -13,11 +18,24 @@ describe('TasksService', () => {
     status: 'queued',
     selectedAgent: 'codex',
     repoPath: '/repo',
+    worktreePath: null,
+    branchName: null,
+    baseRef: null,
+    baseCommit: null,
+    approvalMode: 'cooperative-gated',
     createdAt: new Date('2026-05-10T12:00:00.000Z'),
     updatedAt: new Date('2026-05-10T12:00:00.000Z')
   };
-  const runningTask = {
+  const worktreeTask = {
     ...task,
+    repoPath: '/repo',
+    worktreePath: '/repo/worktrees/task-1-demo',
+    branchName: 'agent/task-1-demo',
+    baseRef: 'main',
+    baseCommit: 'abc123'
+  };
+  const runningTask = {
+    ...worktreeTask,
     status: 'running',
     updatedAt: new Date('2026-05-10T12:00:01.000Z')
   };
@@ -37,6 +55,7 @@ describe('TasksService', () => {
   const prisma: any = {
     task: {
       create: jest.fn(),
+      update: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn()
     },
@@ -46,10 +65,31 @@ describe('TasksService', () => {
     agentLog: {
       findMany: jest.fn()
     },
+    gitChangeSummary: {
+      findMany: jest.fn()
+    },
+    testRunSummary: {
+      findMany: jest.fn()
+    },
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> => callback(prisma))
   };
   const agentSessions = {
     createAndStart: jest.fn()
+  };
+  const worktrees = {
+    createForTask: jest.fn()
+  };
+  const approvals = {
+    listForTask: jest.fn()
+  };
+  const diffs = {
+    summarizeTask: jest.fn()
+  };
+  const tests = {
+    runTaskCommand: jest.fn()
+  };
+  const policies = {
+    listTestCommands: jest.fn()
   };
   const config = {
     repoPath: '/repo',
@@ -58,13 +98,29 @@ describe('TasksService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    worktrees.createForTask.mockResolvedValue({
+      repoPath: '/repo',
+      worktreePath: '/repo/worktrees/task-1-demo',
+      branchName: 'agent/task-1-demo',
+      baseRef: 'main',
+      baseCommit: 'abc123'
+    });
+    prisma.task.update.mockResolvedValue(worktreeTask);
+    approvals.listForTask.mockResolvedValue({ approvals: [] });
+    prisma.gitChangeSummary.findMany.mockResolvedValue([]);
+    prisma.testRunSummary.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
         { provide: PrismaService, useValue: prisma },
         { provide: AgentSessionsService, useValue: agentSessions },
-        { provide: AppConfigService, useValue: config }
+        { provide: AppConfigService, useValue: config },
+        { provide: GitWorktreeService, useValue: worktrees },
+        { provide: ApprovalsService, useValue: approvals },
+        { provide: GitDiffService, useValue: diffs },
+        { provide: TestRunnerService, useValue: tests },
+        { provide: PolicyLoaderService, useValue: policies }
       ]
     }).compile();
 
@@ -87,7 +143,23 @@ describe('TasksService', () => {
         repoPath: '/repo'
       }
     });
-    expect(agentSessions.createAndStart).toHaveBeenCalledWith(task);
+    expect(worktrees.createForTask).toHaveBeenCalledWith({
+      taskId: task.id,
+      title: 'Demo',
+      prompt: 'Say hello'
+    });
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: {
+        repoPath: '/repo',
+        worktreePath: '/repo/worktrees/task-1-demo',
+        branchName: 'agent/task-1-demo',
+        baseRef: 'main',
+        baseCommit: 'abc123',
+        approvalMode: 'cooperative-gated'
+      }
+    });
+    expect(agentSessions.createAndStart).toHaveBeenCalledWith(worktreeTask);
     expect(prisma.task.findUnique).toHaveBeenCalledWith({ where: { id: task.id } });
     expect(result).toEqual({ task: runningTask, session });
   });

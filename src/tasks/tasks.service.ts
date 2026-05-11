@@ -1,10 +1,15 @@
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
-import { AgentLog, AgentSession, Task } from '@prisma/client';
+import { AgentLog, AgentSession, ApprovalRequest, GitChangeSummary, Task, TestRunSummary } from '@prisma/client';
 import { AgentSessionsService, StopTaskResult } from '../agent-sessions/agent-sessions.service';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
+import { GitDiffService } from '../git/git-diff.service';
+import { GitWorktreeService, WorktreeResult } from '../git/git-worktree.service';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TestRunnerService } from '../test-runs/test-runner.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 
 export interface CreateTaskResult {
@@ -16,6 +21,9 @@ export interface TaskDetails {
   task: Task;
   session: AgentSession | null;
   logs: AgentLog[];
+  approvals: ApprovalRequest[];
+  changeSummaries: GitChangeSummary[];
+  testRuns: TestRunSummary[];
 }
 
 @Injectable()
@@ -24,17 +32,47 @@ export class TasksService {
     private readonly prisma: PrismaService,
     private readonly agentSessions: AgentSessionsService,
     private readonly config: AppConfigService,
+    private readonly worktrees: GitWorktreeService,
+    private readonly approvals: ApprovalsService,
+    private readonly diffs: GitDiffService,
+    private readonly tests: TestRunnerService,
+    private readonly policies: PolicyLoaderService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
   async createTask(input: CreateTaskDto): Promise<CreateTaskResult> {
-    const created = await this.prisma.task.create({
+    const draft = await this.prisma.task.create({
       data: {
         title: input.title,
         prompt: input.prompt,
         status: 'queued',
         selectedAgent: input.agent,
         repoPath: this.config.repoPath
+      }
+    });
+    let worktree: WorktreeResult;
+    try {
+      worktree = await this.worktrees.createForTask({
+        taskId: draft.id,
+        title: input.title,
+        prompt: input.prompt
+      });
+    } catch (error) {
+      await this.prisma.task.update({
+        where: { id: draft.id },
+        data: { status: 'failed' }
+      });
+      throw error;
+    }
+    const created = await this.prisma.task.update({
+      where: { id: draft.id },
+      data: {
+        repoPath: worktree.repoPath,
+        worktreePath: worktree.worktreePath,
+        branchName: worktree.branchName,
+        baseRef: worktree.baseRef,
+        baseCommit: worktree.baseCommit,
+        approvalMode: 'cooperative-gated'
       }
     });
     const session = await this.agentSessions.createAndStart(created);
@@ -67,20 +105,34 @@ export class TasksService {
       orderBy: { createdAt: 'desc' }
     });
 
-    if (!session) {
-      return { task, session: null, logs: [] };
-    }
-
-    const logs = await this.prisma.agentLog.findMany({
-      where: { sessionId: session.id },
-      orderBy: { sequence: 'desc' },
-      take: this.config.logTailLimit
-    });
+    const [logs, approvalsResult, changeSummaries, testRuns] = await Promise.all([
+      session
+        ? this.prisma.agentLog.findMany({
+          where: { sessionId: session.id },
+          orderBy: { sequence: 'desc' },
+          take: this.config.logTailLimit
+        })
+        : Promise.resolve([]),
+      this.approvals.listForTask(id),
+      this.prisma.gitChangeSummary.findMany({
+        where: { taskId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      }),
+      this.prisma.testRunSummary.findMany({
+        where: { taskId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      })
+    ]);
 
     return {
       task,
       session,
-      logs: logs.reverse()
+      logs: logs.reverse(),
+      approvals: approvalsResult.approvals,
+      changeSummaries,
+      testRuns
     };
   }
 
@@ -99,5 +151,33 @@ export class TasksService {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${id}" does not exist.`);
     }
     await this.agentSessions.sendInput(task.id, text);
+  }
+
+  async listApprovals(id: string) {
+    await this.assertTaskExists(id);
+    return this.approvals.listForTask(id);
+  }
+
+  async summarizeDiff(id: string) {
+    await this.assertTaskExists(id);
+    return this.diffs.summarizeTask(id);
+  }
+
+  async runTest(id: string, commandId: string) {
+    await this.assertTaskExists(id);
+    return this.tests.runTaskCommand(id, commandId);
+  }
+
+  async listTestCommands(id: string) {
+    await this.assertTaskExists(id);
+    return { testCommands: await this.policies.listTestCommands() };
+  }
+
+  private async assertTaskExists(id: string): Promise<Task> {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${id}" does not exist.`);
+    }
+    return task;
   }
 }

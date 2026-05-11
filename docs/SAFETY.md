@@ -1,6 +1,6 @@
 # Safety Model
 
-The phone is the approval surface. The orchestrator is the gatekeeper. The agent is a guest with a daypass — useful, capable, and never trusted with the building's master key.
+The phone is the approval surface. The orchestrator is the local broker. The agent is useful and capable, but not trusted with broad authority.
 
 This document defines what the agent can do, what requires the human, and what is refused outright.
 
@@ -8,7 +8,7 @@ This document defines what the agent can do, what requires the human, and what i
 
 ## Three tiers
 
-Every action an agent attempts is classified before execution.
+Every action the orchestrator can reliably broker is classified before execution. In Phase 3, that means native-gated actions where a CLI exposes real hooks, cooperative `ARC_ACTION_REQUEST` actions emitted by the agent, and review-time diff/test summaries for everything else. The system does not claim universal interception of arbitrary CLI behavior.
 
 ### SAFE — auto-allow, log only
 
@@ -41,7 +41,7 @@ Examples:
 - Call an MCP tool that declares write capability
 - Run a shell command that is on the approval allowlist but produces side effects (e.g., `chmod`, `chown`, `ln -s`)
 
-Behavior: emit `agent.requested_action` over WebSocket → controller renders an approval card → human decides → orchestrator forwards `approved` / `denied` / `denied_with_message` back to the agent. All four states are recorded in `ApprovalRequest` and `AuditLog`.
+Behavior: emit `approval.requested` over WebSocket -> controller renders an approval card -> human decides -> orchestrator forwards `approved`, `denied`, or `expired` back to the agent through `ARC_APPROVAL`. All states are recorded in `ApprovalRequest` and `AuditLog`.
 
 ### BLOCKED BY DEFAULT — refuse, do not surface as approvable
 
@@ -76,7 +76,7 @@ Two reasons.
 
 ## Where the taxonomy lives
 
-The SAFE / NEEDS_APPROVAL / BLOCKED classification is **data, not code** (Phase 3).
+The SAFE / NEEDS_APPROVAL / BLOCKED classification is data first.
 
 ```text
 arc.config.json
@@ -87,8 +87,39 @@ arc.config.json
 
 This means:
 - Tuning the policy doesn't require redeploying the orchestrator.
-- Per-repo overrides are possible (`<repo>/.arc/policy.json`).
+- Per-repo overrides are possible by changing `ARC_POLICY_PATH`.
+- Configured test runs are time-bounded by `ARC_TEST_COMMAND_TIMEOUT_MS`, with optional per-command `timeoutMs` overrides.
 - The audit log includes which rule fired, which makes "why was this blocked?" debugging trivial.
+
+The controller UI keeps REST approval/task actions behind a server-side Next.js proxy that forwards `CONTROLLER_SECRET` to the orchestrator. WebSocket auth remains a browser-present token because the browser opens the socket.io connection directly; this is local-loop controller auth, not a production secrecy boundary.
+
+---
+
+## Approval modes
+
+### Native-gated
+
+If a CLI or adapter exposes a reliable pre-execution approval/sandbox hook, the adapter may use it and route the decision through `ApprovalRequest`. This mode must be proven in code before docs or UI claim hard enforcement.
+
+### Cooperative-gated
+
+This is the default Phase 3 mode. The agent prints exactly one machine-readable line:
+
+```text
+ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch","title":"Patch file","files":["src/file.ts"]}
+```
+
+The orchestrator classifies the request, persists the result, emits an approval or policy event, and responds:
+
+```text
+ARC_APPROVAL {"id":"<uuid>","decision":"denied","message":"Not this way","constraints":[]}
+```
+
+Cooperative mode relies on agent compliance, so it is paired with worktree containment and mandatory diff/test review.
+
+### Mixed
+
+Future adapters can combine native hooks for commands the CLI truly exposes and cooperative requests for actions that need structured human context.
 
 ---
 
@@ -124,8 +155,8 @@ The audit log is **append-only**. Even superusers cannot edit existing rows; cor
 | Phase | Auth model |
 |---|---|
 | **Phase 2** | LAN-only bind + shared secret. Sufficient for "my phone on my home network." |
-| **Phase 3** | Add per-device pairing — each phone registers with a device key. Approvals carry the device key in the audit log. |
-| **Phase 4+** | If the orchestrator becomes accessible outside the LAN, layer in a proper OAuth / WebAuthn flow. Tunneling (Tailscale, Cloudflare Tunnel) is preferred over public exposure. |
+| **Phase 3** | Keep the shared secret, add approval/diff/test auditability, and do not expose production or public-network behavior. Per-device pairing remains future work. |
+| **Phase 4+** | If the orchestrator becomes accessible outside the LAN, layer in per-device keys and then proper OAuth / WebAuthn. Tunneling (Tailscale, Cloudflare Tunnel) is preferred over public exposure. |
 
 The orchestrator must **never** bind to `0.0.0.0` without explicit configuration. Default bind is `127.0.0.1` plus the LAN interface that has been allowlisted in config.
 
@@ -144,7 +175,7 @@ The orchestrator must **never** bind to `0.0.0.0` without explicit configuration
 These have all bitten people. Calling them out so we don't replay them.
 
 - **Approval timeouts that auto-allow.** Never. Expired approvals are denials.
-- **"Fixing" a denied action by silently retrying with a slightly different command.** The orchestrator must detect this pattern and treat it as a security event.
+- **"Fixing" a denied action by silently retrying the same command/files.** The orchestrator detects exact denied/expired/refused repeats and treats them as security events. Semantic paraphrase detection is future hardening.
 - **Letting agents read denied files via indirect means** (`git show :file`, `git stash show`, `cat ../../.env` via a relative path). The denial is on the *file*, not the path string.
 - **Trusting agent-provided action descriptions.** The agent might describe what it's doing politely; the classifier looks at the actual command, not the description.
 - **Running test commands that have side effects.** Tests that hit production endpoints or modify external state are NEEDS_APPROVAL, not SAFE. The repo's test command must be declared deterministic and isolated to count as SAFE.

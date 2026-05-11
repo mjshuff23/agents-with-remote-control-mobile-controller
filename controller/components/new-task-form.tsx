@@ -12,7 +12,10 @@ export function NewTaskForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      setError('Prompt is required.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -49,7 +52,6 @@ export function NewTaskForm() {
         </label>
         <textarea
           id="task-prompt"
-          required
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={7}
@@ -64,7 +66,7 @@ export function NewTaskForm() {
       )}
       <button
         type="submit"
-        disabled={loading || !prompt.trim()}
+        disabled={loading}
         className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
       >
         {loading ? 'Starting task…' : 'Start Task'}

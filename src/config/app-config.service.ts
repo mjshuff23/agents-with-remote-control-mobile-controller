@@ -54,6 +54,22 @@ export class AppConfigService {
     return this.config.getOrThrow<number>('ARC_SHUTDOWN_GRACE_MS');
   }
 
+  get worktreeRoot(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('ARC_WORKTREE_ROOT'));
+  }
+
+  get policyPath(): string {
+    return this.config.getOrThrow<string>('ARC_POLICY_PATH');
+  }
+
+  get approvalTimeoutMs(): number {
+    return this.config.getOrThrow<number>('ARC_APPROVAL_TIMEOUT_MS');
+  }
+
+  get testCommandTimeoutMs(): number {
+    return this.config.getOrThrow<number>('ARC_TEST_COMMAND_TIMEOUT_MS');
+  }
+
   get controllerSecret(): string | undefined {
     return this.emptyToUndefined(this.config.get<string>('CONTROLLER_SECRET'));
   }

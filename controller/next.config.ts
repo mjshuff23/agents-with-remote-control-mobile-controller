@@ -1,12 +1,22 @@
 import type { NextConfig } from 'next';
 
-const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3000';
+// Derive allowed dev origins from the WS URL env var so any LAN/VPN IP works
+// without hardcoding. Only needed in development (HMR websocket).
+function devOriginsFromEnv(): string[] {
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+  if (!wsUrl) return [];
+  try {
+    const { hostname } = new URL(wsUrl);
+    return hostname !== 'localhost' && hostname !== '127.0.0.1' ? [hostname] : [];
+  } catch {
+    return [];
+  }
+}
 
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      { source: '/api/:path*', destination: `${backendUrl}/:path*` }
-    ];
+  allowedDevOrigins: devOriginsFromEnv(),
+  turbopack: {
+    root: '..'
   }
 };
 

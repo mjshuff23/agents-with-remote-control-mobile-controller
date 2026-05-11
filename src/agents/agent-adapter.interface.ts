@@ -15,6 +15,8 @@ export interface StartAgentTaskInput {
   taskId: string;
   sessionId: string;
   repoPath: string;
+  worktreePath?: string;
+  branchName?: string;
   prompt: string;
   onOutput: (event: AgentOutputEvent) => Promise<void>;
   onExit: (event: AgentExitEvent) => Promise<void>;

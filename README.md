@@ -2,17 +2,17 @@
 
 > Local-first agent orchestration: control CLI coding agents (Codex, Claude Code, Gemini) from your phone, with approval gates and Git worktree isolation.
 
-**Status:** Phase 2 complete. The local orchestrator runs with a socket.io WebSocket gateway and a Next.js mobile-first controller UI. You can start tasks, watch live agent output stream in real time, send input to the agent, and stop tasks — all from a phone browser. Phase 3 (worktree isolation + approval gates) is next.
+**Status:** Phase 3 local implementation is in this working tree. The local orchestrator now builds on the Phase 2 controller loop with isolated Git worktrees, cooperative approval events, audit records, diff summaries, and configured test-run summaries. The approval model is containment-first and cooperative-gated; it does not claim universal pre-execution interception of every CLI action.
 
 ---
 
 ## TL;DR
 
-Run AI coding agents on your PC. Control them from your phone. The agent works in an isolated Git worktree. When it needs to commit, push, install something, or do anything risky, it asks you on your phone. You approve, deny, or steer with free-text. When it's done, it opens a draft PR.
+Run AI coding agents on your PC. Control them from your phone. The agent works in an isolated Git worktree. When it needs to install something, mutate files, run a migration, commit, push, or do anything risky, it asks you on your phone. You approve, deny, or steer with free-text. Phase 3 stops at local review: diffs and configured tests are summarized, but commits, pushes, PRs, and external sync stay deferred.
 
 ## Current implementation scope
 
-Phases 1 and 2 are complete. The code in this repo currently ships:
+Phases 1 and 2 are complete. Phase 3 is the current local-loop hardening implementation. The code in this repo currently ships:
 
 **Phase 1 — Local orchestrator**
 - A root-level NestJS REST API.
@@ -29,11 +29,18 @@ Phases 1 and 2 are complete. The code in this repo currently ships:
 - Three pages: Dashboard (task list, 5s polling), New Task (prompt form), Task Detail (virtual log pane + live WebSocket updates, Continue/Stop actions).
 - Sequence-based log deduplication so REST history and live WS stream don't produce duplicates.
 
+**Phase 3 — Local-loop hardening**
+- Per-task Git worktree provisioning under `ARC_WORKTREE_ROOT` (or a default sibling `worktrees/` directory).
+- Task metadata for `worktreePath`, `branchName`, `baseRef`, `baseCommit`, and approval mode.
+- Cooperative `ARC_ACTION_REQUEST` / `ARC_APPROVAL` protocol for typed approval requests where native CLI hooks are unavailable.
+- `ApprovalRequest`, `AuditLog`, `GitChangeSummary`, and `TestRunSummary` persistence.
+- Approval, policy-violation, diff, test, and worktree WebSocket events using a typed event envelope.
+- Controller cards for pending approvals, diff summaries, and test run status.
+
 Deferred until later phases:
 
-- Git worktree creation, approval gates, diffs, and audit policy tables.
 - GitHub, Linear, Notion, Figma, MCP sync, and draft PR automation.
-- Claude Code, Gemini, and multi-agent workflows.
+- Claude Code, Gemini, opencode, and multi-agent workflows (adapter pattern is documented in [`docs/adding-agents.md`](docs/adding-agents.md)).
 
 See [`PLAN.md`](PLAN.md) for phase handoff contracts and manual smoke tests.
 
@@ -56,8 +63,8 @@ It is **not** a mobile IDE. It is **not** a VS Code chat extension. It is a thin
 3. The agent works inside an isolated repo worktree.
 4. When the agent needs input, approval, or review, it pings your phone.
 5. Reply with free text, structured actions, or approve/deny tool use, request tests, inspect summaries.
-6. Continue, stop, commit, open PRs, or sync project tools — all from the phone.
-7. Later, sync work across GitHub, Linear, Figma, Notion, and MCP-backed tools.
+6. Continue, stop, inspect diff summaries, and run configured local tests from the phone.
+7. Later, commit, open PRs, and sync work across GitHub, Linear, Figma, Notion, and MCP-backed tools.
 
 ---
 
@@ -120,7 +127,7 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 - REST endpoints for one-shot commands
 - `node-pty` for wrapping the Codex CLI
 - WebSocket gateway for live updates in Phase 2
-- Git worktree operations in Phase 3
+- Git worktree operations and cooperative approval gates in Phase 3
 
 **Frontend (controller)**
 - Next.js 15 (App Router), mobile-first, runs on port 3001
@@ -133,6 +140,15 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 - Windows host
 - WSL2 for agent execution
 - Git worktrees for task isolation
+
+## Phase 3 approval mode
+
+Phase 3 uses a containment-first safety model:
+
+- **Contain always:** every task runs in its own worktree and branch.
+- **Intercept where real:** native CLI approval/sandbox hooks may be wired later if they expose reliable pre-execution semantics.
+- **Cooperate where not:** Codex tasks can emit machine-readable `ARC_ACTION_REQUEST { ... }` lines; the orchestrator classifies them, stores an approval record, and responds with `ARC_APPROVAL { ... }` over stdin.
+- **Review always:** diffs and configured test runs are summarized before any later commit/push/PR workflow. Phase 3 does not commit, push, open PRs, or sync external tools.
 
 **Agents (adapter pattern)**
 - Codex CLI (first target)
@@ -212,6 +228,9 @@ pnpm prisma:migrate
 ```
 
 Edit `.env` before running if `ARC_REPO_PATH` should point somewhere other than this checkout.
+Set `ARC_WORKTREE_ROOT` when you want task worktrees somewhere specific; otherwise the orchestrator uses a sibling `worktrees/` directory beside `ARC_REPO_PATH`.
+Set `ARC_TEST_COMMAND_TIMEOUT_MS` to bound configured test runs globally; individual `arc.config.json` test commands may override it with `timeoutMs`.
+`ARC_CODEX_IGNORE_USER_CONFIG=true` is the recommended Phase 3 default. It adds `--ignore-user-config` to ARC-launched `codex exec` runs so user-configured MCP/OAuth/plugin side effects do not leak into local task logs; Codex auth still comes from `CODEX_HOME`.
 
 Run the orchestrator:
 
@@ -227,6 +246,8 @@ pnpm install
 pnpm dev          # http://localhost:3001
 ```
 
+The controller proxies REST calls through its Next.js server so `CONTROLLER_SECRET` can stay server-side for HTTP actions. WebSocket auth still uses `NEXT_PUBLIC_CONTROLLER_SECRET` because the browser connects directly to the orchestrator socket.
+
 The controller UI proxies API calls to the orchestrator at `http://127.0.0.1:3000`. Open `http://localhost:3001` in a browser (or on your phone via LAN IP) to start and monitor tasks.
 
 You can also use the REST API directly:
@@ -235,18 +256,28 @@ You can also use the REST API directly:
 # Start a task
 curl -i -X POST http://127.0.0.1:3000/tasks \
   -H 'Content-Type: application/json' \
+  -H 'X-Controller-Secret: <your-secret>' \
   -d '{"prompt":"Say hello from Codex and then stop.","agent":"codex","title":"Smoke test"}'
 
 # Inspect it
-curl http://127.0.0.1:3000/tasks/<task-id>
+curl -H 'X-Controller-Secret: <your-secret>' http://127.0.0.1:3000/tasks/<task-id>
 ```
+
+### Accessing from your phone
+
+**Same network (home/office WiFi):** set `ARC_HOST=0.0.0.0` and `ARC_ALLOW_PUBLIC_BIND=true` in `.env`, update `controller/.env.local` with your LAN IP, and open `http://<LAN-IP>:3001` on your phone.
+
+**Outside your network (gym, travel):** see [`docs/remote-access.md`](docs/remote-access.md) for Tailscale, NetBird, Cloudflare Tunnel, and ngrok options. Tailscale is recommended for daily use — install once, works everywhere, no open ports.
 
 More detail:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full system design
 - [`docs/SAFETY.md`](docs/SAFETY.md) — safety model and approval gates
+- [`docs/remote-access.md`](docs/remote-access.md) — Tailscale, NetBird, Cloudflare Tunnel, ngrok
+- [`docs/adding-agents.md`](docs/adding-agents.md) — how to add Claude Code, Gemini, opencode, or any custom CLI agent
 - [`docs/diagrams.md`](docs/diagrams.md) — all 7 system diagrams
 - [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md) — Mermaid mirrors of the FigJam companion boards
-- [`PLAN.md`](PLAN.md) — Phase 1 runtime scope and manual smoke test
+- [`PLAN.md`](PLAN.md) — current phase contracts, Phase 3 handoff, and manual smoke tests
+- [`arc.config.json`](arc.config.json) — Phase 3 policy and allowed local test commands
 - [`AGENTS.md`](AGENTS.md) — instructions for AI agents working on this repo
 
 ---

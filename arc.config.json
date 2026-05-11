@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "approval": {
+    "timeoutMs": 300000
+  },
+  "policy": {
+    "safe": [
+      {
+        "id": "git.read",
+        "actionTypes": ["git.status", "git.diff", "git.log"],
+        "rationale": "Read-only Git inspection inside the task worktree."
+      },
+      {
+        "id": "test.allowed",
+        "actionTypes": ["test.run"],
+        "commandIds": ["root:test", "root:test:e2e", "root:typecheck", "root:build", "controller:typecheck"],
+        "rationale": "Declared deterministic local verification commands."
+      }
+    ],
+    "needsApproval": [
+      {
+        "id": "fs.mutation",
+        "actionTypes": ["fs.write_patch", "fs.delete"],
+        "rationale": "File mutations require human approval."
+      },
+      {
+        "id": "package.mutation",
+        "actionTypes": ["pkg.install", "pkg.remove", "pkg.update"],
+        "rationale": "Dependency changes require human approval."
+      },
+      {
+        "id": "database.migration",
+        "actionTypes": ["db.migrate"],
+        "rationale": "Database migrations require human approval."
+      },
+      {
+        "id": "git.write",
+        "actionTypes": ["git.commit", "git.push", "git.branch"],
+        "rationale": "Git write operations require human approval."
+      },
+      {
+        "id": "shell.unknown",
+        "actionTypes": ["shell.command"],
+        "rationale": "Unknown shell commands default to approval."
+      }
+    ],
+    "blocked": [
+      {
+        "id": "secrets.paths",
+        "pathGlobs": [".env", ".env.*", "*.pem", "*.key", "id_*", "**/.ssh/**"],
+        "rationale": "Secrets and private keys are never approvable from the phone."
+      },
+      {
+        "id": "git.force_push",
+        "commandIncludes": ["push", "--force"],
+        "rationale": "Force pushes are blocked by default."
+      },
+      {
+        "id": "git.force_push_with_lease",
+        "commandIncludes": ["push", "--force-with-lease"],
+        "rationale": "Force pushes are blocked by default."
+      },
+      {
+        "id": "internet.pipe_shell",
+        "commandIncludes": ["|", "sh"],
+        "rationale": "Pipe-from-internet shell execution is blocked."
+      },
+      {
+        "id": "internet.pipe_bash",
+        "commandIncludes": ["|", "bash"],
+        "rationale": "Pipe-from-internet shell execution is blocked."
+      },
+      {
+        "id": "production.deploy",
+        "commandIncludes": ["deploy", "--prod"],
+        "rationale": "Production deploys are out of scope."
+      },
+      {
+        "id": "global.config",
+        "commandIncludes": ["config", "--global"],
+        "rationale": "Global system or tool configuration changes are blocked."
+      },
+      {
+        "id": "outside.worktree.delete",
+        "commandIncludes": ["rm", "-rf", ".."],
+        "rationale": "Destructive deletes outside the task worktree are blocked."
+      }
+    ]
+  },
+  "testCommands": [
+    {
+      "id": "root:test",
+      "label": "Root unit tests",
+      "command": ["npm", "test"]
+    },
+    {
+      "id": "root:test:e2e",
+      "label": "Root e2e tests",
+      "command": ["npm", "run", "test:e2e"]
+    },
+    {
+      "id": "root:typecheck",
+      "label": "Root typecheck",
+      "command": ["npm", "run", "typecheck"]
+    },
+    {
+      "id": "root:build",
+      "label": "Root build",
+      "command": ["npm", "run", "build"]
+    },
+    {
+      "id": "controller:typecheck",
+      "label": "Controller typecheck",
+      "cwd": "controller",
+      "command": ["npm", "exec", "--", "tsc", "--noEmit"]
+    }
+  ]
+}

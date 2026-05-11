@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import type { ApprovalRequest, DiffSummaryResponse, TaskEventEnvelope, TestRunSummary } from './api';
 
 type GlobalWithSocket = typeof globalThis & {
   __CONTROLLER_SOCKET__?: Socket;
@@ -63,6 +64,16 @@ export interface TaskSocketHandlers {
   onLog?: (data: { type: string; content: string; sequence: number }) => void;
   onStarted?: (data: unknown) => void;
   onCompleted?: (data: { exitCode: number; status: string }) => void;
+  onApprovalRequested?: (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => void;
+  onApprovalResolved?: (event: TaskEventEnvelope<'approval.resolved', ApprovalRequest>) => void;
+  onPolicyViolation?: (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => void;
+  onDiffSummary?: (event: TaskEventEnvelope<'diff.summary', DiffSummaryResponse>) => void;
+  onTestStarted?: (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => void;
+  onTestLog?: (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => void;
+  onTestCompleted?: (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => void;
+  // Fires after a socket reconnect. The page should re-fetch task state
+  // to recover any events that were emitted while the socket was disconnected.
+  onReconnected?: () => void;
 }
 
 export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): void {
@@ -73,48 +84,98 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
   useEffect(() => {
     const socket = getSocket();
     let active = true;
-    // Populated once the subscribe ack resolves; called in cleanup.
-    let cleanupListeners: (() => void) | null = null;
+    // Track whether we've ever had a successful connection in this effect lifetime.
+    // The first 'connect' event is the initial connection; subsequent ones are reconnects.
+    let hasConnectedOnce = socket.connected;
 
-    // Await the server-side room join before attaching listeners.
-    // This closes the race window where task.completed could fire before
-    // the client has actually joined the task room.
-    void socket.emitWithAck('subscribe', { taskId }).then(() => {
-      if (!active) {
-        // Component unmounted before ack — leave the room immediately.
-        socket.emit('unsubscribe', { taskId });
-        return;
+    // All event handlers defined upfront so they can be registered immediately
+    // and cleaned up without needing to wait for the subscribe ack.
+    const onLog = (data: { taskId: string; type: string; content: string; sequence: number }) => {
+      if (data.taskId === taskId) ref.current.onLog?.(data);
+    };
+    const onStarted = (data: { taskId: string }) => {
+      if (data.taskId === taskId) ref.current.onStarted?.(data);
+    };
+    const onCompleted = (data: { taskId: string; exitCode: number; status: string }) => {
+      if (data.taskId === taskId) ref.current.onCompleted?.(data);
+    };
+    const onApprovalRequested = (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => {
+      if (event.taskId === taskId) ref.current.onApprovalRequested?.(event);
+    };
+    const onApprovalResolved = (event: TaskEventEnvelope<'approval.resolved', ApprovalRequest>) => {
+      if (event.taskId === taskId) ref.current.onApprovalResolved?.(event);
+    };
+    const onPolicyViolation = (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => {
+      if (event.taskId === taskId) ref.current.onPolicyViolation?.(event);
+    };
+    const onDiffSummary = (event: TaskEventEnvelope<'diff.summary', DiffSummaryResponse>) => {
+      if (event.taskId === taskId) ref.current.onDiffSummary?.(event);
+    };
+    const onTestStarted = (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => {
+      if (event.taskId === taskId) ref.current.onTestStarted?.(event);
+    };
+    const onTestLog = (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => {
+      if (event.taskId === taskId) ref.current.onTestLog?.(event);
+    };
+    const onTestCompleted = (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => {
+      if (event.taskId === taskId) ref.current.onTestCompleted?.(event);
+    };
+
+    // Attach all event handlers immediately. Events are filtered client-side
+    // by taskId, so there is no risk of cross-task bleed. Attaching before the
+    // subscribe ack means we can't miss an event that fires in the RTT window.
+    socket.on('agent.log', onLog);
+    socket.on('task.started', onStarted);
+    socket.on('task.completed', onCompleted);
+    socket.on('approval.requested', onApprovalRequested);
+    socket.on('approval.resolved', onApprovalResolved);
+    socket.on('policy.violation', onPolicyViolation);
+    socket.on('diff.summary', onDiffSummary);
+    socket.on('test.started', onTestStarted);
+    socket.on('test.log', onTestLog);
+    socket.on('test.completed', onTestCompleted);
+
+    // Join the server-side room. socket.io rooms are server-side only and are
+    // lost on every disconnect, so this must be repeated on every reconnect.
+    const joinRoom = () => {
+      if (!active) return;
+      void socket
+        .timeout(5_000)
+        .emitWithAck('subscribe', { taskId })
+        .catch(() => {});
+    };
+
+    // Re-subscribe on every connect event (initial + reconnects).
+    // On reconnect, also notify the page so it can re-fetch state to recover
+    // any events that were emitted while the socket was disconnected.
+    const onConnect = () => {
+      if (!active) return;
+      joinRoom();
+      if (hasConnectedOnce) {
+        ref.current.onReconnected?.();
       }
+      hasConnectedOnce = true;
+    };
+    socket.on('connect', onConnect);
 
-      // Filter by taskId so events from a previous task don't leak into a new
-      // one during App Router transitions where old/new pages briefly coexist.
-      const onLog = (data: { taskId: string; type: string; content: string; sequence: number }) => {
-        if (data.taskId === taskId) ref.current.onLog?.(data);
-      };
-      const onStarted = (data: { taskId: string }) => {
-        if (data.taskId === taskId) ref.current.onStarted?.(data);
-      };
-      const onCompleted = (data: { taskId: string; exitCode: number; status: string }) => {
-        if (data.taskId === taskId) ref.current.onCompleted?.(data);
-      };
-
-      socket.on('agent.log', onLog);
-      socket.on('task.started', onStarted);
-      socket.on('task.completed', onCompleted);
-
-      cleanupListeners = () => {
-        socket.off('agent.log', onLog);
-        socket.off('task.started', onStarted);
-        socket.off('task.completed', onCompleted);
-        socket.emit('unsubscribe', { taskId });
-      };
-    });
+    // Initial room join. If the socket isn't connected yet, socket.io queues
+    // this and sends it automatically on first connect.
+    joinRoom();
 
     return () => {
       active = false;
-      // If ack already resolved, cleanupListeners is populated and handles everything.
-      // If ack is still pending, the .then() branch handles unsubscribe on resolution.
-      cleanupListeners?.();
+      socket.off('agent.log', onLog);
+      socket.off('task.started', onStarted);
+      socket.off('task.completed', onCompleted);
+      socket.off('approval.requested', onApprovalRequested);
+      socket.off('approval.resolved', onApprovalResolved);
+      socket.off('policy.violation', onPolicyViolation);
+      socket.off('diff.summary', onDiffSummary);
+      socket.off('test.started', onTestStarted);
+      socket.off('test.log', onTestLog);
+      socket.off('test.completed', onTestCompleted);
+      socket.off('connect', onConnect);
+      socket.emit('unsubscribe', { taskId });
     };
   }, [taskId]);
 }

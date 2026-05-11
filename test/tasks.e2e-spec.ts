@@ -4,8 +4,12 @@ import request = require('supertest');
 import { AppModule } from '../src/app.module';
 import { AGENT_ADAPTERS } from '../src/agents/agent-adapter.token';
 import { applyAppGlobals } from '../src/app-globals';
+import { AppConfigService } from '../src/config/app-config.service';
+import { GitWorktreeService } from '../src/git/git-worktree.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
+
+const TEST_SECRET = 'test-secret';
 
 describe('Tasks API', () => {
   let app: INestApplication;
@@ -13,6 +17,9 @@ describe('Tasks API', () => {
   const adapter = {
     name: 'codex' as const,
     startTask: jest.fn()
+  };
+  const worktrees = {
+    createForTask: jest.fn()
   };
 
   beforeEach(async () => {
@@ -22,6 +29,13 @@ describe('Tasks API', () => {
     process.env.ARC_HOST = '127.0.0.1';
 
     prisma = createInMemoryPrisma();
+    worktrees.createForTask.mockResolvedValue({
+      repoPath: '/repo',
+      worktreePath: '/repo/worktrees/task',
+      branchName: 'agent/task-demo',
+      baseRef: 'main',
+      baseCommit: 'abc123'
+    });
     adapter.startTask.mockImplementation(async (input) => {
       await input.onOutput({ type: 'stdout', content: 'started' });
       return {
@@ -37,9 +51,14 @@ describe('Tasks API', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      .overrideProvider(GitWorktreeService)
+      .useValue(worktrees)
       .overrideProvider(AGENT_ADAPTERS)
       .useValue([adapter])
       .compile();
+
+    const configSvc = moduleRef.get(AppConfigService);
+    jest.spyOn(configSvc, 'controllerSecret', 'get').mockReturnValue(TEST_SECRET);
 
     app = moduleRef.createNestApplication();
     applyAppGlobals(app);
@@ -55,6 +74,7 @@ describe('Tasks API', () => {
   it('creates a codex task and returns 201 with a Location header', async () => {
     const response = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Say hello', agent: 'codex', title: 'Greeting' })
       .expect(201);
 
@@ -64,7 +84,11 @@ describe('Tasks API', () => {
       prompt: 'Say hello',
       status: 'running',
       selectedAgent: 'codex',
-      repoPath: '/repo'
+      repoPath: '/repo',
+      worktreePath: '/repo/worktrees/task',
+      branchName: 'agent/task-demo',
+      baseRef: 'main',
+      baseCommit: 'abc123'
     }));
     expect(response.body.session).toEqual(expect.objectContaining({
       agentName: 'codex',
@@ -76,11 +100,13 @@ describe('Tasks API', () => {
   it('returns task details with latest session and log tail', async () => {
     const created = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Say hello', agent: 'codex' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
       .get(`/tasks/${created.body.task.id}`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .expect(200);
 
     expect(response.body.task.id).toBe(created.body.task.id);
@@ -94,15 +120,18 @@ describe('Tasks API', () => {
   it('lists recent tasks newest first', async () => {
     await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'First', agent: 'codex' })
       .expect(201);
     await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Second', agent: 'codex' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
       .get('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .expect(200);
 
     expect(response.body.tasks.map((task: { prompt: string }) => task.prompt)).toEqual(['Second', 'First']);
@@ -111,11 +140,13 @@ describe('Tasks API', () => {
   it('returns 202 when stopping a running task', async () => {
     const created = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Stop me', agent: 'codex' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/stop`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .expect(202);
 
     expect(response.body.session.status).toBe('stopping');
@@ -124,6 +155,7 @@ describe('Tasks API', () => {
   it('returns problem details for invalid task input', async () => {
     const response = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: '', agent: 'gemini' })
       .expect(400);
 
@@ -148,11 +180,13 @@ describe('Tasks API', () => {
 
     const created = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Run something', agent: 'codex' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/input`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ text: 'yes, continue' })
       .expect(202);
 
@@ -164,11 +198,13 @@ describe('Tasks API', () => {
   it('returns 400 when input text is empty', async () => {
     const created = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Run something', agent: 'codex' })
       .expect(201);
 
     const res = await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/input`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ text: '' })
       .expect(400);
 
@@ -178,6 +214,7 @@ describe('Tasks API', () => {
   it('returns 404 when sending input to a non-existent task', async () => {
     await request(app.getHttpServer())
       .post('/tasks/00000000-0000-0000-0000-000000000000/input')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ text: 'hello' })
       .expect(404);
   });
@@ -190,11 +227,13 @@ describe('Tasks API', () => {
 
     const created = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Run something', agent: 'codex' })
       .expect(201);
 
     await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/input`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ text: 'hello' })
       .expect(409);
   });
@@ -211,6 +250,7 @@ describe('Tasks API', () => {
 
     const created = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'Wait then exit', agent: 'codex' })
       .expect(201);
 
@@ -218,6 +258,7 @@ describe('Tasks API', () => {
     // from runningProcesses via completeFromExit (deferred through setImmediate).
     await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/stop`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .expect(202);
 
     // Allow the setImmediate → stop() → onExit → completeFromExit chain to finish.
@@ -225,6 +266,7 @@ describe('Tasks API', () => {
 
     const res = await request(app.getHttpServer())
       .post(`/tasks/${created.body.task.id}/input`)
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ text: 'hello' })
       .expect(409);
 

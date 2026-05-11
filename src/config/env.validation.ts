@@ -30,6 +30,14 @@ const readNumber = (config: RawEnv, key: string, defaultValue: number): number =
   return parsed;
 };
 
+const readPositiveNumber = (config: RawEnv, key: string, defaultValue: number): number => {
+  const parsed = readNumber(config, key, defaultValue);
+  if (parsed <= 0) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+  return parsed;
+};
+
 const readBoolean = (config: RawEnv, key: string, defaultValue = false): boolean => {
   const value = config[key];
   if (value === undefined || value === null || value === '') {
@@ -59,7 +67,16 @@ const readCodexArgs = (config: RawEnv): string[] => {
     throw new Error('ARC_CODEX_ARGS_JSON must be a JSON string array');
   }
 
-  return parsed;
+  const args = [...(parsed as string[])];
+  if (
+    readBoolean(config, 'ARC_CODEX_IGNORE_USER_CONFIG', true) &&
+    args[0] === 'exec' &&
+    !args.includes('--ignore-user-config')
+  ) {
+    args.splice(1, 0, '--ignore-user-config');
+  }
+
+  return args;
 };
 
 export function validateEnv(config: RawEnv): Record<string, unknown> {
@@ -82,6 +99,7 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_PORT: readNumber(config, 'ARC_PORT', 3000),
     ARC_REPO_PATH: readString(config, 'ARC_REPO_PATH'),
     ARC_RUNNER_MODE: runnerMode,
+    ARC_CODEX_IGNORE_USER_CONFIG: readBoolean(config, 'ARC_CODEX_IGNORE_USER_CONFIG', true),
     ARC_CODEX_COMMAND: readString(config, 'ARC_CODEX_COMMAND', 'codex'),
     ARC_CODEX_ARGS: readCodexArgs(config),
     ARC_CODEX_ENV_KEYS: readStringList(config, 'ARC_CODEX_ENV_KEYS'),
@@ -90,6 +108,10 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_WSL_USER: readOptionalString(config, 'ARC_WSL_USER'),
     ARC_LOG_TAIL_LIMIT: readNumber(config, 'ARC_LOG_TAIL_LIMIT', 200),
     ARC_SHUTDOWN_GRACE_MS: readNumber(config, 'ARC_SHUTDOWN_GRACE_MS', 2000),
+    ARC_WORKTREE_ROOT: readOptionalString(config, 'ARC_WORKTREE_ROOT'),
+    ARC_POLICY_PATH: readString(config, 'ARC_POLICY_PATH', 'arc.config.json'),
+    ARC_APPROVAL_TIMEOUT_MS: readPositiveNumber(config, 'ARC_APPROVAL_TIMEOUT_MS', 300000),
+    ARC_TEST_COMMAND_TIMEOUT_MS: readPositiveNumber(config, 'ARC_TEST_COMMAND_TIMEOUT_MS', 600000),
     CONTROLLER_SECRET: readOptionalString(config, 'CONTROLLER_SECRET')
   };
 }

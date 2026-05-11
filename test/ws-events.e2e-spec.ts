@@ -8,6 +8,7 @@ import { applyAppGlobals } from '../src/app-globals';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AGENT_ADAPTERS } from '../src/agents/agent-adapter.token';
 import { AppConfigService } from '../src/config/app-config.service';
+import { GitWorktreeService } from '../src/git/git-worktree.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
 
 const TEST_SECRET = 'test-secret';
@@ -17,9 +18,17 @@ describe('WebSocket events', () => {
   let socket: Socket;
 
   const adapter = { name: 'codex' as const, startTask: jest.fn() };
+  const worktrees = { createForTask: jest.fn() };
 
   beforeEach(async () => {
     jest.restoreAllMocks();
+    worktrees.createForTask.mockResolvedValue({
+      repoPath: '/repo',
+      worktreePath: '/repo/worktrees/task',
+      branchName: 'agent/task-demo',
+      baseRef: 'main',
+      baseCommit: 'abc123'
+    });
 
     // Delay the process exit so the client can subscribe before task.completed fires
     adapter.startTask.mockImplementation(async (input) => {
@@ -30,6 +39,7 @@ describe('WebSocket events', () => {
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService).useValue(createInMemoryPrisma())
+      .overrideProvider(GitWorktreeService).useValue(worktrees)
       .overrideProvider(AGENT_ADAPTERS).useValue([adapter])
       .compile();
 
@@ -56,6 +66,7 @@ describe('WebSocket events', () => {
 
     const createRes = await request(app.getHttpServer())
       .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
       .send({ prompt: 'do something', agent: 'codex' })
       .expect(201);
     const taskId: string = createRes.body.task.id;

@@ -48,6 +48,10 @@ export const createInMemoryPrisma = () => {
   const tasks: Row[] = [];
   const sessions: Row[] = [];
   const logs: Row[] = [];
+  const approvals: Row[] = [];
+  const auditLogs: Row[] = [];
+  const changeSummaries: Row[] = [];
+  const testRuns: Row[] = [];
 
   const createDelegate = (rows: Row[], prefix: string) => ({
     create: jest.fn(async ({ data }: { data: Row }) => {
@@ -84,12 +88,20 @@ export const createInMemoryPrisma = () => {
     task: createDelegate(tasks, 'task'),
     agentSession: createDelegate(sessions, 'session'),
     agentLog: createDelegate(logs, 'log'),
+    approvalRequest: createDelegate(approvals, 'approval'),
+    auditLog: createDelegate(auditLogs, 'audit'),
+    gitChangeSummary: createDelegate(changeSummaries, 'summary'),
+    testRunSummary: createDelegate(testRuns, 'testRun'),
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
       task: createDelegate(tasks, 'task'),
       agentSession: createDelegate(sessions, 'session'),
-      agentLog: createDelegate(logs, 'log')
+      agentLog: createDelegate(logs, 'log'),
+      approvalRequest: createDelegate(approvals, 'approval'),
+      auditLog: createDelegate(auditLogs, 'audit'),
+      gitChangeSummary: createDelegate(changeSummaries, 'summary'),
+      testRunSummary: createDelegate(testRuns, 'testRun')
     }))
   };
 };

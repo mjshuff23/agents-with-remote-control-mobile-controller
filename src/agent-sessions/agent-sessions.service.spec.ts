@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsService } from '../agents/agents.service';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { AppConfigService } from '../config/app-config.service';
+import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentSessionsService } from './agent-sessions.service';
 
@@ -13,6 +15,11 @@ describe('AgentSessionsService', () => {
     status: 'queued',
     selectedAgent: 'codex',
     repoPath: '/repo',
+    worktreePath: '/repo',
+    branchName: 'agent/task-1-run-this-task',
+    baseRef: 'main',
+    baseCommit: 'abc123',
+    approvalMode: 'cooperative-gated',
     createdAt: new Date('2026-05-10T12:00:00.000Z'),
     updatedAt: new Date('2026-05-10T12:00:00.000Z')
   };
@@ -39,6 +46,15 @@ describe('AgentSessionsService', () => {
   const agents = {
     getAdapter: jest.fn(() => adapter)
   };
+  const approvals = {
+    createFromAgentRequest: jest.fn(),
+    resolve: jest.fn(),
+    hasPendingForSession: jest.fn()
+  };
+  const policies = {
+    load: jest.fn(),
+    approvalTimeoutMs: jest.fn()
+  };
   const prisma = {
     task: {
       update: jest.fn()
@@ -46,6 +62,7 @@ describe('AgentSessionsService', () => {
     agentSession: {
       create: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn()
     },
@@ -55,7 +72,8 @@ describe('AgentSessionsService', () => {
     }
   };
   const config = {
-    shutdownGraceMs: 10
+    shutdownGraceMs: 10,
+    approvalTimeoutMs: 50
   };
 
   beforeEach(async () => {
@@ -72,13 +90,22 @@ describe('AgentSessionsService', () => {
       ...(data as Record<string, unknown>)
     }));
     adapter.startTask.mockResolvedValue(runningProcess);
+    policies.load.mockResolvedValue({
+      version: 1,
+      approval: { timeoutMs: 50 },
+      policy: { safe: [], needsApproval: [], blocked: [] },
+      testCommands: []
+    });
+    policies.approvalTimeoutMs.mockResolvedValue(50);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentSessionsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AgentsService, useValue: agents },
-        { provide: AppConfigService, useValue: config }
+        { provide: AppConfigService, useValue: config },
+        { provide: ApprovalsService, useValue: approvals },
+        { provide: PolicyLoaderService, useValue: policies }
       ]
     }).compile();
 
@@ -100,9 +127,10 @@ describe('AgentSessionsService', () => {
         taskId: task.id,
         sessionId: session.id,
         repoPath: '/repo',
-        prompt: 'Run this task'
+        prompt: expect.stringContaining('Run this task')
       })
     );
+    expect(adapter.startTask.mock.calls[0][0].prompt).toContain('ARC_ACTION_REQUEST');
     expect(prisma.agentSession.update).toHaveBeenCalledWith({
       where: { id: session.id },
       data: expect.objectContaining({
@@ -210,5 +238,61 @@ describe('AgentSessionsService', () => {
 
     expect((service as any).nextLogSequences.has(session.id)).toBe(false);
     expect((service as any).logWriteQueues.has(session.id)).toBe(false);
+  });
+
+  it('reconciles waiting approval state if an approval resolves before waiting is persisted', async () => {
+    const pendingApproval = {
+      id: 'approval-1',
+      actionRequestId: 'action-1'
+    };
+    approvals.createFromAgentRequest.mockResolvedValue({ approval: pendingApproval });
+    approvals.hasPendingForSession.mockResolvedValue(false);
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'waiting_approval' });
+
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+    await startInput.onOutput({
+      type: 'stdout',
+      content: 'ARC_ACTION_REQUEST {"id":"action-1","actionType":"fs.write_patch","title":"Patch file"}\n'
+    });
+
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { status: 'waiting_approval' }
+    });
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { status: 'running' }
+    });
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: 'running' }
+    });
+  });
+
+  it('keeps the session waiting while another approval is still pending', async () => {
+    approvals.resolve.mockResolvedValue({
+      id: 'approval-1',
+      taskId: task.id,
+      sessionId: session.id,
+      actionRequestId: 'action-1',
+      decision: 'approved',
+      decisionMessage: null,
+      status: 'approved'
+    });
+    approvals.hasPendingForSession.mockResolvedValue(true);
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'waiting_approval' });
+
+    await service.resolveApproval('approval-1', 'approved');
+
+    expect(approvals.hasPendingForSession).toHaveBeenCalledWith(session.id);
+    expect(prisma.agentSession.update).not.toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { status: 'running' }
+    });
+    expect(prisma.task.update).not.toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: 'running' }
+    });
   });
 });
