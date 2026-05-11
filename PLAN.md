@@ -49,6 +49,7 @@ Environment:
 ARC_WORKTREE_ROOT=""
 ARC_POLICY_PATH="arc.config.json"
 ARC_APPROVAL_TIMEOUT_MS="300000"
+ARC_TEST_COMMAND_TIMEOUT_MS="600000"
 ```
 
 Policy lives in [`arc.config.json`](arc.config.json):
@@ -56,7 +57,7 @@ Policy lives in [`arc.config.json`](arc.config.json):
 - `policy.safe`
 - `policy.needsApproval`
 - `policy.blocked`
-- `testCommands`
+- `testCommands`, with optional per-command `timeoutMs`
 
 Unknown mutating commands default to `NEEDS_APPROVAL`. Secret paths, force push, production deploy, global config changes, internet-piped shell scripts, and destructive deletes outside the worktree are `BLOCKED`.
 

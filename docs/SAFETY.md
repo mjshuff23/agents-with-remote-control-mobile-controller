@@ -88,6 +88,7 @@ arc.config.json
 This means:
 - Tuning the policy doesn't require redeploying the orchestrator.
 - Per-repo overrides are possible by changing `ARC_POLICY_PATH`.
+- Configured test runs are time-bounded by `ARC_TEST_COMMAND_TIMEOUT_MS`, with optional per-command `timeoutMs` overrides.
 - The audit log includes which rule fired, which makes "why was this blocked?" debugging trivial.
 
 ---

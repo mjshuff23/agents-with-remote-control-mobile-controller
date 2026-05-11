@@ -16,6 +16,7 @@ export interface TestCommandConfig {
   label: string;
   cwd?: string;
   command: string[];
+  timeoutMs?: number;
 }
 
 export interface ArcConfig {

@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { AppConfigService } from '../config/app-config.service';
@@ -70,5 +71,38 @@ describe('GitWorktreeService', () => {
       path.join(tmp, 'task-123-demo'),
       'agent/task-123-demo'
     ]);
+  });
+
+  it('validates an existing worktree is on the expected branch before reuse', async () => {
+    await mkdir(path.join(tmp, 'task-123-demo', '.git'), { recursive: true });
+    (git.git as jest.Mock)
+      .mockResolvedValueOnce({ stdout: 'main\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'abc123\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'agent/task-123-demo\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'def456\n', stderr: '' });
+
+    const result = await service.createForTask({
+      taskId: 'task-123',
+      title: 'Demo',
+      prompt: 'ignored'
+    });
+
+    expect(result.baseCommit).toBe('def456');
+    expect(git.git).toHaveBeenCalledWith(path.join(tmp, 'task-123-demo'), ['rev-parse', '--abbrev-ref', 'HEAD']);
+    expect(git.git).not.toHaveBeenCalledWith('/repo/main', expect.arrayContaining(['worktree', 'add']));
+  });
+
+  it('rejects an existing worktree on an unexpected branch', async () => {
+    await mkdir(path.join(tmp, 'task-123-demo', '.git'), { recursive: true });
+    (git.git as jest.Mock)
+      .mockResolvedValueOnce({ stdout: 'main\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'abc123\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'other-branch\n', stderr: '' });
+
+    await expect(service.createForTask({
+      taskId: 'task-123',
+      title: 'Demo',
+      prompt: 'ignored'
+    })).rejects.toThrow('expected "agent/task-123-demo"');
   });
 });

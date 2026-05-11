@@ -2,15 +2,19 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import { ProblemException } from '../common/errors/problem.exception';
+import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+const TEST_KILL_GRACE_MS = 2000;
 
 @Injectable()
 export class TestRunnerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly policies: PolicyLoaderService,
+    private readonly config: AppConfigService,
     private readonly events: EventsGateway
   ) {}
 
@@ -41,6 +45,7 @@ export class TestRunnerService {
       throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Test Command', `Test command "${commandId}" has no executable.`);
     }
     assertSafeConfiguredCommand(command.command, commandId);
+    const timeoutMs = command.timeoutMs ?? this.config.testCommandTimeoutMs;
     const row = await this.prisma.testRunSummary.create({
       data: {
         taskId,
@@ -55,18 +60,61 @@ export class TestRunnerService {
       id: row.id,
       commandId: command.id,
       label: command.label,
-      command: command.command
+      command: command.command,
+      timeoutMs
     }, { sessionId: session?.id, correlationId: row.id });
 
-    void this.runProcess(taskId, session?.id, row.id, cwd, command.command);
+    void this.runProcess(taskId, session?.id, row.id, cwd, command.command, timeoutMs);
     return row;
   }
 
-  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, command: string[]): Promise<void> {
+  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, command: string[], timeoutMs: number): Promise<void> {
     const [bin, ...args] = command;
     const child = spawn(bin, args, { cwd, shell: false, env: safeTestEnv() });
     const highlights: string[] = [];
     let finished = false;
+    let timedOut = false;
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    let killHandle: NodeJS.Timeout | undefined;
+
+    const clearTimers = () => {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
+      }
+      if (killHandle) {
+        clearTimeout(killHandle);
+        killHandle = undefined;
+      }
+    };
+
+    const completeOnce = async (exitCode: number, status: 'passed' | 'failed', nextHighlights: string[]) => {
+      if (finished) return;
+      finished = true;
+      clearTimers();
+      await this.complete(taskId, sessionId, testRunId, exitCode, status, nextHighlights);
+    };
+
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      const timeoutHighlight = `Timed out after ${timeoutMs}ms`;
+      highlights.unshift(timeoutHighlight);
+      try {
+        child.kill('SIGTERM');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        highlights.unshift(`Failed to terminate timed-out test: ${message}`);
+      }
+      killHandle = setTimeout(() => {
+        if (finished) return;
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // The process may already have exited between timers.
+        }
+        void completeOnce(1, 'failed', highlights);
+      }, TEST_KILL_GRACE_MS);
+    }, timeoutMs);
 
     const handleData = (chunk: Buffer, stream: 'stdout' | 'stderr') => {
       const content = chunk.toString('utf8');
@@ -83,14 +131,10 @@ export class TestRunnerService {
     child.stdout.on('data', (chunk: Buffer) => handleData(chunk, 'stdout'));
     child.stderr.on('data', (chunk: Buffer) => handleData(chunk, 'stderr'));
     child.on('error', async (error) => {
-      if (finished) return;
-      finished = true;
-      await this.complete(taskId, sessionId, testRunId, 1, 'failed', [`Failed to start: ${error.message}`]);
+      await completeOnce(1, 'failed', [`Failed to start: ${error.message}`]);
     });
     child.on('close', async (exitCode) => {
-      if (finished) return;
-      finished = true;
-      await this.complete(taskId, sessionId, testRunId, exitCode ?? 1, exitCode === 0 ? 'passed' : 'failed', highlights);
+      await completeOnce(exitCode ?? 1, timedOut ? 'failed' : exitCode === 0 ? 'passed' : 'failed', highlights);
     });
   }
 

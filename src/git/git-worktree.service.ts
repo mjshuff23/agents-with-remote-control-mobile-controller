@@ -41,14 +41,19 @@ export class GitWorktreeService {
     await mkdir(worktreeRoot, { recursive: true });
 
     if (await pathExists(path.join(worktreePath, '.git'))) {
+      const existingBranch = (await this.gitCommands.git(worktreePath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
+      if (existingBranch !== branchName) {
+        throw new Error(`Existing worktree at ${worktreePath} is on "${existingBranch}", expected "${branchName}"`);
+      }
+      const existingCommit = (await this.gitCommands.git(worktreePath, ['rev-parse', 'HEAD'])).stdout.trim() || baseCommit;
       this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
         worktreePath,
         branchName,
         baseRef,
-        baseCommit,
+        baseCommit: existingCommit,
         reused: true
       });
-      return { repoPath, worktreePath, branchName, baseRef, baseCommit };
+      return { repoPath, worktreePath, branchName, baseRef, baseCommit: existingCommit };
     }
 
     const branchExists = await this.branchExists(repoPath, branchName);

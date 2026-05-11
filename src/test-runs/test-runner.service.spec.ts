@@ -12,6 +12,9 @@ describe('TestRunnerService', () => {
   const policies = {
     getTestCommand: jest.fn()
   };
+  const config = {
+    testCommandTimeoutMs: 600000
+  };
   const events = {
     emitEnvelopeToTask: jest.fn()
   };
@@ -20,7 +23,7 @@ describe('TestRunnerService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new TestRunnerService(prisma as any, policies as any, events as any);
+    service = new TestRunnerService(prisma as any, policies as any, config as any, events as any);
     prisma.task.findUnique.mockResolvedValue({
       id: 'task-1',
       worktreePath: '/tmp/arc-worktrees/task-1'

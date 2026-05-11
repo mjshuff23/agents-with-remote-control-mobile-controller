@@ -229,6 +229,7 @@ pnpm prisma:migrate
 
 Edit `.env` before running if `ARC_REPO_PATH` should point somewhere other than this checkout.
 Set `ARC_WORKTREE_ROOT` when you want task worktrees somewhere specific; otherwise the orchestrator uses a sibling `worktrees/` directory beside `ARC_REPO_PATH`.
+Set `ARC_TEST_COMMAND_TIMEOUT_MS` to bound configured test runs globally; individual `arc.config.json` test commands may override it with `timeoutMs`.
 
 Run the orchestrator:
 

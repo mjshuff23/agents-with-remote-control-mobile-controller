@@ -66,6 +66,10 @@ export class AppConfigService {
     return this.config.getOrThrow<number>('ARC_APPROVAL_TIMEOUT_MS');
   }
 
+  get testCommandTimeoutMs(): number {
+    return this.config.getOrThrow<number>('ARC_TEST_COMMAND_TIMEOUT_MS');
+  }
+
   get controllerSecret(): string | undefined {
     return this.emptyToUndefined(this.config.get<string>('CONTROLLER_SECRET'));
   }
