@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { spawn } from 'child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { existsSync, realpathSync } from 'fs';
 import * as path from 'path';
 import { ProblemException } from '../common/errors/problem.exception';
@@ -77,19 +77,20 @@ export class TestRunnerService {
       timeoutMs
     }, { sessionId: session?.id, correlationId: row.id });
 
-    void this.runProcess(taskId, session?.id, row.id, cwd, safeCommand, timeoutMs);
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = spawn(safeCommand.bin, safeCommand.args, { cwd, shell: false, env: safeTestEnv() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.complete(taskId, session?.id, row.id, 1, 'failed', [`Failed to start: ${message}`]);
+      return row;
+    }
+
+    void this.monitorProcess(taskId, session?.id, row.id, child, timeoutMs);
     return row;
   }
 
-  private async runProcess(taskId: string, sessionId: string | undefined, testRunId: string, cwd: string, safeSpawn: SafeSpawnCommand, timeoutMs: number): Promise<void> {
-    let child;
-    try {
-      child = spawn(safeSpawn.bin, safeSpawn.args, { cwd, shell: false, env: safeTestEnv() });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await this.complete(taskId, sessionId, testRunId, 1, 'failed', [`Failed to start: ${message}`]);
-      return;
-    }
+  private async monitorProcess(taskId: string, sessionId: string | undefined, testRunId: string, child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<void> {
     const highlights: string[] = [];
     let finished = false;
     let timedOut = false;
