@@ -211,11 +211,17 @@ export class GitHubProvider implements IGitHubProvider {
     if (status && status >= 500) {
       return { category: 'network_error', message: 'GitHub API server error', retryable: true, statusCode: status };
     }
-    if (status === undefined) {
+    if (status === undefined && isNetworkFailure(msg)) {
       return { category: 'network_error', message: msg, retryable: true, statusCode: undefined };
     }
     return { category: 'unexpected', message: msg, retryable: false, statusCode: status };
   }
+}
+
+const NETWORK_FAILURE_PATTERNS = /fetch failed|econnrefused|enotfound|network|etimedout|socket/i;
+
+function isNetworkFailure(msg: string): boolean {
+  return NETWORK_FAILURE_PATTERNS.test(msg);
 }
 
 function normalizeGitHubIssue(data: Record<string, unknown>): GitHubSearchIssue {

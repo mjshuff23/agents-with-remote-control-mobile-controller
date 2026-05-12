@@ -1,14 +1,39 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createTask } from '../lib/api';
+import { createTask, type ExternalIssueRef } from '../lib/api';
+import { IssuePicker } from './issue-picker';
+import { LinkedIssueBadge } from './linked-issue-badge';
+
+type Step = 'pick' | 'form';
 
 export function NewTaskForm() {
   const router = useRouter();
+  const [step, setStep] = useState<Step>('pick');
   const [prompt, setPrompt] = useState('');
   const [title, setTitle] = useState('');
+  const [linkedIssue, setLinkedIssue] = useState<ExternalIssueRef | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleIssueSelected(ref: ExternalIssueRef, generatedPrompt: string) {
+    setLinkedIssue(ref);
+    setPrompt(generatedPrompt);
+    if (!title && ref.title) setTitle(ref.title.slice(0, 160));
+    setStep('form');
+  }
+
+  function handleSkip() {
+    setLinkedIssue(null);
+    setStep('form');
+  }
+
+  function handleClearIssue() {
+    setLinkedIssue(null);
+    setPrompt('');
+    setTitle('');
+    setStep('pick');
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +47,8 @@ export function NewTaskForm() {
       const { task } = await createTask({
         prompt: prompt.trim(),
         agent: 'codex',
-        title: title.trim() || undefined
+        title: title.trim() || undefined,
+        externalIssueRef: linkedIssue ?? undefined,
       });
       router.push(`/tasks/${task.id}`);
     } catch (err) {
@@ -31,8 +57,25 @@ export function NewTaskForm() {
     }
   }
 
+  if (step === 'pick') {
+    return <IssuePicker onSelect={handleIssueSelected} onSkip={handleSkip} />;
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Linked issue badge or re-link button */}
+      {linkedIssue ? (
+        <LinkedIssueBadge ref_={linkedIssue} onClear={handleClearIssue} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setStep('pick')}
+          className="w-full text-left text-sm text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-lg px-3 py-2"
+        >
+          + Link to a GitHub or Linear issue
+        </button>
+      )}
+
       <div>
         <label htmlFor="task-title" className="block text-sm font-medium text-gray-700 mb-1.5">
           Title <span className="text-gray-400 font-normal">(optional)</span>
@@ -46,6 +89,7 @@ export function NewTaskForm() {
           className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
+
       <div>
         <label htmlFor="task-prompt" className="block text-sm font-medium text-gray-700 mb-1.5">
           Prompt <span className="text-red-400">*</span>
@@ -59,11 +103,13 @@ export function NewTaskForm() {
           className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </div>
+
       {error && (
         <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           {error}
         </p>
       )}
+
       <button
         type="submit"
         disabled={loading}

@@ -4,6 +4,8 @@ import { GithubIntegrationModule } from './github/github-integration.module';
 import { LinearIntegrationModule } from './linear/linear-integration.module';
 import { McpGatewayModule } from './mcp-gateway/mcp-gateway.module';
 import { NotionIntegrationModule } from './notion/notion-integration.module';
+import { IssueSearchController } from './issue-search.controller';
+import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
   imports: [
@@ -11,8 +13,10 @@ import { NotionIntegrationModule } from './notion/notion-integration.module';
     GithubIntegrationModule,
     LinearIntegrationModule,
     NotionIntegrationModule,
-    FigmaIntegrationModule
+    FigmaIntegrationModule,
+    ProvidersModule,
   ],
+  controllers: [IssueSearchController],
   exports: [McpGatewayModule]
 })
 export class IntegrationsModule {}

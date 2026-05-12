@@ -1,5 +1,15 @@
 const API_BASE = '/api';
 
+export type IssueProvider = 'github' | 'linear';
+
+export interface ExternalIssueRef {
+  provider: IssueProvider;
+  externalId: string;
+  key: string;
+  url?: string;
+  title?: string;
+}
+
 export interface Task {
   id: string;
   title: string | null;
@@ -12,6 +22,7 @@ export interface Task {
   baseRef: string | null;
   baseCommit: string | null;
   approvalMode: string;
+  externalIssueRef: ExternalIssueRef | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,7 +236,7 @@ export function replayTask(id: string, cursors: { afterEventSeq: number; afterLo
  * @param payload - Prompt text, agent name, and optional title.
  * @returns The created task and its initial agent session.
  */
-export function createTask(payload: { prompt: string; agent: string; title?: string }): Promise<{ task: Task; session: Session }> {
+export function createTask(payload: { prompt: string; agent: string; title?: string; externalIssueRef?: ExternalIssueRef }): Promise<{ task: Task; session: Session }> {
   return apiFetch('/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -344,4 +355,35 @@ export function runTest(id: string, commandId: string): Promise<TestRunSummary> 
 /** Restore a dormant task session back to running. */
 export function restoreTask(id: string): Promise<{ restored: boolean; session: Session; runtime: RuntimeState }> {
   return apiFetch(`/tasks/${id}/restore`, { method: 'POST' });
+}
+
+// ── Issue search ──────────────────────────────────────────────────────────────
+
+export interface NormalizedIssue {
+  provider: IssueProvider;
+  externalId: string;
+  key: string;
+  title: string;
+  url?: string;
+  state: string;
+  labels: string[];
+  body?: string;
+}
+
+export interface IssueSearchParams {
+  provider: IssueProvider;
+  query?: string;
+  /** GitHub: owner/repo slug. Linear: team ID. */
+  scope?: string;
+  stateId?: string;
+  limit?: number;
+}
+
+export function searchIssues(params: IssueSearchParams): Promise<{ issues: NormalizedIssue[]; provider: IssueProvider }> {
+  const p = new URLSearchParams({ provider: params.provider });
+  if (params.query) p.set('query', params.query);
+  if (params.scope) p.set('scope', params.scope);
+  if (params.stateId) p.set('stateId', params.stateId);
+  if (params.limit !== undefined) p.set('limit', String(params.limit));
+  return apiFetch(`/issues/search?${p.toString()}`);
 }
