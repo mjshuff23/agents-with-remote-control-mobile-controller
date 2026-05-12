@@ -87,6 +87,16 @@ export class AppConfigService {
     return this.config.getOrThrow<number>('ARC_TEST_COMMAND_TIMEOUT_MS');
   }
 
+  /** Idle timeout (ms) before a session transitions to dormant (default 30 min). */
+  get dormantTimeoutMs(): number {
+    return this.config.getOrThrow<number>('ARC_DORMANT_TIMEOUT_MS');
+  }
+
+  /** How often (ms) to scan for idle sessions eligible for dormancy (default 60s). */
+  get dormantCheckIntervalMs(): number {
+    return this.config.getOrThrow<number>('ARC_DORMANT_CHECK_INTERVAL_MS');
+  }
+
   /** Shared secret for controller API authentication, or undefined. */
   get controllerSecret(): string | undefined {
     return this.emptyToUndefined(this.config.get<string>('CONTROLLER_SECRET'));

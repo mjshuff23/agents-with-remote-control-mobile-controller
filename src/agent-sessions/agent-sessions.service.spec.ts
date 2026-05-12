@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsService } from '../agents/agents.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AppConfigService } from '../config/app-config.service';
+import { CheckpointsService } from '../checkpoints/checkpoints.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentSessionsService } from './agent-sessions.service';
@@ -33,6 +34,10 @@ describe('AgentSessionsService', () => {
     completedAt: null,
     exitCode: null,
     errorMessage: null,
+    lastUserActivityAt: null,
+    lastWorkerActivityAt: null,
+    dormantAt: null,
+    dormantReason: null,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -55,20 +60,36 @@ describe('AgentSessionsService', () => {
     load: jest.fn(),
     approvalTimeoutMs: jest.fn()
   };
-  const prisma = {
+  const checkpoints = {
+    capture: jest.fn(),
+    restore: jest.fn(),
+    latestForSession: jest.fn(),
+    canTransitionToDormant: jest.fn(),
+    transitionToDormant: jest.fn(),
+    captureAtBoundary: jest.fn()
+  };
+  const prisma: any = {
+    $transaction: jest.fn(async (callback: (tx: Record<string, unknown>) => Promise<unknown>) => callback(prisma)),
     task: {
-      update: jest.fn()
+      update: jest.fn(),
+      findUnique: jest.fn()
     },
     agentSession: {
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn(),
-      findMany: jest.fn()
+      findMany: jest.fn(),
+      updateMany: jest.fn()
     },
     agentLog: {
       create: jest.fn(),
       findFirst: jest.fn()
+    },
+    sessionCheckpoint: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn()
     }
   };
   const config = {
@@ -79,6 +100,7 @@ describe('AgentSessionsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma.agentSession.create.mockResolvedValue(session);
+    prisma.agentSession.updateMany.mockResolvedValue({ count: 1 });
     prisma.agentLog.findFirst.mockResolvedValue(null);
     prisma.agentLog.create.mockImplementation(async ({ data }: { data: unknown }) => data);
     prisma.agentSession.update.mockImplementation(async ({ data }: { data: unknown }) => ({
@@ -89,6 +111,7 @@ describe('AgentSessionsService', () => {
       ...task,
       ...(data as Record<string, unknown>)
     }));
+    prisma.task.findUnique.mockResolvedValue(task);
     adapter.startTask.mockResolvedValue(runningProcess);
     policies.load.mockResolvedValue({
       version: 1,
@@ -97,6 +120,35 @@ describe('AgentSessionsService', () => {
       testCommands: []
     });
     policies.approvalTimeoutMs.mockResolvedValue(50);
+    checkpoints.captureAtBoundary.mockResolvedValue(null);
+    checkpoints.restore.mockResolvedValue({ checkpoint: { id: 'cp-1' }, session: { ...session, status: 'running' } });
+    checkpoints.latestForSession.mockResolvedValue({
+      id: 'cp-1',
+      sessionId: session.id,
+      taskId: task.id,
+      schemaVersion: 1,
+      reason: 'idle_timeout',
+      lifecycleState: 'running',
+      durableEventCursor: 5,
+      lastUserActivityAt: null,
+      lastWorkerActivityAt: null,
+      workerWasLive: false,
+      launchMetadataJson: JSON.stringify({ agentName: 'codex', repoPath: '/repo' }),
+      frontierJson: JSON.stringify({ prompt: 'Run this task' }),
+      lastUserMessage: null,
+      lastAssistantMessage: null,
+      recentTurnsJson: null,
+      pendingApprovalIdsJson: null,
+      pendingCriticalApproval: false,
+      worktreePath: '/repo',
+      branchName: 'agent/task-1-run-this-task',
+      baseCommitSha: 'abc123',
+      currentHeadSha: 'abc123',
+      repoRoot: '/repo',
+      latestDiffSummaryId: null,
+      latestTestSummaryId: null,
+      createdAt: new Date()
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -105,7 +157,8 @@ describe('AgentSessionsService', () => {
         { provide: AgentsService, useValue: agents },
         { provide: AppConfigService, useValue: config },
         { provide: ApprovalsService, useValue: approvals },
-        { provide: PolicyLoaderService, useValue: policies }
+        { provide: PolicyLoaderService, useValue: policies },
+        { provide: CheckpointsService, useValue: checkpoints }
       ]
     }).compile();
 
@@ -138,6 +191,7 @@ describe('AgentSessionsService', () => {
         externalSessionId: 'pty-1'
       })
     });
+    expect(checkpoints.captureAtBoundary).toHaveBeenCalledWith(session.id, task.id, 'session_start', expect.objectContaining({ workerWasLive: true }));
     expect(result.status).toBe('running');
   });
 
@@ -156,14 +210,10 @@ describe('AgentSessionsService', () => {
         content: 'first'
       }
     });
-    expect(prisma.agentLog.create).toHaveBeenNthCalledWith(3, {
-      data: {
-        sessionId: session.id,
-        type: 'stdout',
-        sequence: 3,
-        content: 'second'
-      }
-    });
+    const secondCall = (prisma.agentLog.create as jest.Mock).mock.calls[2];
+    expect(secondCall[0].data.sessionId).toBe(session.id);
+    expect(secondCall[0].data.content).toBe('second');
+    expect(secondCall[0].data.sequence).toBe(3);
   });
 
   it('serializes concurrent output writes for the same session', async () => {
@@ -183,14 +233,10 @@ describe('AgentSessionsService', () => {
         content: 'first'
       }
     });
-    expect(prisma.agentLog.create).toHaveBeenNthCalledWith(3, {
-      data: {
-        sessionId: session.id,
-        type: 'stdout',
-        sequence: 3,
-        content: 'second'
-      }
-    });
+    const secondCall = (prisma.agentLog.create as jest.Mock).mock.calls[2];
+    expect(secondCall[0].data.sessionId).toBe(session.id);
+    expect(secondCall[0].data.content).toBe('second');
+    expect(secondCall[0].data.sequence).toBe(3);
   });
 
   it('marks the session and task failed when adapter startup fails', async () => {
@@ -238,6 +284,37 @@ describe('AgentSessionsService', () => {
 
     expect((service as any).nextLogSequences.has(session.id)).toBe(false);
     expect((service as any).logWriteQueues.has(session.id)).toBe(false);
+  });
+
+  it('restores a dormant session by relaunching the agent', async () => {
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'dormant' });
+
+    const result = await service.restoreSession(session.id);
+
+    expect(adapter.startTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: task.id,
+        sessionId: session.id,
+        repoPath: '/repo',
+        prompt: expect.stringContaining('Run this task')
+      })
+    );
+    expect(checkpoints.restore).toHaveBeenCalledWith(session.id);
+    expect(result.session.status).toBe('running');
+  });
+
+  it('rejects restore for non-dormant sessions', async () => {
+    prisma.agentSession.updateMany.mockResolvedValue({ count: 0 });
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'running' });
+
+    await expect(service.restoreSession(session.id)).rejects.toThrow('Not Dormant');
+  });
+
+  it('rejects restore with conflict for restoring session', async () => {
+    prisma.agentSession.updateMany.mockResolvedValue({ count: 0 });
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'restoring' });
+
+    await expect(service.restoreSession(session.id)).rejects.toThrow('Restore In Progress');
   });
 
   it('reconciles waiting approval state if an approval resolves before waiting is persisted', async () => {

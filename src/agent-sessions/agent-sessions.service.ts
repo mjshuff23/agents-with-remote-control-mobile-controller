@@ -3,6 +3,7 @@ import { AgentSession, ApprovalRequest, Task } from '@prisma/client';
 import { AgentsService } from '../agents/agents.service';
 import { AgentLogType, RunningAgentProcess } from '../agents/agent-adapter.interface';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { CheckpointsService } from '../checkpoints/checkpoints.service';
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -28,11 +29,6 @@ export interface SessionRuntimeState {
   statusLabel: RuntimeStatusLabel;
 }
 
-/**
- * Manages the full lifecycle of agent sessions: starting, monitoring,
- * stopping, recovery, and the cooperative approval protocol
- * (ARC_ACTION_REQUEST / ARC_APPROVAL).
- */
 @Injectable()
 export class AgentSessionsService implements OnApplicationBootstrap {
 
@@ -50,6 +46,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     private readonly config: AppConfigService,
     private readonly approvals: ApprovalsService,
     private readonly policies: PolicyLoaderService,
+    private readonly checkpoints: CheckpointsService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -59,12 +56,110 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   }
 
   /**
+   * Restore a dormant session back to running: rehydrate state from the
+   * checkpoint, relaunch the agent in the preserved worktree context,
+   * wire callbacks, and flip the DB status.
+   */
+  async restoreSession(sessionId: string): Promise<{ session: AgentSession }> {
+    // Atomically transition from dormant to restoring to prevent races
+    const updateResult = await this.prisma.agentSession.updateMany({
+      where: { id: sessionId, status: 'dormant' },
+      data: { status: 'restoring' }
+    });
+
+    if (updateResult.count === 0) {
+      const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
+      if (!session) {
+        throw new ProblemException(HttpStatus.NOT_FOUND, 'Session Not Found', `Session "${sessionId}" does not exist.`);
+      }
+      if (session.status === 'restoring') {
+        throw new ProblemException(HttpStatus.CONFLICT, 'Restore In Progress', 'A restore is already in progress for this session.');
+      }
+      throw new ProblemException(HttpStatus.CONFLICT, 'Not Dormant', `Session "${sessionId}" is ${session.status}, not dormant.`);
+    }
+
+    const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
+    if (!session) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Session Not Found', `Session "${sessionId}" does not exist.`);
+    }
+
+    const checkpoint = await this.checkpoints.latestForSession(sessionId);
+    if (!checkpoint) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'No Checkpoint', `No checkpoint found for dormant session "${sessionId}".`);
+    }
+
+    const task = await this.prisma.task.findUnique({ where: { id: checkpoint.taskId } });
+    if (!task) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${checkpoint.taskId}" for checkpoint not found.`);
+    }
+
+    const adapter = this.agents.getAdapter(task.selectedAgent);
+
+    const frontier = this.parseFrontier(checkpoint.frontierJson);
+    const prompt = this.buildCooperativeRestorePrompt(task, frontier);
+    const launch = this.parseLaunchMetadata(checkpoint.launchMetadataJson);
+
+    try {
+      let runningProcess: RunningAgentProcess;
+      try {
+        runningProcess = await adapter.startTask({
+          taskId: task.id,
+          sessionId: session.id,
+          repoPath: launch.repoPath ?? task.repoPath,
+          worktreePath: launch.worktreePath ?? task.worktreePath ?? undefined,
+          branchName: launch.branchName ?? task.branchName ?? undefined,
+          prompt,
+          onOutput: async (event) => {
+            await this.appendLog(session.id, event.type, event.content);
+            if (event.type === 'stdout') {
+              await this.handleProtocolOutput(task.id, session.id, event.content);
+            }
+          },
+          onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
+        });
+
+        this.runningProcesses.set(session.id, runningProcess);
+        this.sessionToTask.set(session.id, task.id);
+      } catch (error) {
+        // Revert status back to dormant on failure
+        await this.prisma.agentSession.update({
+          where: { id: sessionId },
+          data: { status: 'dormant' }
+        });
+        const message = this.errorMessage(error);
+        await this.appendLog(session.id, 'system', `Restore relaunch failed: ${message}`);
+        throw new ProblemException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          'Agent could not be restarted from checkpoint',
+          message
+        );
+      }
+
+      let result: import('../checkpoints/checkpoints.service').RestoreResult;
+      try {
+        result = await this.checkpoints.restore(sessionId);
+      } catch (error) {
+        this.runningProcesses.delete(session.id);
+        this.sessionToTask.delete(session.id);
+        await Promise.resolve(runningProcess.stop?.()).catch(() => undefined);
+        throw error;
+      }
+      await this.appendLog(session.id, 'system', `Session restored from dormant (checkpoint ${checkpoint.id})`);
+
+      return { session: result.session };
+    } catch (error) {
+      // Ensure status is reverted to dormant if checkpoint.restore fails
+      await this.prisma.agentSession.update({
+        where: { id: sessionId },
+        data: { status: 'dormant' }
+      }).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
    * Create an AgentSession row, launch the agent adapter process,
    * wire output/exit callbacks, and update the session/task status.
-   *
-   * @param task - The task to start a session for.
-   * @returns The updated AgentSession with running status.
-   * @throws ProblemException(503) if the agent cannot be started.
    */
   async createAndStart(task: Task): Promise<AgentSession> {
     const session = await this.prisma.agentSession.create({
@@ -101,7 +196,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         data: { status: 'running' }
       });
 
-      return this.prisma.agentSession.update({
+      const updated = await this.prisma.agentSession.update({
         where: { id: session.id },
         data: {
           status: 'running',
@@ -109,6 +204,14 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           startedAt: new Date()
         }
       });
+
+      void this.checkpoints.captureAtBoundary(session.id, task.id, 'session_start', {
+        workerWasLive: this.hasLiveProcess(session.id)
+      }).catch((err) => {
+        this.appendLog(session.id, 'system', `Checkpoint capture failed (session_start): ${this.errorMessage(err)}`);
+      });
+
+      return updated;
     } catch (error) {
       const message = this.errorMessage(error);
       await this.appendLog(session.id, 'system', `Codex startup failed: ${message}`);
@@ -147,8 +250,6 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
   /**
    * Send stdin text to the running agent process for a task.
-   * @throws ProblemException(404) if no session exists.
-   * @throws ProblemException(409) if the session has no live or writable process.
    */
   async sendInput(taskId: string, text: string): Promise<void> {
     const session = await this.prisma.agentSession.findFirst({
@@ -167,6 +268,12 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
     running.write(text);
     await this.appendLog(session.id, 'system', `Input sent (${text.length} chars)`);
+    await this.updateUserActivity(session.id);
+
+    void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'user_turn', {
+      lastUserMessage: text,
+      workerWasLive: this.hasLiveProcess(session.id)
+    }).catch((err) => this.appendLog(session.id, 'system', `Checkpoint capture failed (user_turn): ${this.errorMessage(err)}`));
   }
 
   /**
@@ -192,13 +299,22 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       await this.resumeIfWaiting(approval.taskId, approval.sessionId);
     }
 
+    if (approval.sessionId) {
+      await this.updateUserActivity(approval.sessionId);
+
+      void this.checkpoints.captureAtBoundary(approval.sessionId, approval.taskId, 'approval_event', {
+        workerWasLive: this.hasLiveProcess(approval.sessionId)
+      }).catch((err) =>
+        this.appendLog(approval.sessionId!, 'system', `Checkpoint capture failed (approval_event): ${this.errorMessage(err)}`)
+      );
+    }
+
     return { approval };
   }
 
   /**
    * Stop a running task by killing its agent process.
    * Returns immediately with `accepted: true`; the actual kill is deferred.
-   * @returns `{ accepted: false }` if the session is already terminal.
    */
   async stopTask(taskId: string): Promise<StopTaskResult> {
     const session = await this.prisma.agentSession.findFirst({
@@ -221,6 +337,14 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
 
     await this.appendLog(session.id, 'system', 'Stop requested by REST client');
+    await this.updateUserActivity(session.id);
+
+    void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_stop', {
+      workerWasLive: this.hasLiveProcess(session.id)
+    }).catch((err) =>
+      this.appendLog(session.id, 'system', `Checkpoint capture failed (pre_stop): ${this.errorMessage(err)}`)
+    );
+
     const updated = await this.prisma.agentSession.update({
       where: { id: session.id },
       data: { status: 'stopping' }
@@ -248,6 +372,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           content
         }
       });
+      await this.updateWorkerActivity(sessionId);
       const taskId = this.sessionToTask.get(sessionId);
       if (taskId) {
         await this.events?.emitCompatibilityEventToTask(
@@ -275,6 +400,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
   /** Mark both session and task as failed with an error message. */
   private async markSessionFailed(taskId: string, sessionId: string, message: string): Promise<void> {
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_terminal): ${this.errorMessage(err)}`)
+    );
     await this.prisma.agentSession.update({
       where: { id: sessionId },
       data: {
@@ -321,6 +449,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       : `Agent process exited with code ${exitCode}`;
 
     await this.appendLog(sessionId, 'system', message);
+
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_terminal): ${this.errorMessage(err)}`)
+    );
+
     await this.prisma.agentSession.update({
       where: { id: sessionId },
       data: {
@@ -345,6 +478,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   /** Mark a session as stopped when no live process is registered. */
   private async markStoppedWithoutProcess(taskId: string, sessionId: string): Promise<AgentSession> {
     await this.appendLog(sessionId, 'system', 'Stop requested, but no live local process was registered');
+
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_stop').catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_stop): ${this.errorMessage(err)}`)
+    );
+
     await this.prisma.task.update({
       where: { id: taskId },
       data: { status: 'stopped' }
@@ -360,29 +498,90 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return stopped;
   }
 
-  /** Mark sessions left in starting/running/stopping as failed/stopped after boot. */
+  /** Recover sessions interrupted by orchestrator crash. */
   private async recoverInterruptedSessions(): Promise<void> {
     const interrupted = await this.prisma.agentSession.findMany({
       where: {
-        status: { in: ['starting', 'running', 'stopping'] }
+        status: { in: ['starting', 'running', 'stopping', 'restoring'] }
       }
     });
 
     for (const session of interrupted) {
-      const status = session.status === 'stopping' ? 'stopped' : 'failed';
-      await this.appendLog(session.id, 'system', `Session marked ${status} after orchestrator startup`);
-      await this.prisma.agentSession.update({
-        where: { id: session.id },
-        data: {
-          status,
-          completedAt: new Date(),
-          errorMessage: status === 'failed' ? 'Orchestrator restarted before the process exit was observed' : null
+      if (session.status === 'stopping') {
+        await this.appendLog(session.id, 'system', 'Session marked stopped after orchestrator startup');
+        await this.prisma.agentSession.update({
+          where: { id: session.id },
+          data: { status: 'stopped', completedAt: new Date() }
+        });
+        await this.prisma.task.update({
+          where: { id: session.taskId },
+          data: { status: 'stopped' }
+        });
+      } else if (session.status === 'starting') {
+        await this.appendLog(session.id, 'system', 'Session marked failed after orchestrator startup');
+        await this.prisma.agentSession.update({
+          where: { id: session.id },
+          data: {
+            status: 'failed',
+            completedAt: new Date(),
+            errorMessage: 'Orchestrator restarted before the session could start'
+          }
+        });
+        await this.prisma.task.update({
+          where: { id: session.taskId },
+          data: { status: 'failed' }
+        });
+      } else if (session.status === 'restoring') {
+        await this.appendLog(session.id, 'system', 'Session reverted to dormant (restore was interrupted by orchestrator restart)');
+        await this.prisma.agentSession.update({
+          where: { id: session.id },
+          data: {
+            status: 'dormant',
+            dormantAt: new Date(),
+            dormantReason: 'orchestrator_restart'
+          }
+        });
+        await this.prisma.task.update({
+          where: { id: session.taskId },
+          data: { status: 'dormant' }
+        });
+      } else {
+        // running → dormant: recoverable, not failed
+        const existing = await this.checkpoints.latestForSession(session.id);
+        if (!existing) {
+          const captured = await this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_transition');
+          if (!captured) {
+            await this.appendLog(session.id, 'system', 'Session marked failed after orchestrator startup (no checkpoint could be created for restore)');
+            await this.prisma.agentSession.update({
+              where: { id: session.id },
+              data: {
+                status: 'failed',
+                completedAt: new Date(),
+                errorMessage: 'Orchestrator restarted and no checkpoint was available for restore'
+              }
+            });
+            await this.prisma.task.update({
+              where: { id: session.taskId },
+              data: { status: 'failed' }
+            });
+            this.clearLogState(session.id);
+            continue;
+          }
         }
-      });
-      await this.prisma.task.update({
-        where: { id: session.taskId },
-        data: { status }
-      });
+        await this.appendLog(session.id, 'system', 'Session moved to dormant after orchestrator startup (live process was lost)');
+        await this.prisma.agentSession.update({
+          where: { id: session.id },
+          data: {
+            status: 'dormant',
+            dormantAt: new Date(),
+            dormantReason: 'orchestrator_restart'
+          }
+        });
+        await this.prisma.task.update({
+          where: { id: session.taskId },
+          data: { status: 'dormant' }
+        });
+      }
       this.clearLogState(session.id);
     }
   }
@@ -415,6 +614,63 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     ].join('\n');
   }
 
+  /**
+   * Build a restore prompt from checkpoint frontier data.
+   * Reuses the cooperative prompt structure and appends continuation context.
+   */
+  private buildCooperativeRestorePrompt(task: Task, frontier: { prompt: string; currentInstructions?: string }): string {
+    const base = this.buildCooperativePrompt({
+      ...task,
+      prompt: frontier.prompt || task.prompt
+    });
+    return [
+      base,
+      '',
+      '--- SESSION RESTORED FROM CHECKPOINT ---',
+      'Your previous session was checkpointed and has been restored. Continue working on the task above.',
+      'All previous worktree state, branch, and approvals are preserved.',
+      'If you were in the middle of a multi-step plan, review the current state and continue.'
+    ].join('\n');
+  }
+
+  /**
+   * Parse the frontier JSON from a checkpoint, providing safe defaults.
+   */
+  private parseFrontier(frontierJson: string): { prompt: string; currentInstructions?: string } {
+    try {
+      return JSON.parse(frontierJson) as { prompt: string; currentInstructions?: string };
+    } catch {
+      return { prompt: '' };
+    }
+  }
+
+  /**
+   * Build a restore prompt (side-effect-free; used by restoreSession for logging/validation).
+   * This method is kept for the side effect of verification; the actual prompt
+   * is built by buildCooperativeRestorePrompt.
+   */
+  private buildRestorePrompt(task: Task, checkpoint: import('@prisma/client').SessionCheckpoint): string {
+    return `RESTORE: task ${task.id} session ${checkpoint.sessionId} checkpoint ${checkpoint.id}`;
+  }
+
+  /**
+   * Parse the launch metadata JSON from a checkpoint, providing safe defaults.
+   * Used by restoreSession to reconstruct the worktree/branch context from
+   * the checkpoint rather than relying solely on current task fields.
+   */
+  private parseLaunchMetadata(launchMetadataJson: string): { repoPath?: string; worktreePath?: string; branchName?: string } {
+    try {
+      const parsed = JSON.parse(launchMetadataJson) as Record<string, string | undefined>;
+      return {
+        repoPath: parsed.repoPath ?? undefined,
+        worktreePath: parsed.worktreePath ?? undefined,
+        branchName: parsed.branchName ?? undefined
+      };
+    } catch {
+      return {};
+    }
+  }
+
   /** Scan agent output for ARC_ACTION_REQUEST lines and process each one. */
   private async handleProtocolOutput(taskId: string, sessionId: string, content: string): Promise<void> {
     const lines = this.extractProtocolLines(sessionId, content);
@@ -423,6 +679,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         continue;
       }
       try {
+        await this.updateWorkerActivity(sessionId);
         const request = JSON.parse(line.slice(ACTION_REQUEST_PREFIX.length).trim()) as AgentActionRequest;
         const result = await this.approvals.createFromAgentRequest(taskId, sessionId, request);
         if (result.decision) {
@@ -572,6 +829,30 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private async approvalTimeoutMs(): Promise<number> {
     return this.policies.approvalTimeoutMs(this.config.approvalTimeoutMs);
   }
+
+  /** Persist lastUserActivityAt to the session row. */
+  private async updateUserActivity(sessionId: string): Promise<void> {
+    try {
+      await this.prisma.agentSession.update({
+        where: { id: sessionId },
+        data: { lastUserActivityAt: new Date() }
+      });
+    } catch {
+      // best-effort; log updates should not fail the caller
+    }
+  }
+
+  /** Persist lastWorkerActivityAt to the session row. */
+  private async updateWorkerActivity(sessionId: string): Promise<void> {
+    try {
+      await this.prisma.agentSession.update({
+        where: { id: sessionId },
+        data: { lastWorkerActivityAt: new Date() }
+      });
+    } catch {
+      // best-effort; log updates should not fail the caller
+    }
+  }
 }
 
 /**
@@ -580,9 +861,6 @@ export class AgentSessionsService implements OnApplicationBootstrap {
  */
 function safeProtocolBufferRemainder(last: string): string {
   if (last.trim().startsWith(ACTION_REQUEST_PREFIX)) {
-    // Discard oversized partial frames; a legitimate ARC_ACTION_REQUEST fits
-    // well within PROTOCOL_BUFFER_LIMIT. An unbounded buffer here would allow
-    // a crashed or misbehaving agent to grow it without bound.
     return last.length <= PROTOCOL_BUFFER_LIMIT ? last : '';
   }
   return last.slice(-PROTOCOL_BUFFER_LIMIT);

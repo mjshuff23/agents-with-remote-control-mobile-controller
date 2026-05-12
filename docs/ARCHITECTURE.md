@@ -75,6 +75,17 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 - Phase 5: Notion + Figma + MCP.
 - Not implemented in Phase 3.
 
+### CheckpointsModule
+
+- Owns the `SessionCheckpoint` entity and the idle-to-dormant lifecycle.
+- `CheckpointsService` provides checkpoint capture (`capture`, `captureAtBoundary`),
+  dormant eligibility (`canTransitionToDormant`), transition (`transitionToDormant`),
+  and restore persistence (`restore`).
+- Runs a periodic dormancy checker that scans non-terminal sessions and transitions
+  idle ones to the `dormant` recoverable state.
+- Checkpoints are compact frontier snapshots layered on top of the durable event
+  ledger — they are not a second authoritative history stream.
+
 ### AuditLogModule
 
 - Append-only log of every approval, denial, and risk-classification decision.
@@ -123,6 +134,7 @@ SQLite first. Migration to Postgres only if/when concurrency or multi-host requi
 | **AuditLog** | Append-only record of classification, approval, denial, refusal, and security decisions |
 | **GitChangeSummary** | Worktree-scoped snapshot of files changed, +/- counts, status counts, risk flags, and top files |
 | **TestRunSummary** | Configured test command run summary with command id, exit code, status, highlights |
+| **SessionCheckpoint** | Compact frontier snapshot: durable event cursor, worktree/branch/HEAD metadata, pending approval ids, last user/assistant messages, latest diff/test summary ids, schema version, and capture reason |
 
 Potential Phase 4+ sync records are intentionally absent from the Phase 3 schema.
 
@@ -179,9 +191,11 @@ Phase 3 emits cleanup-request events but does not auto-remove worktrees. Destruc
 5. **Gate** — native hooks are used only where real; otherwise the agent cooperates through `ARC_ACTION_REQUEST`.
 6. **Decide** — human approves / denies / steers via free-text.
 7. **Continue** — orchestrator forwards decision to agent; loop until done or stopped.
-8. **Summarize** — `GitChangeSummary` captures diff counts and risk flags; `TestRunSummary` captures configured local test runs.
-9. **Sync** (Phase 4+) — commit, push, open draft PR, update Linear, post Notion summary.
-10. **Cleanup** (future) — remove worktree only after explicit human-gated cleanup.
+8. **Dormancy** — after 30+ minutes of inactivity, session transitions to `dormant` with a checkpoint; remains visible and resumable.
+9. **Restore** — user clicks Resume from the controller; agent relaunches in the preserved worktree/branch context from the checkpoint.
+10. **Summarize** — `GitChangeSummary` captures diff counts and risk flags; `TestRunSummary` captures configured local test runs.
+11. **Sync** (Phase 4+) — commit, push, open draft PR, update Linear, post Notion summary.
+12. **Cleanup** (future) — remove worktree only after explicit human-gated cleanup.
 
 Detailed flow: [`diagrams.md`](diagrams.md#2-task-lifecycle-flow).
 

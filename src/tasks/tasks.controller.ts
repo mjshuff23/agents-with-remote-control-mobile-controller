@@ -89,6 +89,13 @@ export class TasksController {
   async listTestCommands(@Param('id') id: string) {
     return this.tasks.listTestCommands(id);
   }
+
+  /** Restore a dormant session back to running. Returns 202. */
+  @Post(':id/restore')
+  @HttpCode(202)
+  async restoreTask(@Param('id') id: string) {
+    return this.tasks.restoreTask(id);
+  }
 }
 
 /** Parse an optional query param to a non-negative integer, returning undefined if absent or invalid. */

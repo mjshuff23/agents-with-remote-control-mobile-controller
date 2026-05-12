@@ -340,3 +340,8 @@ export function runTest(id: string, commandId: string): Promise<TestRunSummary> 
     body: JSON.stringify({ commandId })
   });
 }
+
+/** Restore a dormant task session back to running. */
+export function restoreTask(id: string): Promise<{ restored: boolean; session: Session; runtime: RuntimeState }> {
+  return apiFetch(`/tasks/${id}/restore`, { method: 'POST' });
+}

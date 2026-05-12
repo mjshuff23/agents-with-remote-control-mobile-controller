@@ -78,6 +78,8 @@ export interface TaskSocketHandlers {
   onTestStarted?: (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => void;
   onTestLog?: (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => void;
   onTestCompleted?: (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => void;
+  onSessionDormant?: (event: TaskEventEnvelope<'session.dormant', { sessionId: string; checkpointId: string; reason: string }>) => void;
+  onSessionRestored?: (event: TaskEventEnvelope<'session.restored', { sessionId: string; checkpointId: string; restoreMode: string }>) => void;
   getReplayCursor?: () => { afterEventSeq: number; afterLogSequence: number };
   onReplay?: (replay: Pick<TaskReplayResponse, 'events' | 'logs'>) => void;
   onReconnected?: () => void;
@@ -137,6 +139,12 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     const onTestCompleted = (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => {
       if (event.taskId === taskId) ref.current.onTestCompleted?.(event);
     };
+    const onSessionDormant = (event: TaskEventEnvelope<'session.dormant', { sessionId: string; checkpointId: string; reason: string }>) => {
+      if (event.taskId === taskId) ref.current.onSessionDormant?.(event);
+    };
+    const onSessionRestored = (event: TaskEventEnvelope<'session.restored', { sessionId: string; checkpointId: string; restoreMode: string }>) => {
+      if (event.taskId === taskId) ref.current.onSessionRestored?.(event);
+    };
 
     // Attach all event handlers immediately. Events are filtered client-side
     // by taskId, so there is no risk of cross-task bleed. Attaching before the
@@ -151,6 +159,8 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     socket.on('test.started', onTestStarted);
     socket.on('test.log', onTestLog);
     socket.on('test.completed', onTestCompleted);
+    socket.on('session.dormant', onSessionDormant);
+    socket.on('session.restored', onSessionRestored);
 
     // Join the server-side room. socket.io rooms are server-side only and are
     // lost on every disconnect, so this must be repeated on every reconnect.
@@ -196,6 +206,8 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
       socket.off('test.started', onTestStarted);
       socket.off('test.log', onTestLog);
       socket.off('test.completed', onTestCompleted);
+      socket.off('session.dormant', onSessionDormant);
+      socket.off('session.restored', onSessionRestored);
       socket.off('connect', onConnect);
       socket.emit('unsubscribe', { taskId });
     };

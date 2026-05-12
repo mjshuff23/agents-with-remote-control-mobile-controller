@@ -118,6 +118,7 @@ export const createInMemoryPrisma = () => {
   const auditLogs: Row[] = [];
   const changeSummaries: Row[] = [];
   const testRuns: Row[] = [];
+  const checkpoints: Row[] = [];
   const taskEvents: Row[] = [];
 
   /**
@@ -203,6 +204,7 @@ export const createInMemoryPrisma = () => {
     auditLog: createDelegate(auditLogs, 'audit'),
     gitChangeSummary: createDelegate(changeSummaries, 'summary'),
     testRunSummary: createDelegate(testRuns, 'testRun'),
+    sessionCheckpoint: createDelegate(checkpoints, 'chkpt'),
     taskEvent: createDelegate(taskEvents, 'event'),
     $connect: jest.fn(),
     $disconnect: jest.fn(),
@@ -220,6 +222,7 @@ export const createInMemoryPrisma = () => {
       auditLog: createDelegate(auditLogs, 'audit'),
       gitChangeSummary: createDelegate(changeSummaries, 'summary'),
       testRunSummary: createDelegate(testRuns, 'testRun'),
+      sessionCheckpoint: createDelegate(checkpoints, 'chkpt'),
       taskEvent: createDelegate(taskEvents, 'event')
     }))
   };
