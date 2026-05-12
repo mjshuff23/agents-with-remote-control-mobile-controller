@@ -26,6 +26,7 @@ model Task {
   changeSummaries GitChangeSummary[]
   testRuns        TestRunSummary[]
   events          TaskEvent[]
+  syncEvents      SyncEvent[]
 }
 
 model AgentSession {
@@ -52,6 +53,7 @@ model AgentSession {
   testRuns            TestRunSummary[]
   events              TaskEvent[]
   checkpoints         SessionCheckpoint[]
+  syncEvents          SyncEvent[]
 
   @@index([taskId])
   @@index([status])
@@ -196,6 +198,30 @@ model SessionCheckpoint {
 
   @@index([sessionId, createdAt])
   @@index([taskId])
+}
+
+model SyncEvent {
+  id            String        @id @default(uuid())
+  taskId        String
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId     String?
+  session       AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  provider      String
+  action        String
+  targetId      String
+  status        String        @default("pending")
+  externalId    String?
+  url           String?
+  errorCategory String?
+  errorMessage  String?
+  metadataJson  String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([taskId, provider, targetId, action])
+  @@index([taskId])
+  @@index([taskId, status])
+  @@index([taskId, action])
 }
 
 model TestRunSummary {
