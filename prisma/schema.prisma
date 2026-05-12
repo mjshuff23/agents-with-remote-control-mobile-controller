@@ -29,24 +29,29 @@ model Task {
 }
 
 model AgentSession {
-  id                String             @id @default(uuid())
-  taskId            String
-  task              Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  agentName         String
-  status            String             @default("starting")
-  externalSessionId String?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  exitCode          Int?
-  errorMessage      String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  logs              AgentLog[]
-  approvals         ApprovalRequest[]
-  auditLogs         AuditLog[]
-  changeSummaries   GitChangeSummary[]
-  testRuns          TestRunSummary[]
-  events            TaskEvent[]
+  id                  String             @id @default(uuid())
+  taskId              String
+  task                Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agentName           String
+  status              String             @default("starting")
+  externalSessionId   String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  exitCode            Int?
+  errorMessage        String?
+  lastUserActivityAt  DateTime?
+  lastWorkerActivityAt DateTime?
+  dormantAt           DateTime?
+  dormantReason       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  logs                AgentLog[]
+  approvals           ApprovalRequest[]
+  auditLogs           AuditLog[]
+  changeSummaries     GitChangeSummary[]
+  testRuns            TestRunSummary[]
+  events              TaskEvent[]
+  checkpoints         SessionCheckpoint[]
 
   @@index([taskId])
   @@index([status])
@@ -159,6 +164,38 @@ model GitChangeSummary {
 
   @@index([taskId, createdAt])
   @@index([sessionId, createdAt])
+}
+
+model SessionCheckpoint {
+  id                      String        @id @default(uuid())
+  sessionId               String
+  session                 AgentSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  taskId                  String
+  schemaVersion           Int           @default(1)
+  reason                  String        // idle_timeout, pre_transition
+  lifecycleState          String
+  durableEventCursor      Int
+  lastUserActivityAt      DateTime?
+  lastWorkerActivityAt    DateTime?
+  workerWasLive           Boolean       @default(false)
+  launchMetadataJson      String        // { agentName, repoPath, worktreePath, branchName }
+  frontierJson            String        // serialized frontier
+  lastUserMessage         String?
+  lastAssistantMessage    String?
+  recentTurnsJson         String?
+  pendingApprovalIdsJson  String?
+  pendingCriticalApproval Boolean       @default(false)
+  worktreePath            String?
+  branchName              String?
+  baseCommitSha           String?
+  currentHeadSha          String?
+  repoRoot                String?
+  latestDiffSummaryId     String?
+  latestTestSummaryId     String?
+  createdAt               DateTime      @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([taskId])
 }
 
 model TestRunSummary {

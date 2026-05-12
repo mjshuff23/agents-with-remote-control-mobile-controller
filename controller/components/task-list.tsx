@@ -9,7 +9,9 @@ const STATUS_COLOR: Record<string, string> = {
   failed: 'bg-red-500',
   stopped: 'bg-gray-400',
   stopping: 'bg-orange-400',
-  queued: 'bg-yellow-400'
+  queued: 'bg-yellow-400',
+  dormant: 'bg-purple-500',
+  waiting_approval: 'bg-amber-500'
 };
 
 export function TaskList({ tasks }: { tasks: Task[] }) {

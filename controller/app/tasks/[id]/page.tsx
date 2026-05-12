@@ -7,6 +7,7 @@ import {
   getTask,
   listTestCommands,
   replayTask,
+  restoreTask,
   runTest,
   sendInput,
   stopTask,
@@ -263,6 +264,18 @@ export default function TaskDetailPage() {
       upsertApproval(event.data);
       appendSyntheticLog('system', `Policy violation: ${event.data.title}`);
     },
+    onSessionDormant: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      setRuntime({ processState: 'reconstructed', statusLabel: 'dormant' });
+      appendSyntheticLog('system', `Session dormant: ${event.data.reason}`);
+    },
+    onSessionRestored: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      setRuntime({ processState: 'reconstructed', statusLabel: 'active' });
+      appendSyntheticLog('system', `Session restored (${event.data.restoreMode})`);
+    },
     onDiffSummary: (event) => {
       lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
       if (markEventSeen(event.id)) return;
@@ -384,6 +397,18 @@ export default function TaskDetailPage() {
     }
   }
 
+  async function handleRestore() {
+    setActionError(null);
+    try {
+      const result = await restoreTask(id);
+      setSession(result.session);
+      setRuntime(result.runtime);
+      appendSyntheticLog('system', 'Session restored from dormant');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Restore failed');
+    }
+  }
+
   const isLive = runtime?.processState === 'live_process' && (
     runtime.statusLabel === 'active' || runtime.statusLabel === 'waiting_approval'
   );
@@ -423,7 +448,12 @@ export default function TaskDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold truncate">{task.title ?? task.prompt.slice(0, 50)}</p>
-          <p className="text-xs text-gray-400">{task.status} · {task.selectedAgent} · {runtimeLabel(runtime)}</p>
+          <p className="text-xs text-gray-400">
+            {runtime?.statusLabel === 'dormant' ? (
+              <span className="text-purple-700 font-medium">dormant</span>
+            ) : task.status}
+            {' · '}{task.selectedAgent} · {runtimeLabel(runtime)}
+          </p>
         </div>
       </div>
 
@@ -572,7 +602,44 @@ export default function TaskDetailPage() {
             </div>
           </>
         )}
-        {!isLive && (
+        {runtime?.statusLabel === 'dormant' && (
+          <div className="space-y-2">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] px-2 py-0.5 rounded bg-purple-200 text-purple-800 font-semibold">
+                  dormant
+                </span>
+                <span className="text-xs text-gray-500">
+                  {task.status === 'dormant' ? 'session checkpointed' : 'no live process'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                worktree: {task.worktreePath ?? '—'} · branch: {task.branchName ?? '—'}
+              </p>
+              <p className="text-xs text-gray-500">
+                base: {task.baseCommit?.slice(0, 12) ?? '—'}
+              </p>
+              <p className="text-xs text-gray-400">
+                restore will relaunch worker in preserved worktree context
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => void handleRestore()}
+                className="bg-purple-600 text-white py-2 rounded-lg text-sm font-semibold active:scale-95 transition-transform"
+              >
+                Resume
+              </button>
+              <button
+                onClick={() => void handleDiffSummary()}
+                className="border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 active:scale-95 transition-all"
+              >
+                Diff
+              </button>
+            </div>
+          </div>
+        )}
+        {!isLive && runtime?.statusLabel !== 'dormant' && (
           <p className="text-center text-xs text-gray-400 py-1">
             Task {task.status} · exit {session?.exitCode ?? '—'}
           </p>

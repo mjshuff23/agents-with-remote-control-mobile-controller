@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { EventsModule } from './events/events.module';
 import { AgentsModule } from './agents/agents.module';
 import { AgentSessionsModule } from './agent-sessions/agent-sessions.module';
+import { CheckpointsModule } from './checkpoints/checkpoints.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ApprovalsModule } from './approvals/approvals.module';
 import { GitModule } from './git/git.module';
@@ -20,6 +21,7 @@ import { TestRunnerModule } from './test-runs/test-runner.module';
     EventsModule,
     AgentsModule,
     AgentSessionsModule,
+    CheckpointsModule,
     TasksModule,
     ApprovalsModule,
     GitModule,

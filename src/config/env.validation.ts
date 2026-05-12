@@ -182,6 +182,8 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_POLICY_PATH: readString(config, 'ARC_POLICY_PATH', 'arc.config.json'),
     ARC_APPROVAL_TIMEOUT_MS: readPositiveNumber(config, 'ARC_APPROVAL_TIMEOUT_MS', 300000),
     ARC_TEST_COMMAND_TIMEOUT_MS: readPositiveNumber(config, 'ARC_TEST_COMMAND_TIMEOUT_MS', 600000),
+    ARC_DORMANT_TIMEOUT_MS: readPositiveNumber(config, 'ARC_DORMANT_TIMEOUT_MS', 1800000),
+    ARC_DORMANT_CHECK_INTERVAL_MS: readPositiveNumber(config, 'ARC_DORMANT_CHECK_INTERVAL_MS', 60000),
     CONTROLLER_SECRET: readOptionalString(config, 'CONTROLLER_SECRET')
   };
 }

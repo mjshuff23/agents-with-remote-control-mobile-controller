@@ -219,6 +219,25 @@ export class TasksService {
     await this.agentSessions.sendInput(task.id, text);
   }
 
+  /** Restore a dormant session back to running. */
+  async restoreTask(id: string): Promise<{ restored: boolean; session: AgentSession; runtime: ReturnType<AgentSessionsService['runtimeState']> }> {
+    const task = await this.assertTaskExists(id);
+    const session = await this.prisma.agentSession.findFirst({
+      where: { taskId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!session || session.status !== 'dormant') {
+      throw new ProblemException(HttpStatus.CONFLICT, 'Not Dormant', `Task "${id}" is not dormant.`);
+    }
+
+    const result = await this.agentSessions.restoreSession(session.id);
+    return {
+      restored: true,
+      session: result.session,
+      runtime: this.agentSessions.runtimeState(result.session)
+    };
+  }
+
   /** List approval requests for a task. */
   async listApprovals(id: string) {
     await this.assertTaskExists(id);
