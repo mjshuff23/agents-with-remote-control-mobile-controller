@@ -1,0 +1,37 @@
+src/features/providers/mock-linear-provider.spec.ts
+  s_da46032282ee84::t_5d0789907cd8f2 146,153-158
+  s_da46032282ee84::t_abe4124d8d912a 125-130
+  s_da46032282ee84::t_ff3bc020efe02f 60-64
+src/features/providers/provider.types.ts
+  s_da46032282ee84::t_55fd91bbe72c39 27
+docs/phase-4-master-plan.md
+  s_da46032282ee84::t_ebb162223b15a7 537
+src/features/providers/mock-linear-provider.ts
+  s_da46032282ee84::t_7c459ff5019127 117
+  s_da46032282ee84::t_daad7ada1f67bd 59-60
+  s_da46032282ee84::t_ba87f7163ba13a 85-92,94
+src/features/providers/mock-github-provider.ts
+  s_da46032282ee84::t_84cf9b6103631b 98,103-109,115,118
+  s_da46032282ee84::t_cd5539f31bfb21 62-63
+  s_da46032282ee84::t_dac89b828fdf6b 147
+src/features/providers/mock-github-provider.spec.ts
+  s_da46032282ee84::t_e78b67239dbd12 66-70
+  s_da46032282ee84::t_97fe7fd26b1159 115-124
+  s_da46032282ee84::t_2d22a4dc7ed1be 153,160-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "86f11a4ba3df5f613c86c77092f99005873247e1",
+  "prompts": {},
+  "sessions": {
+    "s_da46032282ee84": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e20b6c3effe7iNLt9gy5ocrnR",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
