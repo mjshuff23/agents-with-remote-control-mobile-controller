@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "97db057d029610968861e588c2bc68c6e5e15049",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
