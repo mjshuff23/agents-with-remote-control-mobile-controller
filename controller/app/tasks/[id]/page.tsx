@@ -267,12 +267,14 @@ export default function TaskDetailPage() {
     onSessionDormant: (event) => {
       lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
       if (markEventSeen(event.id)) return;
+      setTask((prev) => prev ? { ...prev, status: 'dormant' } : prev);
       setRuntime({ processState: 'reconstructed', statusLabel: 'dormant' });
       appendSyntheticLog('system', `Session dormant: ${event.data.reason}`);
     },
     onSessionRestored: (event) => {
       lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
       if (markEventSeen(event.id)) return;
+      setTask((prev) => prev ? { ...prev, status: 'running' } : prev);
       setRuntime({ processState: 'live_process', statusLabel: 'active' });
       appendSyntheticLog('system', `Session restored (${event.data.restoreMode})`);
     },
@@ -401,6 +403,7 @@ export default function TaskDetailPage() {
     setActionError(null);
     try {
       const result = await restoreTask(id);
+      setTask((prev) => prev ? { ...prev, status: 'running' } : prev);
       setSession(result.session);
       setRuntime(result.runtime);
       appendSyntheticLog('system', 'Session restored from dormant');

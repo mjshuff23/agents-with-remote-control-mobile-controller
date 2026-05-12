@@ -39,6 +39,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private readonly protocolBuffers = new Map<string, string>();
   private readonly approvalTimeouts = new Map<string, NodeJS.Timeout>();
   private readonly approvalTimeoutSessions = new Map<string, string>();
+  private readonly restoreLocks = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -61,6 +62,10 @@ export class AgentSessionsService implements OnApplicationBootstrap {
    * wire callbacks, and flip the DB status.
    */
   async restoreSession(sessionId: string): Promise<{ session: AgentSession }> {
+    if (this.restoreLocks.has(sessionId)) {
+      throw new ProblemException(HttpStatus.CONFLICT, 'Restore In Progress', 'A restore is already in progress for this session.');
+    }
+
     const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
     if (!session) {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Session Not Found', `Session "${sessionId}" does not exist.`);
@@ -86,48 +91,59 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     const prompt = this.buildCooperativeRestorePrompt(task, frontier);
     const launch = this.parseLaunchMetadata(checkpoint.launchMetadataJson);
 
-    let runningProcess: RunningAgentProcess;
+    this.restoreLocks.add(sessionId);
+    let ownsLock = true;
+
     try {
-      runningProcess = await adapter.startTask({
-        taskId: task.id,
-        sessionId: session.id,
-        repoPath: launch.repoPath ?? task.repoPath,
-        worktreePath: launch.worktreePath ?? task.worktreePath ?? undefined,
-        branchName: launch.branchName ?? task.branchName ?? undefined,
-        prompt,
-        onOutput: async (event) => {
-          await this.appendLog(session.id, event.type, event.content);
-          if (event.type === 'stdout') {
-            await this.handleProtocolOutput(task.id, session.id, event.content);
-          }
-        },
-        onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
-      });
+      let runningProcess: RunningAgentProcess;
+      try {
+        runningProcess = await adapter.startTask({
+          taskId: task.id,
+          sessionId: session.id,
+          repoPath: launch.repoPath ?? task.repoPath,
+          worktreePath: launch.worktreePath ?? task.worktreePath ?? undefined,
+          branchName: launch.branchName ?? task.branchName ?? undefined,
+          prompt,
+          onOutput: async (event) => {
+            await this.appendLog(session.id, event.type, event.content);
+            if (event.type === 'stdout') {
+              await this.handleProtocolOutput(task.id, session.id, event.content);
+            }
+          },
+          onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
+        });
 
-      this.runningProcesses.set(session.id, runningProcess);
-      this.sessionToTask.set(session.id, task.id);
-    } catch (error) {
-      const message = this.errorMessage(error);
-      await this.appendLog(session.id, 'system', `Restore relaunch failed: ${message}`);
-      throw new ProblemException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        'Agent could not be restarted from checkpoint',
-        message
-      );
+        this.runningProcesses.set(session.id, runningProcess);
+        this.sessionToTask.set(session.id, task.id);
+      } catch (error) {
+        ownsLock = false;
+        this.restoreLocks.delete(sessionId);
+        const message = this.errorMessage(error);
+        await this.appendLog(session.id, 'system', `Restore relaunch failed: ${message}`);
+        throw new ProblemException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          'Agent could not be restarted from checkpoint',
+          message
+        );
+      }
+
+      let result: import('../checkpoints/checkpoints.service').RestoreResult;
+      try {
+        result = await this.checkpoints.restore(sessionId);
+      } catch (error) {
+        this.runningProcesses.delete(session.id);
+        this.sessionToTask.delete(session.id);
+        await Promise.resolve(runningProcess.stop?.()).catch(() => undefined);
+        throw error;
+      }
+      await this.appendLog(session.id, 'system', `Session restored from dormant (checkpoint ${checkpoint.id})`);
+
+      return { session: result.session };
+    } finally {
+      if (ownsLock) {
+        this.restoreLocks.delete(sessionId);
+      }
     }
-
-    let result: import('../checkpoints/checkpoints.service').RestoreResult;
-    try {
-      result = await this.checkpoints.restore(sessionId);
-    } catch (error) {
-      this.runningProcesses.delete(session.id);
-      this.sessionToTask.delete(session.id);
-      await Promise.resolve(runningProcess.stop?.()).catch(() => undefined);
-      throw error;
-    }
-    await this.appendLog(session.id, 'system', `Session restored from dormant (checkpoint ${checkpoint.id})`);
-
-    return { session: result.session };
   }
 
   /**

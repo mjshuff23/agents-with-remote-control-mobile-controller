@@ -240,6 +240,8 @@ export class CheckpointsService implements OnApplicationBootstrap {
       lastUserMessage?: string | null;
       lastAssistantMessage?: string | null;
       workerWasLive?: boolean;
+      frontierPrompt?: string;
+      recentTurns?: Array<{ role: string; content: string }> | null;
     }
   ): Promise<SessionCheckpoint | null> {
     try {
@@ -284,12 +286,12 @@ export class CheckpointsService implements OnApplicationBootstrap {
           branchName: task.branchName ?? undefined
         },
         frontier: {
-          prompt: task.prompt,
+          prompt: metadata?.frontierPrompt ?? task.prompt,
           currentInstructions: undefined
         },
         lastUserMessage: metadata?.lastUserMessage ?? null,
         lastAssistantMessage: metadata?.lastAssistantMessage ?? null,
-        recentTurns: null,
+        recentTurns: metadata?.recentTurns ?? null,
         pendingApprovalIds: pendingApprovals.map((a) => a.id),
         pendingCriticalApproval,
         worktreeInfo: {
