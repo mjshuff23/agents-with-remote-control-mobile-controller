@@ -39,7 +39,6 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private readonly protocolBuffers = new Map<string, string>();
   private readonly approvalTimeouts = new Map<string, NodeJS.Timeout>();
   private readonly approvalTimeoutSessions = new Map<string, string>();
-  private readonly restoreLocks = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -62,16 +61,26 @@ export class AgentSessionsService implements OnApplicationBootstrap {
    * wire callbacks, and flip the DB status.
    */
   async restoreSession(sessionId: string): Promise<{ session: AgentSession }> {
-    if (this.restoreLocks.has(sessionId)) {
-      throw new ProblemException(HttpStatus.CONFLICT, 'Restore In Progress', 'A restore is already in progress for this session.');
+    // Atomically transition from dormant to restoring to prevent races
+    const updateResult = await this.prisma.agentSession.updateMany({
+      where: { id: sessionId, status: 'dormant' },
+      data: { status: 'restoring' }
+    });
+
+    if (updateResult.count === 0) {
+      const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
+      if (!session) {
+        throw new ProblemException(HttpStatus.NOT_FOUND, 'Session Not Found', `Session "${sessionId}" does not exist.`);
+      }
+      if (session.status === 'restoring') {
+        throw new ProblemException(HttpStatus.CONFLICT, 'Restore In Progress', 'A restore is already in progress for this session.');
+      }
+      throw new ProblemException(HttpStatus.CONFLICT, 'Not Dormant', `Session "${sessionId}" is ${session.status}, not dormant.`);
     }
 
     const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
     if (!session) {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Session Not Found', `Session "${sessionId}" does not exist.`);
-    }
-    if (session.status !== 'dormant') {
-      throw new ProblemException(HttpStatus.CONFLICT, 'Not Dormant', `Session "${sessionId}" is ${session.status}, not dormant.`);
     }
 
     const checkpoint = await this.checkpoints.latestForSession(sessionId);
@@ -84,15 +93,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${checkpoint.taskId}" for checkpoint not found.`);
     }
 
-    this.buildRestorePrompt(task, checkpoint);
     const adapter = this.agents.getAdapter(task.selectedAgent);
 
     const frontier = this.parseFrontier(checkpoint.frontierJson);
     const prompt = this.buildCooperativeRestorePrompt(task, frontier);
     const launch = this.parseLaunchMetadata(checkpoint.launchMetadataJson);
-
-    this.restoreLocks.add(sessionId);
-    let ownsLock = true;
 
     try {
       let runningProcess: RunningAgentProcess;
@@ -116,8 +121,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         this.runningProcesses.set(session.id, runningProcess);
         this.sessionToTask.set(session.id, task.id);
       } catch (error) {
-        ownsLock = false;
-        this.restoreLocks.delete(sessionId);
+        // Revert status back to dormant on failure
+        await this.prisma.agentSession.update({
+          where: { id: sessionId },
+          data: { status: 'dormant' }
+        });
         const message = this.errorMessage(error);
         await this.appendLog(session.id, 'system', `Restore relaunch failed: ${message}`);
         throw new ProblemException(
@@ -139,10 +147,13 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       await this.appendLog(session.id, 'system', `Session restored from dormant (checkpoint ${checkpoint.id})`);
 
       return { session: result.session };
-    } finally {
-      if (ownsLock) {
-        this.restoreLocks.delete(sessionId);
-      }
+    } catch (error) {
+      // Ensure status is reverted to dormant if checkpoint.restore fails
+      await this.prisma.agentSession.update({
+        where: { id: sessionId },
+        data: { status: 'dormant' }
+      }).catch(() => undefined);
+      throw error;
     }
   }
 

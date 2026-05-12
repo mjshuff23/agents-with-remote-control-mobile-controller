@@ -152,20 +152,21 @@ export class CheckpointsService implements OnApplicationBootstrap {
   }
 
   async transitionToDormant(session: AgentSession, checkpoint: SessionCheckpoint): Promise<AgentSession> {
-    const [updated] = await Promise.all([
-      this.prisma.agentSession.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedSession = await tx.agentSession.update({
         where: { id: session.id },
         data: {
           status: 'dormant',
           dormantAt: new Date(),
           dormantReason: `dormant_${checkpoint.reason}`
         }
-      }),
-      this.prisma.task.update({
+      });
+      await tx.task.update({
         where: { id: session.taskId },
         data: { status: 'dormant' }
-      })
-    ]);
+      });
+      return updatedSession;
+    });
 
     await this.events?.emitEnvelopeToTask(session.taskId, 'session.dormant', 'lifecycle', 'info', {
       sessionId: session.id,
@@ -205,8 +206,8 @@ export class CheckpointsService implements OnApplicationBootstrap {
       }
     }
 
-    const [updated] = await Promise.all([
-      this.prisma.agentSession.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedSession = await tx.agentSession.update({
         where: { id: sessionId },
         data: {
           status: 'running',
@@ -214,12 +215,13 @@ export class CheckpointsService implements OnApplicationBootstrap {
           dormantReason: null,
           lastUserActivityAt: new Date()
         }
-      }),
-      this.prisma.task.update({
+      });
+      await tx.task.update({
         where: { id: session.taskId },
         data: { status: 'running' }
-      })
-    ]);
+      });
+      return updatedSession;
+    });
 
     await this.events?.emitEnvelopeToTask(session.taskId, 'session.restored', 'lifecycle', 'info', {
       sessionId: session.id,
@@ -406,8 +408,6 @@ export class CheckpointsService implements OnApplicationBootstrap {
         const data = await this.collectCheckpointData(session);
         if (!data) continue;
 
-        const checkpoint = await this.capture(data);
-
         const refreshed = await this.prisma.agentSession.findUnique({ where: { id: session.id } });
         if (refreshed) {
           const recheck = await this.canTransitionToDormant(refreshed);
@@ -416,6 +416,8 @@ export class CheckpointsService implements OnApplicationBootstrap {
             continue;
           }
         }
+
+        const checkpoint = await this.capture(data);
 
         await this.transitionToDormant(session, checkpoint);
       } catch (error) {
