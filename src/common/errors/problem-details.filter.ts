@@ -8,11 +8,11 @@ import {
 import { Response } from 'express';
 import { ProblemDetails } from './problem.exception';
 
-@Catch()
 /**
- * Global exception filter that converts all exceptions to RFC 9457
+ * Global exception filter that converts all exceptions to RFC 7807
  * Problem Details JSON responses (`application/problem+json`).
  */
+@Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
   /**
    * Handle an exception by writing a Problem Details response.
@@ -41,7 +41,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
    * @param exception - The thrown exception.
    * @param status    - HTTP status code.
    * @param instance  - Request URL for the `instance` field.
-   * @returns A Problem Details object conforming to RFC 9457.
+   * @returns A Problem Details object conforming to RFC 7807.
    */
   private toProblemDetails(exception: unknown, status: number, instance: string): ProblemDetails {
     if (exception instanceof HttpException) {

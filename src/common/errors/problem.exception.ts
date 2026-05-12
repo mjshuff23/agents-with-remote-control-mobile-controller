@@ -9,7 +9,7 @@ export interface ProblemDetails {
 }
 
 /**
- * HTTP exception that serializes to RFC 9457 Problem Details format.
+ * HTTP exception that serializes to RFC 7807 Problem Details format.
  *
  * @param status - HTTP status code for the response.
  * @param title  - Short human-readable problem summary.

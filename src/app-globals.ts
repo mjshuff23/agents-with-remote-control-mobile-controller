@@ -3,7 +3,7 @@ import { ProblemDetailsFilter } from './common/errors/problem-details.filter';
 
 /**
  * Apply global NestJS pipes and filters: validation (whitelist + forbid
- * non-whitelisted) and RFC 9457 problem-detail exception formatting.
+ * non-whitelisted) and RFC 7807 problem-detail exception formatting.
  *
  * @param app - The NestJS application instance to configure.
  */
