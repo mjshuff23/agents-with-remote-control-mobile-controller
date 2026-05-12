@@ -1,21 +1,27 @@
-# Phase 3 Implementation Plan
+# Phase 4 Implementation Plan
 
 ## Summary
 
-Phases 1 and 2 are complete. Phase 3 is the active local-loop hardening phase for Linear `TSH-79`.
+Phases 1, 2, 3, and 3.5 are complete. Phase 4 is the active GitHub + Linear synchronization phase for Linear `TSH-80` and GitHub issue #5.
 
-The Phase 3 safety model is containment-first:
+Phase 4 connects the durable local controller loop to repo/project-management workflows:
 
-- Contain always: every task runs in a per-task Git worktree.
-- Intercept where real: native CLI approval hooks may be used only if they prove reliable pre-execution semantics.
-- Cooperate where not: agents emit structured `ARC_ACTION_REQUEST` lines and receive `ARC_APPROVAL` decisions over stdin.
-- Review always: diffs and configured tests are summarized before any future commit, push, PR, deploy, or external sync.
+```text
+GitHub or Linear issue -> linked task -> worktree branch -> approved commit -> approved push -> draft PR -> Linear link/status sync
+```
 
-Phase 3 does not implement GitHub sync, Linear sync, Notion/Figma writes, auto-commit, auto-push, auto-PR, auto-merge, deploys, Claude/Gemini adapters, or multi-agent orchestration.
+The Phase 4 safety model inherits Phase 3 containment and approval gates:
+
+- Contain always: every task still runs in a per-task Git worktree.
+- Approve risky operations: commit, push, draft PR creation, and provider status/link writes require explicit approval unless a prior approval clearly covers the exact action.
+- Idempotency always: provider sync actions must not duplicate PRs, comments, links, or status updates on retry.
+- No auto-merge or auto-deploy: Phase 4 stops at draft PR and project-tool sync.
+
+Canonical handoff: [`docs/phase-4-implementation.md`](docs/phase-4-implementation.md).
 
 ## Current Runtime Contract
 
-`POST /tasks` accepts:
+`POST /tasks` remains compatible:
 
 ```json
 {
@@ -25,25 +31,63 @@ Phase 3 does not implement GitHub sync, Linear sync, Notion/Figma writes, auto-c
 }
 ```
 
-The server uses `ARC_REPO_PATH` as the source checkout and creates a worktree before agent launch. The client never supplies arbitrary repo paths.
+Phase 4 should extend the task creation contract without breaking existing callers. New external refs should be optional and provider-neutral.
 
-Worktree defaults:
+Suggested linked task shape:
 
-- Branch: `agent/<task-id>-<slug>`
-- Path: `ARC_WORKTREE_ROOT/<task-id>-<slug>` when configured
-- Fallback path: sibling `worktrees/<task-id>-<slug>` beside `ARC_REPO_PATH`
+```json
+{
+  "prompt": "Implement the linked issue",
+  "agent": "codex",
+  "title": "Optional title",
+  "externalIssue": {
+    "provider": "github",
+    "externalId": "5",
+    "key": "GH-5",
+    "url": "https://github.com/owner/repo/issues/5",
+    "title": "Issue title"
+  }
+}
+```
 
-Task metadata now includes:
+## Phase 4 Child Tickets
 
-- `worktreePath`
-- `branchName`
-- `baseRef`
-- `baseCommit`
-- `approvalMode`, currently `cooperative-gated`
+| Linear | Purpose |
+|---|---|
+| `TSH-97` | GitHub access model for issue-to-PR workflow |
+| `TSH-98` | Linear access model and status mapping |
+| `TSH-99` | SyncEvent idempotency model |
+| `TSH-100` | Issue picker and task-linking UX |
+| `TSH-101` | Branch naming and worktree lifecycle rules |
+| `TSH-102` | Approved commit flow and signing checks |
+| `TSH-103` | Approved push flow with remote protection |
+| `TSH-104` | Draft PR creation with generated summary |
+| `TSH-105` | Linear-GitHub cross-reference sync |
+| `TSH-106` | PR merge detection and Linear completion sync |
+| `TSH-107` | Provider adapter seams for GitHub and Linear |
+| `TSH-108` | Approvals, audit logs, and sync events integration |
+| `TSH-109` | Mobile sync UI and provider error surfaces |
+| `TSH-110` | Provider adapter test matrix and token-gated e2e |
+
+Recommended build order:
+
+1. `TSH-107` adapter seams.
+2. `TSH-99` SyncEvent model.
+3. `TSH-97` / `TSH-98` access models and setup docs.
+4. `TSH-100` issue picker + linked task creation.
+5. `TSH-101` branch/worktree lifecycle.
+6. `TSH-108` approval/audit/sync matrix.
+7. `TSH-102` commit flow.
+8. `TSH-103` push flow.
+9. `TSH-104` draft PR flow.
+10. `TSH-105` cross-reference sync.
+11. `TSH-106` merge detection and Linear completion sync.
+12. `TSH-109` mobile polish.
+13. `TSH-110` test matrix and provider e2e.
 
 ## Configuration
 
-Environment:
+Existing environment stays valid:
 
 ```bash
 ARC_WORKTREE_ROOT=""
@@ -52,147 +96,90 @@ ARC_APPROVAL_TIMEOUT_MS="300000"
 ARC_TEST_COMMAND_TIMEOUT_MS="600000"
 ```
 
-Policy lives in [`arc.config.json`](arc.config.json):
+Phase 4 should add provider config incrementally. Keep provider config documented in `.env.example`; do not store provider credentials in DB records, task event payloads, logs, or controller-visible error details.
 
-- `policy.safe`
-- `policy.needsApproval`
-- `policy.blocked`
-- `testCommands`, with optional per-command `timeoutMs`
+Status mapping should be configurable. Linear workflow state names vary by team and workspace, so provider code should discover available workflow states and then map configured names when present.
 
-Unknown mutating commands default to `NEEDS_APPROVAL`. Secret paths, force push, production deploy, global config changes, internet-piped shell scripts, and destructive deletes outside the worktree are `BLOCKED`.
+## SyncEvent Contract
 
-## Cooperative Approval Protocol
+Phase 4 introduces durable provider-sync state. Every provider-facing action should be represented by a `SyncEvent` or equivalent service record.
 
-Agents request actions with one machine-readable stdout line:
+Suggested state machine:
 
 ```text
-ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch","riskLevel":"NEEDS_APPROVAL","title":"Patch file","rationale":"Needed for the task","command":["arg1"],"files":["src/file.ts"],"expectedEffect":"One sentence"}
+pending -> running -> succeeded
+pending -> running -> retryable -> running
+pending -> skipped
+running -> failed
 ```
 
-The orchestrator replies over stdin:
+Suggested uniqueness rule:
 
 ```text
-ARC_APPROVAL {"id":"<uuid>","decision":"approved","message":"Proceed","constraints":["Execute only the exact approved action in this task worktree."]}
+(taskId, provider, targetId, action)
 ```
 
-Agent rules:
+Provider metadata should be recovery-safe only:
 
-- If denied, do not retry the same action by paraphrasing it.
-- If expired, treat it as denied.
-- If refused or `BLOCKED`, do not ask again.
-- If approved, execute only the exact approved action within the stated constraints.
-- After mutating actions, produce or allow a diff summary.
+- provider IDs,
+- URLs,
+- timestamps,
+- action categories,
+- failure categories.
 
-## REST Additions
+Do not store raw provider responses by default.
 
-Existing endpoints remain compatible:
+## Approval + Audit Contract
 
-- `POST /tasks`
-- `GET /tasks`
-- `GET /tasks/:id`
-- `POST /tasks/:id/stop`
-- `POST /tasks/:id/input`
+Phase 4 actions that require explicit approval:
 
-Phase 3 adds:
+- branch creation when tied to external issue metadata,
+- commit creation,
+- push,
+- draft PR creation,
+- Linear status update,
+- Linear link/comment/write actions.
 
-- `GET /tasks/:id/approvals`
-- `POST /approvals/:id/approve`
-- `POST /approvals/:id/deny`
-- `POST /tasks/:id/diff-summary`
-- `POST /tasks/:id/test-runs`
+`AuditLog` records decisions and meaningful outcomes. `SyncEvent` records provider action state and idempotency. Do not collapse the two concepts.
 
-Test runs accept:
+## WebSocket / Replay Contract
 
-```json
-{ "commandId": "root:test" }
-```
-
-Only command IDs declared in `arc.config.json` run without approval, and they run inside the task worktree with `shell: false`.
-
-## WebSocket Events
-
-Phase 2 compatibility events:
-
-- `task.started`
-- `agent.log`
-- `task.completed`
-
-Phase 3 envelope events:
-
-- `approval.requested`
-- `approval.resolved`
-- `policy.violation`
-- `diff.summary`
-- `test.started`
-- `test.log`
-- `test.completed`
-- `worktree.created`
-- `worktree.cleanup_requested`
-- `worktree.cleanup_completed`
-
-Envelope shape:
-
-```ts
-type TaskEventEnvelope<TName extends string, TData> = {
-  id: string;
-  seq: number;
-  taskId: string;
-  sessionId?: string;
-  name: TName;
-  kind: 'lifecycle' | 'log' | 'approval' | 'git' | 'diff' | 'test' | 'security' | 'controller';
-  severity: 'info' | 'warn' | 'error';
-  correlationId?: string;
-  at: string;
-  data: TData;
-};
-```
-
-The controller dedupes Phase 3 envelope events by `id`.
-
-Phase 3.5 replay contract:
+Phase 3.5 replay semantics remain canonical:
 
 - `TaskEvent` is the durable task-scoped event ledger with monotonic `seq` per task.
 - `AgentLog` remains the raw terminal log ledger with monotonic `sequence` per session.
-- `GET /tasks/:id/replay?afterEventSeq=&afterLogSequence=&limit=` returns missed events/logs after the controller's cursors.
-- Socket.IO `subscribe` accepts the same cursors and includes missed history in the ack after joining `task:<id>`.
-- A reconstructed DB view is not a live PTY resume; the controller exposes whether the worker is `live_process`, `reconstructed`, or `terminal`.
+- `GET /tasks/:id/replay?afterEventSeq=&afterLogSequence=&limit=` returns missed events/logs after the controller cursors.
+- Socket.IO `subscribe` accepts cursors and includes missed history in the ack after joining `task:<id>`.
+- Reconstructed DB view is not live PTY resume; expose whether worker state is `live_process`, `reconstructed`, or `terminal`.
 
-## Persistence Additions
-
-SQLite remains the MVP database. Phase 3 adds:
-
-- `ApprovalRequest`
-- `AuditLog`
-- `GitChangeSummary`
-- `TestRunSummary`
-
-Statuses are still stored as strings in SQLite and constrained through TypeScript/runtime code rather than Prisma enums. That keeps the current SQLite setup portable while preserving typed service boundaries.
+Phase 4 UI events must not duplicate cards after reconnect/replay.
 
 ## Manual Smoke Test
 
-With the orchestrator and controller running:
+With orchestrator and controller running:
 
 1. Open `http://localhost:3001`.
-2. Create a task from the controller.
-3. Confirm the task has `worktreePath`, `branchName`, `baseRef`, and `baseCommit`.
-4. Confirm `worktree.created` appears in the live stream.
-5. Have the agent emit an `ARC_ACTION_REQUEST` for a file mutation.
-6. Confirm the task moves to `waiting_approval` and the controller shows an approval card.
-7. Deny the action and confirm an `ARC_APPROVAL` denial is written to the agent.
-8. Retry the exact same denied action and confirm it becomes a `policy.violation`.
-9. Run a diff summary and confirm `GitChangeSummary` persists and appears in the controller.
-10. Run an allowed test command and confirm `test.started`, `test.log`, and `test.completed` stream.
+2. Link a new task to a GitHub or Linear issue.
+3. Confirm generated prompt is editable before launch.
+4. Confirm the task creates/uses an isolated worktree and safe branch name.
+5. Confirm linked issue metadata appears on task detail.
+6. Trigger a commit request and confirm approval card appears.
+7. Approve commit and confirm commit SHA is captured.
+8. Trigger push request and confirm separate approval card appears.
+9. Approve push and confirm pushed branch metadata is captured.
+10. Trigger draft PR creation and confirm approval card appears.
+11. Approve draft PR and confirm PR URL appears on task detail.
+12. Confirm Linear link/status sync is idempotent.
+13. Refresh mobile browser and confirm replay does not duplicate cards/events.
 
 Adversarial checks:
 
-- `.env` path request is refused, not approvable.
-- `git push --force` is refused.
-- `curl ... | sh` or `wget ... | bash` is refused.
-- `rm -rf` outside the worktree is refused.
-- Unknown package install is `NEEDS_APPROVAL`.
-- Database migration is `NEEDS_APPROVAL`.
-- Denied action retry is logged as a security event.
-- Approval expiry is a denial, never an allow.
+- Duplicate PR create attempt reuses or updates existing PR.
+- Duplicate Linear link attempt does not spam links/comments.
+- Provider auth failure produces actionable error without leaking provider config.
+- Closed-unmerged PR does not mark Linear issue Done.
+- Force push remains blocked.
+- Auto-merge remains unavailable.
 
 ## Verification
 
@@ -206,12 +193,4 @@ pnpm build
 cd controller && node_modules/.bin/tsc --noEmit
 ```
 
-If `pnpm` is not installed in the current shell, use equivalent npm scripts for the root project:
-
-```bash
-npm test
-npm run test:e2e
-npm run typecheck
-npm run build
-cd controller && node_modules/.bin/tsc --noEmit
-```
+Provider e2e tests should auto-skip unless explicit provider config is present. Default CI/local checks must not require real GitHub/Linear access.
