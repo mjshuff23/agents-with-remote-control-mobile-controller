@@ -1,0 +1,19 @@
+src/features/sync/sync-event.service.ts
+  s_da46032282ee84::t_f317a00ee1959e 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "bc9b0270ce21e3e0c47520693c609f12af8eea6b",
+  "prompts": {},
+  "sessions": {
+    "s_da46032282ee84": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e20b6c3effe7iNLt9gy5ocrnR",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
