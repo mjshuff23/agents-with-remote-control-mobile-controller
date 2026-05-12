@@ -33,15 +33,12 @@ export class GitCommandService {
 
 /** Build a sanitized git environment (disable prompts and pagers). */
 function buildGitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
+  // Preserve the full process environment so required GIT_* settings
+  // (e.g. GIT_SSH_COMMAND, GIT_CONFIG, GIT_DIR) are not accidentally dropped.
+  return {
     ...process.env,
     GIT_TERMINAL_PROMPT: '0',
-    GIT_PAGER: 'cat'
+    GIT_PAGER: 'cat',
+    PAGER: 'cat',
   };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith('GIT_') && key !== 'GIT_TERMINAL_PROMPT' && key !== 'GIT_PAGER') {
-      delete env[key];
-    }
-  }
-  return env;
 }

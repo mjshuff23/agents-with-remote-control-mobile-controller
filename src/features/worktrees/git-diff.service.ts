@@ -56,7 +56,7 @@ export class GitDiffService {
    */
   async summarize(task: Task, session?: AgentSession | null): Promise<DiffSummaryPayload> {
     if (!task.worktreePath) {
-      throw new Error(`Task "${task.id}" has no worktreePath`);
+      throw new ProblemException(HttpStatus.CONFLICT, 'Worktree Missing', `Task "${task.id}" has no worktree path.`);
     }
 
     const [status, stat, numstat, nameStatus] = await Promise.all([
@@ -229,7 +229,8 @@ function computeRiskFlags(paths: string[], topFiles: Array<{ path: string; inser
     const lower = filePath.toLowerCase();
     if (lower.includes('lock') || lower.endsWith('pnpm-lock.yaml') || lower.endsWith('package-lock.json')) flags.add('lockfile_changed');
     if (lower.includes('migration') || lower.includes('prisma/migrations')) flags.add('migration_changed');
-    if (lower.includes('.github/') || lower.includes('ci') || lower.includes('workflow')) flags.add('ci_or_config_changed');
+    // Check for CI/workflow files: .github/, .gitlab-ci, .circleci, Jenkinsfile, etc.
+    if (lower.includes('.github/') || lower.includes('.gitlab-ci') || lower.includes('.circleci') || lower.includes('jenkinsfile') || lower.includes('workflow')) flags.add('ci_or_config_changed');
     if (lower.includes('auth') || lower.includes('credential') || lower.includes('secret') || lower.includes('token') || lower.includes('password')) flags.add('secret_or_auth_shaped_path');
     if (lower.endsWith('.env') || lower.includes('.env.')) flags.add('blocked_secret_path_changed');
   }

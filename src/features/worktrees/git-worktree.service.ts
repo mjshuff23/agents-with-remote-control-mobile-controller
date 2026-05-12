@@ -52,9 +52,9 @@ export class GitWorktreeService {
    * - Issue-linked: `agent/<provider>-<key>-<slug>` (when externalIssueRef is present)
    * - Fallback:     `agent/<taskId>-<slug>`
    *
-   * Collision handling: if the derived branch name already exists and is not
-   * associated with this task's worktree path, a numeric suffix (-2, -3, …) is
-   * appended until a free name is found (up to 9 attempts).
+   * Collision handling: if two tasks attempt to create the same branch name
+   * simultaneously, the second will fail at the git level. The caller can retry
+   * with a collision suffix (-2, -3, …) by using the resolveUniqueBranchName helper.
    *
    * Dirty-repo guard: refuses to create a new worktree if the main checkout has
    * uncommitted changes, to prevent accidental contamination.
@@ -70,7 +70,8 @@ export class GitWorktreeService {
     // Resolve base ref: explicit > current HEAD branch
     const headBranch = (await this.gitCommands.git(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
     const baseRef = (input.baseRef?.trim()) || headBranch || 'HEAD';
-    const baseCommit = (await this.gitCommands.git(repoPath, ['rev-parse', 'HEAD'])).stdout.trim();
+    // Resolve baseCommit from the chosen baseRef, not always from HEAD
+    const baseCommit = (await this.gitCommands.git(repoPath, ['rev-parse', baseRef])).stdout.trim();
 
     const worktreeRoot = this.config.worktreeRoot
       ? path.resolve(this.config.worktreeRoot)
@@ -86,6 +87,14 @@ export class GitWorktreeService {
 
     const worktreeDirName = candidateName.replace(/^agent\//, '');
     const worktreePath = path.join(worktreeRoot, worktreeDirName);
+
+    // Guard against path traversal: the resolved worktree path must stay within worktreeRoot.
+    const resolvedWorktreePath = path.resolve(worktreePath);
+    const resolvedWorktreeRoot = path.resolve(worktreeRoot);
+    if (!resolvedWorktreePath.startsWith(resolvedWorktreeRoot + path.sep) &&
+        resolvedWorktreePath !== resolvedWorktreeRoot) {
+      throw new Error(`Derived worktree path "${resolvedWorktreePath}" escapes worktree root "${resolvedWorktreeRoot}"`);
+    }
 
     await mkdir(worktreeRoot, { recursive: true });
 
@@ -114,14 +123,14 @@ export class GitWorktreeService {
     const branchExists = await this.branchExists(repoPath, candidateName);
     let branchName: string;
     if (branchExists) {
+      // Branch already exists; use it directly.
       branchName = candidateName;
       await this.gitCommands.git(repoPath, ['worktree', 'add', worktreePath, branchName]);
     } else {
       // Branch doesn't exist yet. Use the candidate name directly.
       // If two tasks share the same issue key and both try to create the branch
-      // simultaneously, the second will fail at git level; the collision suffix
-      // path handles the case where the candidate was taken between our check
-      // and the worktree add (detected by the caller retrying with a suffix).
+      // simultaneously, the second will fail at git level; the caller can retry
+      // with a collision suffix if needed.
       branchName = candidateName;
       await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
     }

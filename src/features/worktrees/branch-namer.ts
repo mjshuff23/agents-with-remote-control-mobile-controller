@@ -62,26 +62,33 @@ export function withCollisionSuffix(branchName: string, index: number): string {
  * Result is capped at MAX_SLUG_LEN characters.
  */
 export function slugify(input: string): string {
-  const slug = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_SLUG_LEN)
-    .replace(/-+$/, '');
-  return slug || 'task';
+  // Replace non-alphanumeric runs with a single dash, then slice to cap length.
+  // Avoid anchored repetition patterns on user input to prevent ReDoS.
+  const raw = input.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const trimmed = trimDashes(raw.slice(0, MAX_SLUG_LEN));
+  return trimmed || 'task';
 }
 
 /** Slugify a short segment (provider name, issue key) — same rules, shorter cap. */
 function slugifySegment(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 20)
-    .replace(/-+$/, '') || 'x';
+  const raw = input.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return trimDashes(raw.slice(0, 20)) || 'x';
+}
+
+/**
+ * Trim leading and trailing dashes from a slug without using anchored regex
+ * repetition on user-controlled data (avoids ReDoS).
+ */
+function trimDashes(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === '-') start++;
+  while (end > start && s[end - 1] === '-') end--;
+  return s.slice(start, end);
 }
 
 /** Trim a combined suffix to MAX_BRANCH_SUFFIX_LEN, preserving trailing integrity. */
 function trimSuffix(suffix: string): string {
-  return suffix.slice(0, MAX_BRANCH_SUFFIX_LEN).replace(/-+$/, '') || 'task';
+  const sliced = suffix.slice(0, MAX_BRANCH_SUFFIX_LEN);
+  return trimDashes(sliced) || 'task';
 }
