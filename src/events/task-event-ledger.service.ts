@@ -107,6 +107,8 @@ export class TaskEventLedgerService {
     return latest;
   }
 
+  // Single-writer invariant: only one process appends events for a given taskId.
+  // In-process seq cache is safe because this orchestrator runs as a single instance.
   private async nextSequence(taskId: string): Promise<number> {
     const current = await this.latestSeq(taskId);
     const next = current + 1;
@@ -116,7 +118,7 @@ export class TaskEventLedgerService {
 }
 
 function clampLimit(limit: number | undefined): number {
-  if (!Number.isInteger(limit) || !limit || limit <= 0) {
+  if (limit === undefined || !Number.isInteger(limit) || limit <= 0) {
     return DEFAULT_REPLAY_LIMIT;
   }
   return Math.min(limit, MAX_REPLAY_LIMIT);

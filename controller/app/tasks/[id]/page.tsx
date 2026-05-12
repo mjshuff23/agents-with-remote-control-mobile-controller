@@ -106,11 +106,10 @@ export default function TaskDetailPage() {
       listTestCommands(id)
     ])
       .then(([replay, details, commands]) => {
-        const { task: t, session: s, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns, runtime: nextRuntime, eventCursor } = details;
+        const { task: t, session: s, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns, runtime: nextRuntime } = details;
         setTask(t);
         setSession(s);
         setRuntime(nextRuntime);
-        lastEventSeqRef.current = Math.max(lastEventSeqRef.current, eventCursor);
         applyReplay(replay);
         setApprovals(fresh);
         setChangeSummaries(freshSummaries.map(normalizeStoredDiffSummary));

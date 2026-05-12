@@ -113,7 +113,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     options: { sessionId?: string; correlationId?: string } = {}
   ): Promise<TaskEventEnvelope<TName, TData> | undefined> {
     const envelope = await this.persistEnvelope(taskId, name, kind, severity, data, options);
-    this.emitToTask(taskId, name, envelope);
+    this.emitToTask(taskId, name, envelope ?? data);
     return envelope;
   }
 

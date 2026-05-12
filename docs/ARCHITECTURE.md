@@ -134,7 +134,7 @@ ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 | Direction | Mechanism | Why |
 |---|---|---|
 | Controller → Orchestrator (one-shot commands) | REST | Simple, cacheable, easy to debug |
-| Orchestrator → Controller (live events) | **WebSocket** | Server push is required for live logs, approval prompts, status changes |
+| Orchestrator → Controller (live events) | **Socket.IO** | Server push is required for live logs, approval prompts, status changes |
 | Controller → Orchestrator (replay) | REST + Socket.IO subscribe ack | Mobile reconnect requests missed `TaskEvent` and `AgentLog` rows after its last cursor |
 | Bidirectional task chat | WebSocket | Full duplex |
 | Future: phone push notifications | Web Push (PWA) | Wake the user when off-app |
