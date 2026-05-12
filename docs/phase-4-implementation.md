@@ -15,6 +15,7 @@ Phase 4 parent:
 
 - Linear: [TSH-80](https://linear.app/michaelshuff/issue/TSH-80)
 - GitHub: [Issue #5](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/5)
+- FigJam: [ARC Phase 4 Issue-to-PR Sync Flow](https://www.figma.com/board/1MVpD1gXJn2n5ieymjh8pO?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=v1%2FFRc5v8Q4bl79msDtKjy0fZTrxcbgb5qvXuCNpH47QLA1wB9TPLnl7Z&request_id=51a668d6-0e7d-4c3d-a2be-a80c604a09ae)
 
 ## Goal
 
@@ -25,6 +26,47 @@ issue -> linked task -> isolated worktree -> branch -> approved commit -> approv
 ```
 
 The phone remains the human approval surface. Phase 4 does not auto-merge, auto-deploy, or bypass Phase 3 approval gates.
+
+## Phase 4 flow diagram
+
+This Mermaid diagram mirrors the FigJam Phase 4 sync flow so agents can reason from the repo-native source without needing to open Figma.
+
+```mermaid
+flowchart LR
+  A["GitHub or Linear Issue"] --> B["Issue Picker on Mobile Controller"]
+  B --> C["Linked Task Created"]
+  C --> D["Provider Adapter Seams"]
+  D --> E["SyncEvent Idempotency Record"]
+  E --> F["Isolated Worktree and Safe Branch"]
+  F --> G["Agent Work + Diff/Test Summary"]
+  G --> H{"Human Approval"}
+  H -->|"Approve Commit"| I["Create Local Commit"]
+  I --> J{"Human Approval"}
+  J -->|"Approve Push"| K["Push Branch"]
+  K --> L{"Human Approval"}
+  L -->|"Approve Draft PR"| M["Open Draft PR"]
+  M --> N["Attach PR URL to Linear Issue"]
+  N --> O["PR Merge Detection"]
+  O --> P["Linear Completion Sync"]
+  H -->|"Deny"| Q["Audit Denial"]
+  J -->|"Deny"| Q
+  L -->|"Deny"| Q
+  Q --> R["Task Remains Reviewable"]
+  E --> S["Retry Without Duplicates"]
+  S --> E
+  M --> T["Mobile Sync UI + Provider Errors"]
+  P --> T
+  T --> U["Durable Replay Preserves State"]
+
+  classDef active fill:#EDE9FE,stroke:#6D28D9,color:#2e1065
+  classDef gate fill:#FEF3C7,stroke:#92400E,color:#451a03
+  classDef danger fill:#FEE2E2,stroke:#991B1B,color:#450a0a
+
+  class A,B,C,D,E,F,G,I,K,M,N,O,P,T,U active
+  class H,J,L gate
+  class Q,R danger
+  class S active
+```
 
 ## Phase 4 child tickets
 
