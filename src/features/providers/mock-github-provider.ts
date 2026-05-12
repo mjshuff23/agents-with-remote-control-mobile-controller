@@ -59,8 +59,8 @@ export class MockGitHubProvider implements IGitHubProvider {
     if (params.labels && params.labels.length > 0) {
       results = results.filter((i) => params.labels!.some((l) => i.labels.includes(l)));
     }
-    if (params.limit && results.length > params.limit) {
-      results = results.slice(0, params.limit);
+    if (typeof params.limit === 'number' && results.length > params.limit) {
+      results = results.slice(0, Math.max(0, params.limit));
     }
     return results;
   }
@@ -95,20 +95,27 @@ export class MockGitHubProvider implements IGitHubProvider {
         return {
           provider: 'github',
           externalId: String(params.existingPrNumber),
-          url: `https://github.com/${params.owner}/${params.repo}/pulls/${params.existingPrNumber}`,
+          url: `https://github.com/${params.owner}/${params.repo}/pull/${params.existingPrNumber}`,
           status: 'succeeded',
           prInfo: updated,
         };
       }
+      return {
+        provider: 'github',
+        externalId: String(params.existingPrNumber),
+        status: 'failed',
+        errorCategory: 'not_found',
+        errorMessage: `PR #${params.existingPrNumber} not found in mock`,
+      };
     }
 
     this.prCounter += 1;
     const prInfo: GitHubPrInfo = {
       number: this.prCounter,
-      url: `https://github.com/${params.owner}/${params.repo}/pulls/${this.prCounter}`,
+      url: `https://github.com/${params.owner}/${params.repo}/pull/${this.prCounter}`,
       title: params.title,
       state: 'open',
-      draft: params.draft ?? true,
+      draft: params.draft ?? false,
     };
     this.prs.set(this.prCounter, prInfo);
     return {
@@ -137,6 +144,7 @@ export class MockGitHubProvider implements IGitHubProvider {
       category: 'unexpected',
       message: error instanceof Error ? error.message : String(error),
       retryable: false,
+      statusCode: error instanceof Error && 'status' in error ? (error as any).status : undefined,
     };
   }
 }

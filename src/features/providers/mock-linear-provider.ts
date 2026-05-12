@@ -56,8 +56,8 @@ export class MockLinearProvider implements ILinearProvider {
     if (params.teamId) {
       results = results.filter((i) => i.teamId === params.teamId);
     }
-    if (params.limit && results.length > params.limit) {
-      results = results.slice(0, params.limit);
+    if (typeof params.limit === 'number' && results.length > params.limit) {
+      results = results.slice(0, Math.max(0, params.limit));
     }
     return results;
   }
@@ -82,9 +82,16 @@ export class MockLinearProvider implements ILinearProvider {
 
   async updateIssueStatus(issueId: string, workflowStateId: string): Promise<ProviderActionResult> {
     const issue = this.issues.find((i) => i.id === issueId);
-    if (issue) {
-      issue.stateId = workflowStateId;
+    if (!issue) {
+      return {
+        provider: 'linear',
+        externalId: issueId,
+        status: 'failed',
+        errorCategory: 'not_found',
+        errorMessage: `Issue ${issueId} not found in mock`,
+      };
     }
+    issue.stateId = workflowStateId;
     return {
       provider: 'linear',
       externalId: issueId,
@@ -107,6 +114,7 @@ export class MockLinearProvider implements ILinearProvider {
       category: 'unexpected',
       message: error instanceof Error ? error.message : String(error),
       retryable: false,
+      statusCode: error instanceof Error && 'status' in error ? (error as any).status : undefined,
     };
   }
 }

@@ -534,7 +534,7 @@ export class LinearStatusMapper {
 ARC_LINEAR_API_KEY=
 ARC_LINEAR_TEAM_ID=
 # Map local lifecycle states to Linear workflow state names
-# Format: ARC_LINEAR_STATUS_MAPPING='{"in_progress":"In Progress","done":"Done","cancelled":"Canceled"}'
+# Format: ARC_LINEAR_STATUS_MAPPING='{"in_progress":"In Progress","done":"Done","canceled":"Canceled"}'
 ARC_LINEAR_STATUS_MAPPING=
 ```
 

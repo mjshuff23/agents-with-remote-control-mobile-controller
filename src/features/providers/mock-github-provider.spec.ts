@@ -63,6 +63,11 @@ describe('MockGitHubProvider', () => {
       const results = await provider.searchIssues({ repo: 'owner/repo', query: 'nonexistent' });
       expect(results).toHaveLength(0);
     });
+
+    it('respects limit of 0 returning empty array', async () => {
+      const results = await provider.searchIssues({ repo: 'owner/repo', limit: 0 });
+      expect(results).toHaveLength(0);
+    });
   });
 
   describe('getIssue', () => {
@@ -107,6 +112,16 @@ describe('MockGitHubProvider', () => {
       expect(updated.status).toBe('succeeded');
       expect(updated.prInfo!.title).toBe('Updated Title');
     });
+
+    it('returns failure for non-existent existingPrNumber', async () => {
+      const result = await provider.createOrUpdatePR({
+        owner: 'owner', repo: 'repo', title: 'Fail PR', body: '', head: 'b', base: 'main',
+        existingPrNumber: 999,
+      });
+      expect(result.status).toBe('failed');
+      expect(result.errorCategory).toBe('not_found');
+      expect(result.prInfo).toBeUndefined();
+    });
   });
 
   describe('getPR', () => {
@@ -135,11 +150,24 @@ describe('MockGitHubProvider', () => {
       const result = provider.normalizeError(new Error('test error'));
       expect(result.category).toBe('unexpected');
       expect(result.message).toBe('test error');
+      expect(result.retryable).toBe(false);
     });
 
     it('handles string errors', () => {
       const result = provider.normalizeError('crash');
       expect(result.message).toBe('crash');
+    });
+
+    it('extracts statusCode from error when present', () => {
+      const error = new Error('Not found');
+      (error as any).status = 404;
+      const result = provider.normalizeError(error);
+      expect(result.statusCode).toBe(404);
+    });
+
+    it('returns undefined statusCode when not on error', () => {
+      const result = provider.normalizeError(new Error('plain'));
+      expect(result.statusCode).toBeUndefined();
     });
   });
 

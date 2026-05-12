@@ -57,6 +57,11 @@ describe('MockLinearProvider', () => {
       const results = await provider.searchIssues({ query: 'nonexistent' });
       expect(results).toHaveLength(0);
     });
+
+    it('respects limit of 0 returning empty array', async () => {
+      const results = await provider.searchIssues({ limit: 0 });
+      expect(results).toHaveLength(0);
+    });
   });
 
   describe('getIssue', () => {
@@ -117,6 +122,12 @@ describe('MockLinearProvider', () => {
       const issue = await provider.getIssue('i-1');
       expect(issue.stateId).toBe('state-done');
     });
+
+    it('returns failure for non-existent issue', async () => {
+      const result = await provider.updateIssueStatus('nonexistent-id', 'state-done');
+      expect(result.status).toBe('failed');
+      expect(result.errorCategory).toBe('not_found');
+    });
   });
 
   describe('attachLink', () => {
@@ -132,11 +143,19 @@ describe('MockLinearProvider', () => {
       const result = provider.normalizeError(new Error('test error'));
       expect(result.category).toBe('unexpected');
       expect(result.message).toBe('test error');
+      expect(result.retryable).toBe(false);
     });
 
     it('handles string errors', () => {
       const result = provider.normalizeError('crash');
       expect(result.message).toBe('crash');
+    });
+
+    it('extracts statusCode from error when present', () => {
+      const error = new Error('Unauthorized');
+      (error as any).status = 401;
+      const result = provider.normalizeError(error);
+      expect(result.statusCode).toBe(401);
     });
   });
 

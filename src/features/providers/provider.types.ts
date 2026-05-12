@@ -24,6 +24,7 @@ export interface NormalizedProviderError {
   category: ProviderErrorCategory;
   message: string;
   retryable: boolean;
+  statusCode?: number;
 }
 
 export interface ExternalIssueRef {
