@@ -13,6 +13,7 @@ import { PolicyModule } from './features/policy/policy.module';
 import { AuditLogModule } from './features/audit/audit-log.module';
 import { TestRunnerModule } from './features/test-runs/test-runner.module';
 import { ProvidersModule } from './features/providers/providers.module';
+import { SyncModule } from './features/sync/sync.module';
 
 @Module({
   imports: [
@@ -28,7 +29,8 @@ import { ProvidersModule } from './features/providers/providers.module';
     PolicyModule,
     AuditLogModule,
     TestRunnerModule,
-    ProvidersModule
+    ProvidersModule,
+    SyncModule
   ]
 })
 export class AppModule {}

@@ -198,6 +198,28 @@ model SessionCheckpoint {
   @@index([taskId])
 }
 
+model SyncEvent {
+  id            String   @id @default(uuid())
+  taskId        String
+  sessionId     String?
+  provider      String   // 'github' | 'linear'
+  action        String   // 'create_branch' | 'commit' | 'push' | 'create_pr' | 'update_pr' | 'update_issue_status' | 'attach_link'
+  targetId      String   // provider-specific external ID (issue number, PR number, Linear issue ID)
+  status        String   // 'pending' | 'running' | 'succeeded' | 'failed' | 'retryable' | 'skipped'
+  externalId    String?  // provider-assigned ID (PR number, Linear issue ID)
+  url           String?  // provider-assigned URL
+  errorCategory String?  // normalized error category
+  errorMessage  String?  // recovery-safe error summary
+  metadataJson  String?  // optional JSON for recovery-safe extra data
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([taskId, provider, targetId, action])
+  @@index([taskId])
+  @@index([taskId, status])
+  @@index([taskId, action])
+}
+
 model TestRunSummary {
   id            String        @id @default(uuid())
   taskId        String
