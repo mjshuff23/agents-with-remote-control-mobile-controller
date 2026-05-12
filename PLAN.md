@@ -149,6 +149,14 @@ type TaskEventEnvelope<TName extends string, TData> = {
 
 The controller dedupes Phase 3 envelope events by `id`.
 
+Phase 3.5 replay contract:
+
+- `TaskEvent` is the durable task-scoped event ledger with monotonic `seq` per task.
+- `AgentLog` remains the raw terminal log ledger with monotonic `sequence` per session.
+- `GET /tasks/:id/replay?afterEventSeq=&afterLogSequence=&limit=` returns missed events/logs after the controller's cursors.
+- Socket.IO `subscribe` accepts the same cursors and includes missed history in the ack after joining `task:<id>`.
+- A reconstructed DB view is not a live PTY resume; the controller exposes whether the worker is `live_process`, `reconstructed`, or `terminal`.
+
 ## Persistence Additions
 
 SQLite remains the MVP database. Phase 3 adds:

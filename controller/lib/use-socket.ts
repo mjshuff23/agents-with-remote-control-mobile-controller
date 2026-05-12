@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import type { ApprovalRequest, DiffSummaryResponse, TaskEventEnvelope, TestRunSummary } from './api';
+import type { ApprovalRequest, DiffSummaryResponse, TaskEventEnvelope, TaskReplayResponse, TestRunSummary } from './api';
 
 type GlobalWithSocket = typeof globalThis & {
   __CONTROLLER_SOCKET__?: Socket;
@@ -61,7 +61,7 @@ function getSocket(): Socket {
 }
 
 export interface TaskSocketHandlers {
-  onLog?: (data: { type: string; content: string; sequence: number }) => void;
+  onLog?: (data: { sessionId?: string; type: string; content: string; sequence: number }) => void;
   onStarted?: (data: unknown) => void;
   onCompleted?: (data: { exitCode: number; status: string }) => void;
   onApprovalRequested?: (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => void;
@@ -71,8 +71,8 @@ export interface TaskSocketHandlers {
   onTestStarted?: (event: TaskEventEnvelope<'test.started', { id: string; commandId: string; label: string; command: string[] }>) => void;
   onTestLog?: (event: TaskEventEnvelope<'test.log', { testRunId: string; stream: string; content: string }>) => void;
   onTestCompleted?: (event: TaskEventEnvelope<'test.completed', TestRunSummary>) => void;
-  // Fires after a socket reconnect. The page should re-fetch task state
-  // to recover any events that were emitted while the socket was disconnected.
+  getReplayCursor?: () => { afterEventSeq: number; afterLogSequence: number };
+  onReplay?: (replay: Pick<TaskReplayResponse, 'events' | 'logs'>) => void;
   onReconnected?: () => void;
 }
 
@@ -90,7 +90,7 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
 
     // All event handlers defined upfront so they can be registered immediately
     // and cleaned up without needing to wait for the subscribe ack.
-    const onLog = (data: { taskId: string; type: string; content: string; sequence: number }) => {
+    const onLog = (data: { taskId: string; sessionId?: string; type: string; content: string; sequence: number }) => {
       if (data.taskId === taskId) ref.current.onLog?.(data);
     };
     const onStarted = (data: { taskId: string }) => {
@@ -139,9 +139,14 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     // lost on every disconnect, so this must be repeated on every reconnect.
     const joinRoom = () => {
       if (!active) return;
+      const cursors = ref.current.getReplayCursor?.() ?? { afterEventSeq: 0, afterLogSequence: 0 };
       void socket
         .timeout(5_000)
-        .emitWithAck('subscribe', { taskId })
+        .emitWithAck('subscribe', { taskId, ...cursors })
+        .then((ack: { replay?: Pick<TaskReplayResponse, 'events' | 'logs'> }) => {
+          if (!active || !ack.replay) return;
+          ref.current.onReplay?.(ack.replay);
+        })
         .catch(() => {});
     };
 

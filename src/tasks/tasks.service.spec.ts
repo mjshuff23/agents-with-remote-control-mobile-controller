@@ -6,6 +6,7 @@ import { GitDiffService } from '../git/git-diff.service';
 import { GitWorktreeService } from '../git/git-worktree.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
+import { TaskEventLedgerService } from '../events/task-event-ledger.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
 import { TasksService } from './tasks.service';
 
@@ -74,7 +75,8 @@ describe('TasksService', () => {
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> => callback(prisma))
   };
   const agentSessions = {
-    createAndStart: jest.fn()
+    createAndStart: jest.fn(),
+    runtimeState: jest.fn()
   };
   const worktrees = {
     createForTask: jest.fn()
@@ -90,6 +92,10 @@ describe('TasksService', () => {
   };
   const policies = {
     listTestCommands: jest.fn()
+  };
+  const ledger = {
+    latestSeq: jest.fn(),
+    replay: jest.fn()
   };
   const config = {
     repoPath: '/repo',
@@ -109,6 +115,9 @@ describe('TasksService', () => {
     approvals.listForTask.mockResolvedValue({ approvals: [] });
     prisma.gitChangeSummary.findMany.mockResolvedValue([]);
     prisma.testRunSummary.findMany.mockResolvedValue([]);
+    ledger.latestSeq.mockResolvedValue(0);
+    ledger.replay.mockResolvedValue({ events: [], logs: [] });
+    agentSessions.runtimeState.mockReturnValue({ processState: 'live_process', statusLabel: 'active' });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -120,7 +129,8 @@ describe('TasksService', () => {
         { provide: ApprovalsService, useValue: approvals },
         { provide: GitDiffService, useValue: diffs },
         { provide: TestRunnerService, useValue: tests },
-        { provide: PolicyLoaderService, useValue: policies }
+        { provide: PolicyLoaderService, useValue: policies },
+        { provide: TaskEventLedgerService, useValue: ledger }
       ]
     }).compile();
 
@@ -188,5 +198,7 @@ describe('TasksService', () => {
     expect(result.logs).toEqual([
       expect.objectContaining({ sequence: 1, content: 'hello' })
     ]);
+    expect(result.runtime).toEqual({ processState: 'live_process', statusLabel: 'active' });
+    expect(result.eventCursor).toBe(0);
   });
 });

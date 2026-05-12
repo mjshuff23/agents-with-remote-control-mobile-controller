@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayInit,
@@ -6,9 +6,9 @@ import {
   WebSocketGateway,
   WebSocketServer
 } from '@nestjs/websockets';
-import { randomUUID } from 'crypto';
 import { Server, Socket } from 'socket.io';
 import { AppConfigService } from '../config/app-config.service';
+import { ReplayTaskEventsResult, TaskEventLedgerService } from './task-event-ledger.service';
 
 export type TaskEventKind = 'lifecycle' | 'log' | 'approval' | 'git' | 'diff' | 'test' | 'security' | 'controller';
 export type TaskEventSeverity = 'info' | 'warn' | 'error';
@@ -26,16 +26,30 @@ export interface TaskEventEnvelope<TName extends string = string, TData = unknow
   data: TData;
 }
 
+export interface SubscribePayload {
+  taskId: string;
+  afterEventSeq?: number;
+  afterLogSequence?: number;
+  limit?: number;
+}
+
+export interface SubscribeAck {
+  ok: true;
+  replay?: ReplayTaskEventsResult;
+}
+
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' } })
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
   private readonly logger = new Logger(EventsGateway.name);
-  private readonly nextEventSequences = new Map<string, number>();
 
   @WebSocketServer()
   private server?: Server;
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(
+    private readonly config: AppConfigService,
+    @Optional() private readonly ledger?: TaskEventLedgerService
+  ) {}
 
   afterInit(server: Server): void {
     this.server = server;
@@ -55,9 +69,17 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   @SubscribeMessage('subscribe')
-  subscribe(client: Socket, payload: { taskId: string }): { ok: true } {
+  async subscribe(client: Socket, payload: SubscribePayload): Promise<SubscribeAck> {
     client.join(`task:${payload.taskId}`);
-    return { ok: true };
+    const replay = this.ledger
+      ? await this.ledger.replay({
+        taskId: payload.taskId,
+        afterEventSeq: payload.afterEventSeq,
+        afterLogSequence: payload.afterLogSequence,
+        limit: payload.limit
+      })
+      : undefined;
+    return replay ? { ok: true, replay } : { ok: true };
   }
 
   @SubscribeMessage('unsubscribe')
@@ -69,33 +91,43 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     this.server?.to(`task:${taskId}`).emit(event, payload);
   }
 
-  emitEnvelopeToTask<TName extends string, TData>(
+  async emitCompatibilityEventToTask<TName extends string, TData>(
     taskId: string,
     name: TName,
     kind: TaskEventKind,
     severity: TaskEventSeverity,
     data: TData,
     options: { sessionId?: string; correlationId?: string } = {}
-  ): TaskEventEnvelope<TName, TData> {
-    const envelope: TaskEventEnvelope<TName, TData> = {
-      id: randomUUID(),
-      seq: this.nextEnvelopeSequence(taskId),
-      taskId,
-      sessionId: options.sessionId,
-      name,
-      kind,
-      severity,
-      correlationId: options.correlationId,
-      at: new Date().toISOString(),
-      data
-    };
+  ): Promise<TaskEventEnvelope<TName, TData> | undefined> {
+    const envelope = await this.persistEnvelope(taskId, name, kind, severity, data, options);
+    this.emitToTask(taskId, name, data);
+    return envelope;
+  }
+
+  async emitEnvelopeToTask<TName extends string, TData>(
+    taskId: string,
+    name: TName,
+    kind: TaskEventKind,
+    severity: TaskEventSeverity,
+    data: TData,
+    options: { sessionId?: string; correlationId?: string } = {}
+  ): Promise<TaskEventEnvelope<TName, TData> | undefined> {
+    const envelope = await this.persistEnvelope(taskId, name, kind, severity, data, options);
     this.emitToTask(taskId, name, envelope);
     return envelope;
   }
 
-  private nextEnvelopeSequence(taskId: string): number {
-    const next = (this.nextEventSequences.get(taskId) ?? 0) + 1;
-    this.nextEventSequences.set(taskId, next);
-    return next;
+  private async persistEnvelope<TName extends string, TData>(
+    taskId: string,
+    name: TName,
+    kind: TaskEventKind,
+    severity: TaskEventSeverity,
+    data: TData,
+    options: { sessionId?: string; correlationId?: string }
+  ): Promise<TaskEventEnvelope<TName, TData> | undefined> {
+    if (!this.ledger) {
+      return undefined;
+    }
+    return this.ledger.append({ taskId, name, kind, severity, data, options });
   }
 }

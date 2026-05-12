@@ -40,6 +40,22 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
       return rowValue === value.equals;
     }
 
+    if ('gt' in value) {
+      return (rowValue as number | Date | string) > (value as { gt: number | Date | string }).gt;
+    }
+
+    if ('gte' in value) {
+      return (rowValue as number | Date | string) >= (value as { gte: number | Date | string }).gte;
+    }
+
+    if ('lt' in value) {
+      return (rowValue as number | Date | string) < (value as { lt: number | Date | string }).lt;
+    }
+
+    if ('lte' in value) {
+      return (rowValue as number | Date | string) <= (value as { lte: number | Date | string }).lte;
+    }
+
     throw new Error(`Unsupported where condition for "${key}": ${JSON.stringify(value)}`);
   });
 };
@@ -52,6 +68,7 @@ export const createInMemoryPrisma = () => {
   const auditLogs: Row[] = [];
   const changeSummaries: Row[] = [];
   const testRuns: Row[] = [];
+  const taskEvents: Row[] = [];
 
   const createDelegate = (rows: Row[], prefix: string) => ({
     create: jest.fn(async ({ data }: { data: Row }) => {
@@ -92,6 +109,7 @@ export const createInMemoryPrisma = () => {
     auditLog: createDelegate(auditLogs, 'audit'),
     gitChangeSummary: createDelegate(changeSummaries, 'summary'),
     testRunSummary: createDelegate(testRuns, 'testRun'),
+    taskEvent: createDelegate(taskEvents, 'event'),
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
@@ -101,7 +119,8 @@ export const createInMemoryPrisma = () => {
       approvalRequest: createDelegate(approvals, 'approval'),
       auditLog: createDelegate(auditLogs, 'audit'),
       gitChangeSummary: createDelegate(changeSummaries, 'summary'),
-      testRunSummary: createDelegate(testRuns, 'testRun')
+      testRunSummary: createDelegate(testRuns, 'testRun'),
+      taskEvent: createDelegate(taskEvents, 'event')
     }))
   };
 };

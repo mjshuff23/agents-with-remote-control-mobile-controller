@@ -88,6 +88,63 @@ describe('WebSocket events', () => {
     });
   });
 
+  it('replays missed logs on reconnect and continues live events from the task room', async () => {
+    const writeStub = jest.fn();
+    adapter.startTask.mockImplementationOnce(async (input) => {
+      await input.onOutput({ type: 'stdout', content: 'hello before disconnect' });
+      setTimeout(() => { void input.onExit({ exitCode: 0 }); }, 800);
+      return { externalSessionId: 'mock-session', stop: jest.fn(), write: writeStub };
+    });
+    const { port } = app.getHttpServer().address() as { port: number };
+
+    const createRes = await request(app.getHttpServer())
+      .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
+      .send({ prompt: 'do something', agent: 'codex' })
+      .expect(201);
+    const taskId: string = createRes.body.task.id;
+
+    socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET }, transports: ['websocket'] });
+    const firstAck = await socket.emitWithAck('subscribe', {
+      taskId,
+      afterEventSeq: 0,
+      afterLogSequence: 0
+    });
+    const lastEventSeq = Math.max(...firstAck.replay.events.map((event: { seq: number }) => event.seq));
+    const lastLogSequence = Math.max(...firstAck.replay.logs.map((log: { sequence: number }) => log.sequence));
+    socket.disconnect();
+
+    await request(app.getHttpServer())
+      .post(`/tasks/${taskId}/input`)
+      .set('X-Controller-Secret', TEST_SECRET)
+      .send({ text: 'continue' })
+      .expect(202);
+
+    socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET }, transports: ['websocket'] });
+    const reconnectAck = await socket.emitWithAck('subscribe', {
+      taskId,
+      afterEventSeq: lastEventSeq,
+      afterLogSequence: lastLogSequence
+    });
+
+    expect(reconnectAck.replay.logs).toEqual([
+      expect.objectContaining({ sequence: lastLogSequence + 1, content: 'Input sent (8 chars)' })
+    ]);
+    expect(reconnectAck.replay.events).toEqual([
+      expect.objectContaining({ seq: lastEventSeq + 1, name: 'agent.log' })
+    ]);
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('timeout: task.completed not received after reconnect')), 5000);
+      socket.on('task.completed', (event: { exitCode: number; status: string }) => {
+        clearTimeout(timeout);
+        expect(event.exitCode).toBe(0);
+        expect(event.status).toBe('completed');
+        resolve();
+      });
+    });
+  });
+
   it('disconnects a client with a wrong token', async () => {
     const { port } = app.getHttpServer().address() as { port: number };
 

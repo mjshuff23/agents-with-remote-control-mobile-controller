@@ -65,6 +65,7 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 
 - Pushes lifecycle, log, approval, policy, diff, test, and worktree events to controller task rooms.
 - Keeps Phase 2 events compatible while adding a typed envelope for Phase 3 events.
+- Persists task-scoped event envelopes in `TaskEvent` so reconnecting controllers can replay missed events after a cursor.
 - Phase 6 can add Web Push for PWA + optional notification adapters.
 
 ### SyncModule (Phase 4+)
@@ -116,6 +117,7 @@ SQLite first. Migration to Postgres only if/when concurrency or multi-host requi
 | **Task** | The user-initiated unit of work: title, prompt, status, selected agent, repo/worktree paths, branch/base metadata, approval mode |
 | **AgentSession** | A single attempt at executing the task with an agent — status, start/end timestamps, external session id |
 | **AgentLog** | Append-only log entries (`stdout`, `stderr`, `system`, `user`, `agent`) |
+| **TaskEvent** | Durable task event ledger with monotonic per-task cursor for reconnect/replay |
 | **ApprovalRequest** | One approval ask with action type, command/files JSON, risk level, rule, status, decision, expiry |
 | **AuditLog** | Append-only record of classification, approval, denial, refusal, and security decisions |
 | **GitChangeSummary** | Worktree-scoped snapshot of files changed, +/- counts, status counts, risk flags, and top files |
@@ -132,11 +134,14 @@ ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 | Direction | Mechanism | Why |
 |---|---|---|
 | Controller → Orchestrator (one-shot commands) | REST | Simple, cacheable, easy to debug |
-| Orchestrator → Controller (events) | **WebSocket** | Server push is required for live logs, approval prompts, status changes |
+| Orchestrator → Controller (live events) | **WebSocket** | Server push is required for live logs, approval prompts, status changes |
+| Controller → Orchestrator (replay) | REST + Socket.IO subscribe ack | Mobile reconnect requests missed `TaskEvent` and `AgentLog` rows after its last cursor |
 | Bidirectional task chat | WebSocket | Full duplex |
 | Future: phone push notifications | Web Push (PWA) | Wake the user when off-app |
 
-Long polling is intentionally **not** the primary mechanism — it is client-initiated and not full duplex, which makes server-push patterns awkward. WebSockets win for this use case.
+Long polling is intentionally **not** the primary mechanism — it is client-initiated and not full duplex, which makes server-push patterns awkward. WebSockets win for this use case. The database, not the socket, is the durable source of truth: `TaskEvent` replays structured lifecycle/approval/diff/test events, and `AgentLog` replays raw terminal output.
+
+DB-backed reconstruction is not a live PTY resume. If an orchestrator process still owns the session's running process, the controller can continue, approve, deny, or stop it. If the process is gone, the controller shows a reconstructed or terminal view from persisted rows and does not imply the hidden agent reasoning stack can be serialized and resumed.
 
 ---
 

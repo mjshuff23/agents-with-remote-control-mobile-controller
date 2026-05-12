@@ -84,7 +84,7 @@ export class ApprovalsService {
         message: 'Agent retried a denied/refused action with the same command/files.',
         metadata: { actionRequestId: request.id }
       });
-      this.events.emitEnvelopeToTask(taskId, 'policy.violation', 'security', 'error', approval, {
+      await this.events.emitEnvelopeToTask(taskId, 'policy.violation', 'security', 'error', approval, {
         sessionId,
         correlationId: request.id
       });
@@ -136,17 +136,17 @@ export class ApprovalsService {
     });
 
     if (classification.riskLevel === 'BLOCKED') {
-      this.events.emitEnvelopeToTask(taskId, 'policy.violation', 'security', 'error', approval, {
+      await this.events.emitEnvelopeToTask(taskId, 'policy.violation', 'security', 'error', approval, {
         sessionId,
         correlationId: request.id
       });
     } else if (classification.riskLevel === 'NEEDS_APPROVAL') {
-      this.events.emitEnvelopeToTask(taskId, 'approval.requested', 'approval', 'warn', approval, {
+      await this.events.emitEnvelopeToTask(taskId, 'approval.requested', 'approval', 'warn', approval, {
         sessionId,
         correlationId: request.id
       });
     } else {
-      this.events.emitEnvelopeToTask(taskId, 'approval.resolved', 'approval', 'info', approval, {
+      await this.events.emitEnvelopeToTask(taskId, 'approval.resolved', 'approval', 'info', approval, {
         sessionId,
         correlationId: request.id
       });
@@ -206,7 +206,7 @@ export class ApprovalsService {
       metadata: { actionRequestId: resolved.actionRequestId }
     });
 
-    this.events.emitEnvelopeToTask(resolved.taskId, 'approval.resolved', 'approval', finalDecision === 'approved' ? 'info' : 'warn', resolved, {
+    await this.events.emitEnvelopeToTask(resolved.taskId, 'approval.resolved', 'approval', finalDecision === 'approved' ? 'info' : 'warn', resolved, {
       sessionId: resolved.sessionId ?? undefined,
       correlationId: resolved.correlationId ?? undefined
     });

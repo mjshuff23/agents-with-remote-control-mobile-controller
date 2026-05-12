@@ -98,7 +98,7 @@ export class GitDiffService {
       createdAt: row.createdAt
     };
 
-    this.events.emitEnvelopeToTask(task.id, 'diff.summary', 'diff', riskFlags.length > 0 ? 'warn' : 'info', payload, {
+    await this.events.emitEnvelopeToTask(task.id, 'diff.summary', 'diff', riskFlags.length > 0 ? 'warn' : 'info', payload, {
       sessionId: session?.id
     });
 

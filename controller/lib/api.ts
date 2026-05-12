@@ -27,6 +27,14 @@ export interface Session {
   exitCode: number | null;
 }
 
+export type RuntimeProcessState = 'live_process' | 'reconstructed' | 'terminal';
+export type RuntimeStatusLabel = 'active' | 'waiting_approval' | 'idle' | 'dormant' | 'completed' | 'failed' | 'stopped';
+
+export interface RuntimeState {
+  processState: RuntimeProcessState;
+  statusLabel: RuntimeStatusLabel;
+}
+
 export interface LogEntry {
   id: string;
   sessionId: string;
@@ -129,9 +137,21 @@ export interface TaskDetailsResponse {
   task: Task;
   session: Session | null;
   logs: LogEntry[];
+  events: TaskEventEnvelope[];
+  eventCursor: number;
+  runtime: RuntimeState;
   approvals: ApprovalRequest[];
   changeSummaries: GitChangeSummary[];
   testRuns: TestRunSummary[];
+}
+
+export interface TaskReplayResponse {
+  task: Task;
+  session: Session | null;
+  logs: LogEntry[];
+  events: TaskEventEnvelope[];
+  eventCursor: number;
+  runtime: RuntimeState;
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -151,6 +171,15 @@ export function listTasks(): Promise<{ tasks: Task[] }> {
 
 export function getTask(id: string): Promise<TaskDetailsResponse> {
   return apiFetch(`/tasks/${id}`);
+}
+
+export function replayTask(id: string, cursors: { afterEventSeq: number; afterLogSequence: number; limit?: number }): Promise<TaskReplayResponse> {
+  const params = new URLSearchParams({
+    afterEventSeq: String(cursors.afterEventSeq),
+    afterLogSequence: String(cursors.afterLogSequence)
+  });
+  if (cursors.limit) params.set('limit', String(cursors.limit));
+  return apiFetch(`/tasks/${id}/replay?${params.toString()}`);
 }
 
 export function createTask(payload: { prompt: string; agent: string; title?: string }): Promise<{ task: Task; session: Session }> {

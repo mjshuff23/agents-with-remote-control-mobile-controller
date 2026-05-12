@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { ControllerSecretGuard } from '../common/guards/controller-secret.guard';
 import { RunTestDto } from '../test-runs/dto/run-test.dto';
@@ -26,6 +26,20 @@ export class TasksController {
   @Get(':id')
   async getTask(@Param('id') id: string) {
     return this.tasks.getTask(id);
+  }
+
+  @Get(':id/replay')
+  async replayTask(
+    @Param('id') id: string,
+    @Query('afterEventSeq') afterEventSeq?: string,
+    @Query('afterLogSequence') afterLogSequence?: string,
+    @Query('limit') limit?: string
+  ) {
+    return this.tasks.replayTask(id, {
+      afterEventSeq: parseCursor(afterEventSeq),
+      afterLogSequence: parseCursor(afterLogSequence),
+      limit: parseCursor(limit)
+    });
   }
 
   @Post(':id/stop')
@@ -63,4 +77,10 @@ export class TasksController {
   async listTestCommands(@Param('id') id: string) {
     return this.tasks.listTestCommands(id);
   }
+}
+
+function parseCursor(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
