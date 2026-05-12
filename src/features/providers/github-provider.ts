@@ -42,11 +42,12 @@ export class GitHubProvider implements IGitHubProvider {
   }
 
   private headers(): Record<string, string> {
-    return {
+    const h: Record<string, string> = {
       Accept: 'application/vnd.github.v3+json',
-      Authorization: `Bearer ${this.token}`,
       'User-Agent': 'arc-orchestrator',
     };
+    if (this.token) h['Authorization'] = `Bearer ${this.token}`;
+    return h;
   }
 
   private async get<T>(path: string): Promise<T> {
@@ -95,7 +96,7 @@ export class GitHubProvider implements IGitHubProvider {
   }
 
   async searchIssues(params: GitHubSearchParams): Promise<GitHubSearchIssue[]> {
-    const { owner, repo } = this.repo();
+    const { owner, repo } = this.repo(params.owner, params.repo);
     const qParts: string[] = [`repo:${owner}/${repo}`];
     if (params.query) qParts.push(params.query);
     if (params.labels && params.labels.length > 0) {
@@ -120,7 +121,7 @@ export class GitHubProvider implements IGitHubProvider {
   async createBranch(params: GitHubCreateBranchParams): Promise<ProviderActionResult> {
     const r = this.repo(params.owner, params.repo);
     const ref = await this.get<{ object: { sha: string } }>(
-      `/repos/${r.owner}/${r.repo}/git/ref/heads/${encodeURIComponent(params.baseRef)}`,
+      `/repos/${r.owner}/${r.repo}/git/ref/heads/${params.baseRef}`,
     );
     await this.post<Record<string, unknown>>(`/repos/${r.owner}/${r.repo}/git/refs`, {
       ref: `refs/heads/${params.branchName}`,
@@ -172,8 +173,17 @@ export class GitHubProvider implements IGitHubProvider {
 
   async listBranches(owner: string, repo: string): Promise<string[]> {
     const r = this.repo(owner, repo);
-    const data = await this.get<Array<{ name: string }>>(`/repos/${r.owner}/${r.repo}/branches?per_page=100`);
-    return data.map((b) => b.name);
+    const names: string[] = [];
+    let page = 1;
+    while (true) {
+      const data = await this.get<Array<{ name: string }>>(
+        `/repos/${r.owner}/${r.repo}/branches?per_page=100&page=${page}`,
+      );
+      names.push(...data.map((b) => b.name));
+      if (data.length < 100) break;
+      page++;
+    }
+    return names;
   }
 
   normalizeError(error: unknown): NormalizedProviderError {
@@ -200,6 +210,9 @@ export class GitHubProvider implements IGitHubProvider {
     }
     if (status && status >= 500) {
       return { category: 'network_error', message: 'GitHub API server error', retryable: true, statusCode: status };
+    }
+    if (status === undefined) {
+      return { category: 'network_error', message: msg, retryable: true, statusCode: undefined };
     }
     return { category: 'unexpected', message: msg, retryable: false, statusCode: status };
   }

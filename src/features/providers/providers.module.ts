@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { IGitHubProvider } from './github-provider.interface';
 import { ILinearProvider } from './linear-provider.interface';
 import { GitHubProvider } from './github-provider';
-import { MockGitHubProvider } from './mock-github-provider';
 import { MockLinearProvider } from './mock-linear-provider';
 import { AppConfigModule } from '../../config/app-config.module';
 import { AppConfigService } from '../../config/app-config.service';
@@ -12,10 +11,7 @@ import { AppConfigService } from '../../config/app-config.service';
   providers: [
     {
       provide: IGitHubProvider,
-      useFactory: (config: AppConfigService) => {
-        const provider = new GitHubProvider(config);
-        return provider.isConfigured() ? provider : new MockGitHubProvider();
-      },
+      useFactory: (config: AppConfigService) => new GitHubProvider(config),
       inject: [AppConfigService],
     },
     { provide: ILinearProvider, useClass: MockLinearProvider },
