@@ -79,6 +79,7 @@ export function TaskLogPane({ logs, autoScroll = true }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const userScrolled = useRef(false);
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: logs.length,
     getScrollElement: () => parentRef.current,
