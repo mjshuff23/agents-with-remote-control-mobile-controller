@@ -18,6 +18,7 @@ model Task {
   baseRef         String?
   baseCommit      String?
   approvalMode    String             @default("cooperative-gated")
+  externalIssueRef String?            // JSON: { provider, externalId, key, url?, title? }
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   sessions        AgentSession[]

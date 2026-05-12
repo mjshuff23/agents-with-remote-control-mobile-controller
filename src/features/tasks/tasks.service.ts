@@ -66,7 +66,8 @@ export class TasksService {
         prompt: input.prompt,
         status: 'queued',
         selectedAgent: input.agent,
-        repoPath: this.config.repoPath
+        repoPath: this.config.repoPath,
+        externalIssueRef: input.externalIssueRef ? JSON.stringify(input.externalIssueRef) : undefined,
       }
     });
     let worktree: WorktreeResult;
