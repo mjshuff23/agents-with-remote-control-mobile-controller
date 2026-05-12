@@ -22,7 +22,7 @@ const SYNC_EVENT_STATUSES: Record<SyncEventStatus, true> = {
 };
 
 function isValidSyncEventStatus(value: string): value is SyncEventStatus {
-  return value in SYNC_EVENT_STATUSES;
+  return Object.hasOwn(SYNC_EVENT_STATUSES, value);
 }
 
 const VALID_TRANSITIONS: Record<SyncEventStatus, SyncEventStatus[]> = {
