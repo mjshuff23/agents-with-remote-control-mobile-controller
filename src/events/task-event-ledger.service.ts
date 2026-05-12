@@ -60,6 +60,10 @@ export class TaskEventLedgerService {
     return currentWrite as Promise<TaskEventEnvelope<TName, TData>>;
   }
 
+  // Log replay is scoped to the latest session for a task. Tasks are currently
+  // single-session: once stopped they cannot be restarted, so afterLogSequence
+  // is a valid monotonic cursor. If multi-session restart is ever added, the
+  // cursor will need to become a per-session map (Record<sessionId, number>).
   async replay(input: ReplayTaskEventsInput): Promise<ReplayTaskEventsResult> {
     const limit = clampLimit(input.limit);
     const session = await this.prisma.agentSession.findFirst({

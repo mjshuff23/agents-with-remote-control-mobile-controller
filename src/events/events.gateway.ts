@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   OnGatewayConnection,
@@ -112,9 +113,23 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     data: TData,
     options: { sessionId?: string; correlationId?: string } = {}
   ): Promise<TaskEventEnvelope<TName, TData> | undefined> {
-    const envelope = await this.persistEnvelope(taskId, name, kind, severity, data, options);
-    this.emitToTask(taskId, name, envelope ?? data);
-    return envelope;
+    const persisted = await this.persistEnvelope(taskId, name, kind, severity, data, options);
+    // When ledger is absent (e.g. tests), build a synthetic envelope so consumers
+    // always receive a consistent TaskEventEnvelope shape with seq/data fields.
+    const envelope: TaskEventEnvelope<TName, TData> = persisted ?? {
+      id: randomUUID(),
+      seq: 0,
+      taskId,
+      sessionId: options.sessionId,
+      name,
+      kind,
+      severity,
+      correlationId: options.correlationId,
+      at: new Date().toISOString(),
+      data
+    };
+    this.emitToTask(taskId, name, envelope);
+    return persisted;
   }
 
   private async persistEnvelope<TName extends string, TData>(

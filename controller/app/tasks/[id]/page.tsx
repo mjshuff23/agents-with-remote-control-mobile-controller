@@ -46,7 +46,6 @@ export default function TaskDetailPage() {
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
   const seqRef = useRef(0);
   const lastEventSeqRef = useRef(0);
-  const logCursorBySession = useRef(new Map<string, number>());
   const syntheticSeqRef = useRef(-1);
   const seenLogKeys = useRef(new Set<string>());
   const seenEvents = useRef(new Set<string>());
@@ -69,8 +68,6 @@ export default function TaskDetailPage() {
   function recordServerLog(log: Pick<LogEntry, 'sessionId' | 'sequence'>) {
     seenLogKeys.current.add(serverLogKey(log.sessionId, log.sequence));
     seqRef.current = Math.max(seqRef.current, log.sequence);
-    const current = logCursorBySession.current.get(log.sessionId) ?? 0;
-    logCursorBySession.current.set(log.sessionId, Math.max(current, log.sequence));
   }
 
   function appendSyntheticLog(type: string, content: string) {
@@ -169,7 +166,6 @@ export default function TaskDetailPage() {
     seenEvents.current.clear();
     seqRef.current = 0;
     lastEventSeqRef.current = 0;
-    logCursorBySession.current.clear();
     syntheticSeqRef.current = -1;
     sessionIdRef.current = '';
     Promise.all([getTask(id), listTestCommands(id)])
