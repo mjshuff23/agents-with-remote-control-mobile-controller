@@ -10,7 +10,7 @@ Tailscale creates an encrypted mesh VPN between your devices. Install it on your
 
 **Setup (once):**
 
-1. Install Tailscale on Windows: https://tailscale.com/download/windows
+1. Install Tailscale on Windows: <https://tailscale.com/download/windows>
 2. Install Tailscale on your phone (iOS/Android)
 3. Sign in with the same account on both devices
 4. Find your PC's Tailscale IP in the Tailscale admin console or taskbar icon — looks like `100.x.x.x`
@@ -53,7 +53,7 @@ Open-source alternative to Tailscale. Self-hostable management plane if you want
 
 **Setup:**
 
-1. Create a free account at https://netbird.io or self-host the management server
+1. Create a free account at <https://netbird.io> or self-host the management server
 2. Install the NetBird client on Windows and your phone
 3. Peer your devices; get the peer IP from the NetBird dashboard
 4. Same `.env` and `controller/.env.local` changes as Tailscale above, using your NetBird peer IP

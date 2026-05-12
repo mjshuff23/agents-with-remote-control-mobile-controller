@@ -11,6 +11,7 @@ If you are an AI agent reading this: this file is your briefing. The human runni
 A local-first orchestration system that lets a human run CLI coding agents from their PC and control them from their phone. Yes, you may end up writing your own future supervisor. Take it seriously.
 
 Read these in order:
+
 1. [`README.md`](./README.md) — high-level intent and phased plan
 2. [`PLAN.md`](./PLAN.md) — phase-by-phase runtime contracts and smoke tests
 3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
@@ -45,12 +46,14 @@ Phase 3 approval mode is `cooperative-gated` by default. Do not claim the orches
 The orchestrator this repo is building enforces a three-tier safety model. **You are expected to behave consistently with that model right now**, while working on the repo itself.
 
 ### Always allowed (just do it)
+
 - Read any file inside this repo
 - Run lint, type-check, test commands declared in repo config
 - Summarize, plan, propose patches
 - Read documentation
 
 ### Always require explicit human approval
+
 - Edit, create, delete files outside `worktrees/` or scratch dirs
 - `git add` / `git commit` / `git push` / `git rebase` / `git merge`
 - Create or delete branches
@@ -62,6 +65,7 @@ The orchestrator this repo is building enforces a three-tier safety model. **You
 - Modify hooks (git, husky, anything that runs on commit/push)
 
 ### Refuse outright (do not even ask)
+
 - Read `.env`, `*.pem`, `*.key`, `id_*`, anything in `~/.ssh/`, anything matching the secrets pattern
 - Force push (`--force`, `--force-with-lease`) to any branch
 - Disable git hooks or skip signing (`--no-verify`, `--no-gpg-sign`)
@@ -104,27 +108,32 @@ The controller exposes approvals on the task detail page. Diffs and configured t
 ## Conventions
 
 ### Branches
+
 - Feature: `agent/<linear-id>-<slug>` (e.g., `agent/tsh-79-worktree-approval-gates`)
 - Docs: `docs/<slug>` (e.g., `docs/phase-3-handoff-cleanup`)
 - Never commit directly to `main` unless the human explicitly asks for a direct docs-only update. Prefer a PR.
 
 ### Commits
+
 - Imperative mood ("Add X", "Fix Y", not "Added").
 - Reference Linear issue ID in body when relevant: `Refs: TSH-79`.
 - Small, focused commits. Don't pile unrelated changes into one.
 
 ### Code
+
 - TypeScript everywhere on the orchestrator and controller.
 - NestJS modules map 1:1 to source folders.
 - One adapter per agent. Adapters implement the runtime interface in `src/agents/agent-adapter.interface.ts` and keep the architecture docs in sync.
 
 ### Tests
+
 - Tests live next to the code (`module.ts` + `module.spec.ts`) or in `test/` for e2e/integration coverage.
 - Phase 1 and Phase 2 have automated tests for the REST service layer, WebSocket gateway, input endpoint, and Codex PTY behavior.
 - Phase 3 should add deterministic tests around worktree creation, policy classification, approval lifecycle, blocked actions, and WebSocket approval prompts.
 - Tests must be deterministic and isolated. A test that hits production endpoints is **NEEDS_APPROVAL**, not a real test.
 
 ### Docs
+
 - Source-of-truth diagrams live in `docs/diagrams.md` as Mermaid. GitHub renders them natively.
 - Architecture decisions go into `docs/ARCHITECTURE.md`, not into commit messages.
 - Update `docs/` in the same PR as the code change. No "I'll update docs later" PRs.
@@ -134,6 +143,7 @@ The controller exposes approvals on the task detail page. Diffs and configured t
 ## Working with Linear
 
 Every meaningful task should be linked to a Linear issue. The Linear issue ID belongs in:
+
 - The PR title (e.g., `[TSH-79] Add worktree isolation and approval gates`)
 - The branch name (`agent/tsh-79-...`)
 - The commit body (`Refs: TSH-79`)

@@ -110,6 +110,7 @@ Also add `ClaudeCodeAdapter` to the `providers` array.
 ### 4. Add unit tests
 
 Create `src/agents/<name>.adapter.spec.ts`. Test at minimum:
+
 - `startTask` calls `onOutput` with chunks from the PTY
 - `startTask` calls `onExit` when the process exits
 - `stop` kills the process
@@ -136,7 +137,7 @@ Create `src/agents/<name>.adapter.spec.ts`. Test at minimum:
 
 ### opencode
 
-- Binary: `opencode` (after install from https://opencode.ai)
+- Binary: `opencode` (after install from <https://opencode.ai>)
 - Supports multiple providers (Anthropic, OpenAI, local models) via config
 - Check its CLI flags for non-interactive / headless mode
 - May require a different PTY setup if it uses an alternate terminal protocol
@@ -144,6 +145,7 @@ Create `src/agents/<name>.adapter.spec.ts`. Test at minimum:
 ### Custom / local agents
 
 Any process that:
+
 1. Accepts a prompt on stdin or as a CLI argument
 2. Writes output to stdout
 3. Exits when done

@@ -14,7 +14,12 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "lint:md": "markdownlint '**/*.md' --ignore node_modules --ignore controller/node_modules --ignore .remember",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.md": "markdownlint --fix"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.18",
@@ -39,7 +44,10 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0",
     "@types/supertest": "^7.2.0",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
+    "lint-staged": "^17.0.4",
+    "markdownlint-cli": "^0.48.0",
     "prisma": "^7.8.0",
     "socket.io-client": "^4.8.3",
     "source-map-support": "^0.5.21",

@@ -50,6 +50,7 @@ A session transitions to `dormant` only when **all** of these are true:
 The safety gate is implemented in `CheckpointsService.canTransitionToDormant()`.
 
 On dormant transition:
+
 1. A `SessionCheckpoint` is captured with real task/worktree/approval/diff data
 2. Session and task status update to `dormant`
 3. `session.dormant` WebSocket event is emitted
@@ -110,6 +111,7 @@ Checkpoints are captured at these meaningful boundaries:
 ## Controller UI
 
 Dormant sessions are visible in:
+
 - **Dashboard** — shows `dormant` badge (purple)
 - **Task detail** — dormant banner with worktree info, checkpoint timestamp,
   latest diff/test summaries, and a Resume button

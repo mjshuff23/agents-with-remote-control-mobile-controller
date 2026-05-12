@@ -15,6 +15,7 @@ Every action the orchestrator can reliably broker is classified before execution
 Read-only or scoped-to-this-task work that cannot damage anything outside the worktree.
 
 Examples:
+
 - Read repository files inside the worktree
 - Inspect `git status`, `git log`, `git diff` (worktree-scoped)
 - Run configured test commands
@@ -30,6 +31,7 @@ Behavior: execute, append to `AuditLog`, no controller prompt.
 Anything that mutates state — locally, in the repo, or externally.
 
 Examples:
+
 - Edit, create, or delete files in the worktree
 - Install / update / remove packages (`npm`, `pnpm`, `pip`, `cargo`, etc.)
 - Run database migrations
@@ -48,6 +50,7 @@ Behavior: emit `approval.requested` over WebSocket -> controller renders an appr
 Actions where the cost of a mistaken approval is too high to ever ask casually.
 
 Examples:
+
 - Read `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, or any file matching the secrets pattern
 - `git push --force` to a protected branch
 - `git push --force-with-lease` to `main` / `master` / `release/*`
@@ -86,6 +89,7 @@ arc.config.json
 ```
 
 This means:
+
 - Tuning the policy doesn't require redeploying the orchestrator.
 - Per-repo overrides are possible by changing `ARC_POLICY_PATH`.
 - Configured test runs are time-bounded by `ARC_TEST_COMMAND_TIMEOUT_MS`, with optional per-command `timeoutMs` overrides.
