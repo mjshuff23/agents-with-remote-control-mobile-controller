@@ -42,6 +42,7 @@ export function useTaskDetail(id: string) {
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
 
   const denyMessagesRef = useRef(denyMessages);
+  // eslint-disable-next-line react-hooks/refs
   denyMessagesRef.current = denyMessages;
 
   const seqRef = useRef(0);

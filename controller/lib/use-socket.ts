@@ -38,7 +38,6 @@ function getSocket(): Socket {
       if (process.env.NODE_ENV === 'production') {
         throw new Error(msg);
       } else {
-        // eslint-disable-next-line no-console
         console.error(msg);
       }
     }
@@ -96,8 +95,11 @@ export interface TaskSocketHandlers {
  *                   test, and reconnect events.
  */
 export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): void {
-  // Keep handlers ref stable so the effect doesn't re-run on every render
+  // Keep handlers ref stable so the effect doesn't re-run on every render.
+  // We intentionally update ref.current during render so that any socket
+  // events emitted between render and the next effect fire the latest handlers.
   const ref = useRef(handlers);
+  // eslint-disable-next-line react-hooks/refs
   ref.current = handlers;
 
   useEffect(() => {
