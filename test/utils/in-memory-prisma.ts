@@ -60,6 +60,11 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
       return rowValue === value;
     }
 
+    if (value instanceof Date) {
+      const rowDate = new Date(rowValue as string | number | Date);
+      return rowDate.getTime() === value.getTime();
+    }
+
     if ('in' in value) {
       if (!Array.isArray(value.in)) {
         throw new Error(`Unsupported where condition for "${key}": "in" operator requires an array`);
@@ -186,7 +191,7 @@ export const createInMemoryPrisma = () => {
      */
     findMany: jest.fn(async ({ where, orderBy, take }: { where?: Row; orderBy?: Record<string, 'asc' | 'desc'>; take?: number } = {}) => {
       const ordered = orderRows(rows.filter((candidate) => matchesWhere(candidate, where)), orderBy);
-      return typeof take === 'number' ? ordered.slice(0, take) : ordered;
+      return typeof take === 'number' && take > 0 ? ordered.slice(0, take) : ordered;
     })
   });
 
