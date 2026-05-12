@@ -81,7 +81,9 @@ export class TasksService {
       worktree = await this.worktrees.createForTask({
         taskId: draft.id,
         title: input.title,
-        prompt: input.prompt
+        prompt: input.prompt,
+        externalIssueRef: input.externalIssueRef ?? null,
+        baseRef: input.baseRef ?? null,
       });
     } catch (error) {
       await this.prisma.task.update({

@@ -158,7 +158,9 @@ describe('TasksService', () => {
     expect(worktrees.createForTask).toHaveBeenCalledWith({
       taskId: task.id,
       title: 'Demo',
-      prompt: 'Say hello'
+      prompt: 'Say hello',
+      externalIssueRef: null,
+      baseRef: null,
     });
     expect(prisma.task.update).toHaveBeenCalledWith({
       where: { id: task.id },
