@@ -227,13 +227,36 @@ function computeRiskFlags(paths: string[], topFiles: Array<{ path: string; inser
   const flags = new Set<string>();
   for (const filePath of paths) {
     const lower = filePath.toLowerCase();
-    if (lower.includes('lock') || lower.endsWith('pnpm-lock.yaml') || lower.endsWith('package-lock.json')) flags.add('lockfile_changed');
-    if (lower.includes('migration') || lower.includes('prisma/migrations')) flags.add('migration_changed');
-    // Check for CI/workflow files: .github/, .gitlab-ci, .circleci, Jenkinsfile, etc.
-    if (lower.includes('.github/') || lower.includes('.gitlab-ci') || lower.includes('.circleci') || lower.includes('jenkinsfile') || lower.includes('workflow')) flags.add('ci_or_config_changed');
-    if (lower.includes('auth') || lower.includes('credential') || lower.includes('secret') || lower.includes('token') || lower.includes('password')) flags.add('secret_or_auth_shaped_path');
-    if (lower.endsWith('.env') || lower.includes('.env.')) flags.add('blocked_secret_path_changed');
+    
+    // Lockfile: match specific lockfile names or paths ending with lock-related extensions
+    if (/^.*\/(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|composer\.lock)$/.test(lower) ||
+        /^(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|composer\.lock)$/.test(lower)) {
+      flags.add('lockfile_changed');
+    }
+    
+    // Migration: match prisma/migrations or migration-related paths
+    if (/prisma\/migrations/.test(lower) || /\/migrations\//.test(lower)) {
+      flags.add('migration_changed');
+    }
+    
+    // CI/workflow: match repo-level CI config files and directories
+    if (/^\.github\//.test(lower) || /^\.gitlab-ci\.yml$/.test(lower) || 
+        /^\.circleci\//.test(lower) || /^jenkinsfile$/i.test(lower) ||
+        /^\.github\/workflows\//.test(lower)) {
+      flags.add('ci_or_config_changed');
+    }
+    
+    // Secret/auth: match paths with auth/credential/secret/token/password keywords
+    if (/auth|credential|secret|token|password/.test(lower)) {
+      flags.add('secret_or_auth_shaped_path');
+    }
+    
+    // Blocked secret path: match .env files
+    if (/^\.env$/.test(lower) || /^\.env\./.test(lower)) {
+      flags.add('blocked_secret_path_changed');
+    }
   }
+  
   if (topFiles.some((file) => file.deletions > 0)) flags.add('deletions_present');
   if (topFiles.reduce((sum, file) => sum + file.insertions + file.deletions, 0) > 1000) flags.add('large_diff');
   return [...flags];

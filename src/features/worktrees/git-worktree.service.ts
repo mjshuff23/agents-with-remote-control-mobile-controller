@@ -70,6 +70,12 @@ export class GitWorktreeService {
     // Resolve base ref: explicit > current HEAD branch
     const headBranch = (await this.gitCommands.git(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
     const baseRef = (input.baseRef?.trim()) || headBranch || 'HEAD';
+    
+    // Validate baseRef to prevent option-like input from being interpreted as git flags
+    if (baseRef.startsWith('-')) {
+      throw new Error(`Invalid baseRef: "${baseRef}" looks like a git option`);
+    }
+    
     // Resolve baseCommit from the chosen baseRef, not always from HEAD
     const baseCommit = (await this.gitCommands.git(repoPath, ['rev-parse', baseRef])).stdout.trim();
 
@@ -127,12 +133,21 @@ export class GitWorktreeService {
       branchName = candidateName;
       await this.gitCommands.git(repoPath, ['worktree', 'add', worktreePath, branchName]);
     } else {
-      // Branch doesn't exist yet. Use the candidate name directly.
-      // If two tasks share the same issue key and both try to create the branch
-      // simultaneously, the second will fail at git level; the caller can retry
-      // with a collision suffix if needed.
+      // Branch doesn't exist yet. Try to create with the candidate name.
+      // If a race occurs and the branch is created by another task, retry with a collision suffix.
       branchName = candidateName;
-      await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
+      try {
+        await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
+      } catch (error) {
+        // Check if the error is due to branch already existing (race condition)
+        if (error instanceof Error && error.message.includes('already exists')) {
+          // Resolve a unique branch name with collision suffix
+          branchName = await this.resolveUniqueBranchName(repoPath, candidateName);
+          await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
+        } else {
+          throw error;
+        }
+      }
     }
 
     await this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
@@ -168,6 +183,11 @@ export class GitWorktreeService {
     });
 
     if (policy === 'keep') {
+      // Emit completion event even when keeping the worktree
+      await this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_completed', 'git', 'info', {
+        worktreePath,
+        branchName,
+      });
       return;
     }
 

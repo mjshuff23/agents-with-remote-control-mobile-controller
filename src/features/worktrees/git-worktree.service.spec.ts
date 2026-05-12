@@ -265,12 +265,12 @@ describe('GitWorktreeService', () => {
     expect(events.emitEnvelopeToTask).toHaveBeenCalledWith('task-1', 'worktree.cleanup_completed', 'git', 'info', expect.any(Object));
   });
 
-  it('skips git commands and does not emit completed event with keep policy', async () => {
+  it('emits cleanup_completed event even with keep policy', async () => {
     await service.removeWorktree('task-1', '/wt/path', 'agent/task-1-demo', 'keep');
 
     expect(git.git).not.toHaveBeenCalled();
     expect(events.emitEnvelopeToTask).toHaveBeenCalledWith('task-1', 'worktree.cleanup_requested', 'git', 'info', expect.any(Object));
-    expect(events.emitEnvelopeToTask).not.toHaveBeenCalledWith('task-1', 'worktree.cleanup_completed', expect.anything(), expect.anything(), expect.anything());
+    expect(events.emitEnvelopeToTask).toHaveBeenCalledWith('task-1', 'worktree.cleanup_completed', 'git', 'info', expect.any(Object));
   });
 
   it('still emits cleanup_completed even if worktree remove fails', async () => {
