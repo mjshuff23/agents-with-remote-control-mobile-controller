@@ -26,7 +26,11 @@ const orderRows = <T extends Row>(rows: T[], orderBy?: Record<string, 'asc' | 'd
   if (!orderBy) {
     return [...rows];
   }
-  const [[field, direction]] = Object.entries(orderBy);
+  const entries = Object.entries(orderBy);
+  if (entries.length === 0) {
+    return [...rows];
+  }
+  const [[field, direction]] = entries;
   return [...rows].sort((a, b) => {
     const left = a[field] as Date | number | string;
     const right = b[field] as Date | number | string;
