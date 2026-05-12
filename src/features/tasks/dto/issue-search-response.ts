@@ -4,7 +4,7 @@ export interface NormalizedIssue {
   externalId: string;
   key: string;
   title: string;
-  url: string;
+  url?: string;
   state: string;
   labels: string[];
   body?: string;

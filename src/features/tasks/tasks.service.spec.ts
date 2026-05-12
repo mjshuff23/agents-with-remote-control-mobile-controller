@@ -24,6 +24,7 @@ describe('TasksService', () => {
     baseRef: null,
     baseCommit: null,
     approvalMode: 'cooperative-gated',
+    externalIssueRef: null,
     createdAt: new Date('2026-05-10T12:00:00.000Z'),
     updatedAt: new Date('2026-05-10T12:00:00.000Z')
   };
@@ -150,7 +151,8 @@ describe('TasksService', () => {
         prompt: 'Say hello',
         status: 'queued',
         selectedAgent: 'codex',
-        repoPath: '/repo'
+        repoPath: '/repo',
+        externalIssueRef: null,
       }
     });
     expect(worktrees.createForTask).toHaveBeenCalledWith({
@@ -171,7 +173,7 @@ describe('TasksService', () => {
     });
     expect(agentSessions.createAndStart).toHaveBeenCalledWith(worktreeTask);
     expect(prisma.task.findUnique).toHaveBeenCalledWith({ where: { id: task.id } });
-    expect(result).toEqual({ task: runningTask, session });
+    expect(result).toEqual({ task: { ...runningTask, externalIssueRef: null }, session });
   });
 
   it('returns task details with the latest session and a bounded log tail', async () => {

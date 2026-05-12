@@ -12,14 +12,20 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { CreateTaskDto } from './dto/create-task.dto';
+import type { ExternalIssueRef } from '../providers/provider.types';
+
+/** Task row with `externalIssueRef` parsed to a typed object instead of a raw JSON string. */
+export type TaskWithParsedRef = Omit<Task, 'externalIssueRef'> & {
+  externalIssueRef: ExternalIssueRef | null;
+};
 
 export interface CreateTaskResult {
-  task: Task;
+  task: TaskWithParsedRef;
   session: AgentSession;
 }
 
 export interface TaskDetails {
-  task: Task;
+  task: TaskWithParsedRef;
   session: AgentSession | null;
   logs: AgentLog[];
   events: TaskEventEnvelope[];
@@ -31,7 +37,7 @@ export interface TaskDetails {
 }
 
 export interface TaskReplay {
-  task: Task;
+  task: TaskWithParsedRef;
   session: AgentSession | null;
   logs: AgentLog[];
   events: TaskEventEnvelope[];
@@ -67,7 +73,7 @@ export class TasksService {
         status: 'queued',
         selectedAgent: input.agent,
         repoPath: this.config.repoPath,
-        externalIssueRef: input.externalIssueRef ? JSON.stringify(input.externalIssueRef) : undefined,
+        externalIssueRef: input.externalIssueRef ? JSON.stringify(input.externalIssueRef) : null,
       }
     });
     let worktree: WorktreeResult;
@@ -104,17 +110,17 @@ export class TasksService {
     await this.events?.emitCompatibilityEventToTask(task.id, 'task.started', 'lifecycle', 'info', { taskId: task.id, task, session }, {
       sessionId: session.id
     });
-    return { task, session };
+    return { task: parseTask(task), session };
   }
 
   /** List the 50 most recent tasks. */
-  async listTasks(): Promise<{ tasks: Task[] }> {
+  async listTasks(): Promise<{ tasks: TaskWithParsedRef[] }> {
     const tasks = await this.prisma.task.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50
     });
 
-    return { tasks };
+    return { tasks: tasks.map(parseTask) };
   }
 
   /**
@@ -156,7 +162,7 @@ export class TasksService {
     ]);
 
     return {
-      task,
+      task: parseTask(task),
       session,
       logs: logs.reverse(),
       events: [],
@@ -192,7 +198,7 @@ export class TasksService {
     const eventCursor = replay.events.reduce((max, event) => Math.max(max, event.seq), options.afterEventSeq ?? 0);
 
     return {
-      task,
+      task: parseTask(task),
       session,
       logs: replay.logs,
       events: replay.events,
@@ -271,4 +277,17 @@ export class TasksService {
     }
     return task;
   }
+}
+
+/** Parse the raw Prisma Task into a TaskWithParsedRef, deserializing the JSON externalIssueRef column. */
+function parseTask(task: Task): TaskWithParsedRef {
+  let externalIssueRef: ExternalIssueRef | null = null;
+  if (task.externalIssueRef) {
+    try {
+      externalIssueRef = JSON.parse(task.externalIssueRef) as ExternalIssueRef;
+    } catch {
+      // malformed JSON — treat as absent
+    }
+  }
+  return { ...task, externalIssueRef };
 }

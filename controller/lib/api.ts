@@ -1,5 +1,15 @@
 const API_BASE = '/api';
 
+export type IssueProvider = 'github' | 'linear';
+
+export interface ExternalIssueRef {
+  provider: IssueProvider;
+  externalId: string;
+  key: string;
+  url?: string;
+  title?: string;
+}
+
 export interface Task {
   id: string;
   title: string | null;
@@ -12,7 +22,7 @@ export interface Task {
   baseRef: string | null;
   baseCommit: string | null;
   approvalMode: string;
-  externalIssueRef: string | null;
+  externalIssueRef: ExternalIssueRef | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -349,25 +359,15 @@ export function restoreTask(id: string): Promise<{ restored: boolean; session: S
 
 // ── Issue search ──────────────────────────────────────────────────────────────
 
-export type IssueProvider = 'github' | 'linear';
-
 export interface NormalizedIssue {
   provider: IssueProvider;
   externalId: string;
   key: string;
   title: string;
-  url: string;
+  url?: string;
   state: string;
   labels: string[];
   body?: string;
-}
-
-export interface ExternalIssueRef {
-  provider: IssueProvider;
-  externalId: string;
-  key: string;
-  url?: string;
-  title?: string;
 }
 
 export interface IssueSearchParams {
