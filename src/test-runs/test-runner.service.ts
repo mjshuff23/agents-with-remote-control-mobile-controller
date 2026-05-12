@@ -69,7 +69,7 @@ export class TestRunnerService {
       }
     });
 
-    this.events.emitEnvelopeToTask(taskId, 'test.started', 'test', 'info', {
+    await this.events.emitEnvelopeToTask(taskId, 'test.started', 'test', 'info', {
       id: row.id,
       commandId: command.id,
       label: command.label,
@@ -144,7 +144,7 @@ export class TestRunnerService {
       if (highlights.length < 20) {
         highlights.push(...content.split(/\r?\n/).filter(Boolean).slice(0, 20 - highlights.length));
       }
-      this.events.emitEnvelopeToTask(taskId, 'test.log', 'test', stream === 'stderr' ? 'warn' : 'info', {
+      void this.events.emitEnvelopeToTask(taskId, 'test.log', 'test', stream === 'stderr' ? 'warn' : 'info', {
         testRunId,
         stream,
         content
@@ -171,7 +171,7 @@ export class TestRunnerService {
         highlightsJson: JSON.stringify(highlights.slice(0, 20))
       }
     });
-    this.events.emitEnvelopeToTask(taskId, 'test.completed', 'test', status === 'passed' ? 'info' : 'error', updated, {
+    await this.events.emitEnvelopeToTask(taskId, 'test.completed', 'test', status === 'passed' ? 'info' : 'error', updated, {
       sessionId,
       correlationId: testRunId
     });

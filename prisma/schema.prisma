@@ -25,6 +25,7 @@ model Task {
   auditLogs       AuditLog[]
   changeSummaries GitChangeSummary[]
   testRuns        TestRunSummary[]
+  events          TaskEvent[]
 }
 
 model AgentSession {
@@ -45,6 +46,7 @@ model AgentSession {
   auditLogs         AuditLog[]
   changeSummaries   GitChangeSummary[]
   testRuns          TestRunSummary[]
+  events            TaskEvent[]
 
   @@index([taskId])
   @@index([status])
@@ -61,6 +63,25 @@ model AgentLog {
 
   @@unique([sessionId, sequence])
   @@index([sessionId, sequence])
+}
+
+model TaskEvent {
+  id            String        @id @default(uuid())
+  taskId        String
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId     String?
+  session       AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  seq           Int
+  name          String
+  kind          String
+  severity      String
+  correlationId String?
+  dataJson      String
+  createdAt     DateTime      @default(now())
+
+  @@unique([taskId, seq])
+  @@index([taskId, seq])
+  @@index([sessionId, seq])
 }
 
 model ApprovalRequest {

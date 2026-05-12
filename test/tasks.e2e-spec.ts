@@ -115,6 +115,48 @@ describe('Tasks API', () => {
       expect.objectContaining({ type: 'system', content: expect.stringContaining('Starting codex') }),
       expect.objectContaining({ type: 'stdout', content: 'started' })
     ]);
+    expect(response.body.runtime).toEqual(expect.objectContaining({
+      processState: 'live_process',
+      statusLabel: 'active'
+    }));
+  });
+
+  it('replays only durable events and logs after supplied cursors', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
+      .send({ prompt: 'Say hello', agent: 'codex' })
+      .expect(201);
+
+    const firstReplay = await request(app.getHttpServer())
+      .get(`/tasks/${created.body.task.id}/replay?afterEventSeq=0&afterLogSequence=0`)
+      .set('X-Controller-Secret', TEST_SECRET)
+      .expect(200);
+
+    expect(firstReplay.body.runtime).toEqual(expect.objectContaining({
+      processState: 'live_process',
+      statusLabel: 'active'
+    }));
+    expect(firstReplay.body.logs).toEqual([
+      expect.objectContaining({ sequence: 1, type: 'system' }),
+      expect.objectContaining({ sequence: 2, type: 'stdout', content: 'started' })
+    ]);
+    expect(firstReplay.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'task.started' })
+    ]));
+
+    const lastEventSeq = Math.max(...firstReplay.body.events.map((event: { seq: number }) => event.seq));
+    const secondReplay = await request(app.getHttpServer())
+      .get(`/tasks/${created.body.task.id}/replay?afterEventSeq=${lastEventSeq}&afterLogSequence=1`)
+      .set('X-Controller-Secret', TEST_SECRET)
+      .expect(200);
+
+    expect(secondReplay.body.logs).toEqual([
+      expect.objectContaining({ sequence: 2, type: 'stdout', content: 'started' })
+    ]);
+    expect(secondReplay.body.events).toEqual([]);
+    expect(prisma.agentLog.create).toHaveBeenCalledTimes(2);
+    expect(prisma.taskEvent.create).toHaveBeenCalledTimes(1);
   });
 
   it('lists recent tasks newest first', async () => {

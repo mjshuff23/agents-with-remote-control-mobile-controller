@@ -6,6 +6,7 @@ import {
   denyAction,
   getTask,
   listTestCommands,
+  replayTask,
   runTest,
   sendInput,
   stopTask,
@@ -14,8 +15,10 @@ import {
   type DiffSummaryResponse,
   type GitChangeSummary,
   type LogEntry,
+  type RuntimeState,
   type Session,
   type Task,
+  type TaskEventEnvelope,
   type TestCommandConfig,
   type TestRunSummary
 } from '../../../lib/api';
@@ -31,6 +34,7 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<Task | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [runtime, setRuntime] = useState<RuntimeState | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [changeSummaries, setChangeSummaries] = useState<DiffSummaryResponse[]>([]);
   const [testRuns, setTestRuns] = useState<TestRunSummary[]>([]);
@@ -41,142 +45,11 @@ export default function TaskDetailPage() {
   const [denyMessages, setDenyMessages] = useState<Record<string, string>>({});
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
   const seqRef = useRef(0);
+  const lastEventSeqRef = useRef(0);
   const syntheticSeqRef = useRef(-1);
-  const seenSeqs = useRef(new Set<number>());
+  const seenLogKeys = useRef(new Set<string>());
   const seenEvents = useRef(new Set<string>());
   const sessionIdRef = useRef<string>('');
-
-  useEffect(() => {
-    // Reset all per-task state so navigating between tasks doesn't bleed data
-    seenSeqs.current.clear();
-    seenEvents.current.clear();
-    seqRef.current = 0;
-    syntheticSeqRef.current = -1;
-    sessionIdRef.current = '';
-    setLogs([]);
-    setApprovals([]);
-    setChangeSummaries([]);
-    setTestRuns([]);
-    setTestCommands([]);
-    setSelectedTestCommandId('');
-    setTask(null);
-    setSession(null);
-
-    Promise.all([getTask(id), listTestCommands(id)])
-      .then(([details, commands]) => {
-        const { task, session, logs, approvals, changeSummaries, testRuns } = details;
-        setTask(task);
-        setSession(session);
-        setApprovals(approvals);
-        setChangeSummaries(changeSummaries.map(normalizeStoredDiffSummary));
-        setTestRuns(testRuns);
-        setTestCommands(commands.testCommands);
-        setSelectedTestCommandId(commands.testCommands[0]?.id ?? '');
-        sessionIdRef.current = session?.id ?? '';
-        setLogs(logs);
-        if (logs.length > 0) {
-          const maxSeq = Math.max(...logs.map((l) => l.sequence));
-          seqRef.current = maxSeq;
-          logs.forEach((l) => seenSeqs.current.add(l.sequence));
-        }
-      })
-      .catch(console.error);
-  }, [id]);
-
-  // Re-sync task state after a socket reconnect or tab visibility restore.
-  // Events emitted while the socket was disconnected are permanently lost,
-  // so we re-fetch from REST and merge any missed data.
-  function resyncTask() {
-    void Promise.all([getTask(id), listTestCommands(id)])
-      .then(([{ task: t, session: s, logs: freshLogs, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns }, commands]) => {
-        setTask(t);
-        setSession(s);
-        setLogs((prev) => {
-          const known = new Set(prev.filter(isServerLog).map((l) => l.sequence));
-          const missed = freshLogs.filter((l) => !known.has(l.sequence));
-          missed.forEach((l) => seenSeqs.current.add(l.sequence));
-          if (missed.length === 0) return prev;
-          return [...prev, ...missed].sort(compareLogs);
-        });
-        setApprovals(fresh);
-        setChangeSummaries(freshSummaries.map(normalizeStoredDiffSummary));
-        setTestRuns(freshRuns);
-        setTestCommands(commands.testCommands);
-        setSelectedTestCommandId((current) =>
-          commands.testCommands.some((command) => command.id === current)
-            ? current
-            : commands.testCommands[0]?.id ?? ''
-        );
-      })
-      .catch(() => {});
-  }
-
-  useTaskSocket(id, {
-    onLog: (data) => {
-      const seq = data.sequence;
-      if (seenSeqs.current.has(seq)) return;
-      seenSeqs.current.add(seq);
-      seqRef.current = Math.max(seqRef.current, seq);
-      setLogs((prev) => [
-        ...prev,
-        {
-          id: `ws-${seq}`,
-          sessionId: sessionIdRef.current,
-          type: data.type,
-          sequence: seq,
-          content: data.content,
-          createdAt: new Date().toISOString()
-        }
-      ]);
-    },
-    onCompleted: (data) => {
-      setTask((prev) => (prev ? { ...prev, status: data.status } : null));
-      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
-    },
-    onApprovalRequested: (event) => {
-      if (markEventSeen(event.id)) return;
-      upsertApproval(event.data);
-    },
-    onApprovalResolved: (event) => {
-      if (markEventSeen(event.id)) return;
-      upsertApproval(event.data);
-    },
-    onPolicyViolation: (event) => {
-      if (markEventSeen(event.id)) return;
-      upsertApproval(event.data);
-      appendSyntheticLog('system', `Policy violation: ${event.data.title}`);
-    },
-    onDiffSummary: (event) => {
-      if (markEventSeen(event.id)) return;
-      setChangeSummaries((prev) => [event.data, ...prev.filter((summary) => summary.id !== event.data.id)].slice(0, 10));
-    },
-    onTestStarted: (event) => {
-      if (markEventSeen(event.id)) return;
-      appendSyntheticLog('system', `Test started: ${event.data.commandId}`);
-    },
-    onTestLog: (event) => {
-      if (markEventSeen(event.id)) return;
-      appendSyntheticLog('system', `[${event.data.stream}] ${event.data.content}`);
-    },
-    onTestCompleted: (event) => {
-      if (markEventSeen(event.id)) return;
-      setTestRuns((prev) => [event.data, ...prev.filter((run) => run.id !== event.data.id)].slice(0, 10));
-      appendSyntheticLog('system', `Test ${event.data.status}: ${event.data.commandId}`);
-    },
-    onReconnected: resyncTask
-  });
-
-  // Re-sync when the tab/app becomes visible again (mobile backgrounding
-  // can silently drop the WebSocket and we miss events while hidden).
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') resyncTask();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  // resyncTask captures stable refs; id is the only meaningful dependency
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
 
   function markEventSeen(eventId: string): boolean {
     if (seenEvents.current.has(eventId)) {
@@ -190,6 +63,11 @@ export default function TaskDetailPage() {
       }
     }
     return false;
+  }
+
+  function recordServerLog(log: Pick<LogEntry, 'sessionId' | 'sequence'>) {
+    seenLogKeys.current.add(serverLogKey(log.sessionId, log.sequence));
+    seqRef.current = Math.max(seqRef.current, log.sequence);
   }
 
   function appendSyntheticLog(type: string, content: string) {
@@ -211,6 +89,220 @@ export default function TaskDetailPage() {
   function upsertApproval(approval: ApprovalRequest) {
     setApprovals((prev) => [approval, ...prev.filter((item) => item.id !== approval.id)].slice(0, 50));
   }
+
+  function appendServerLogs(nextLogs: LogEntry[]) {
+    setLogs((prev) => {
+      const missed = nextLogs.filter((log) => {
+        const key = serverLogKey(log.sessionId, log.sequence);
+        if (seenLogKeys.current.has(key)) return false;
+        recordServerLog(log);
+        return true;
+      });
+      if (missed.length === 0) return prev;
+      return [...prev, ...missed].sort(compareLogs);
+    });
+  }
+
+  function applyTaskEvent(event: TaskEventEnvelope) {
+    lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+    if (markEventSeen(event.id)) return;
+
+    if (event.name === 'agent.log') return;
+    if (event.name === 'approval.requested' || event.name === 'approval.resolved') {
+      upsertApproval(event.data as ApprovalRequest);
+      return;
+    }
+    if (event.name === 'policy.violation') {
+      const approval = event.data as ApprovalRequest;
+      upsertApproval(approval);
+      appendSyntheticLog('system', `Policy violation: ${approval.title}`);
+      return;
+    }
+    if (event.name === 'diff.summary') {
+      const summary = event.data as DiffSummaryResponse;
+      setChangeSummaries((prev) => [summary, ...prev.filter((item) => item.id !== summary.id)].slice(0, 10));
+      return;
+    }
+    if (event.name === 'test.started') {
+      appendSyntheticLog('system', `Test started: ${(event.data as { commandId: string }).commandId}`);
+      return;
+    }
+    if (event.name === 'test.log') {
+      const data = event.data as { stream: string; content: string };
+      appendSyntheticLog('system', `[${data.stream}] ${data.content}`);
+      return;
+    }
+    if (event.name === 'test.completed') {
+      const run = event.data as TestRunSummary;
+      setTestRuns((prev) => [run, ...prev.filter((item) => item.id !== run.id)].slice(0, 10));
+      appendSyntheticLog('system', `Test ${run.status}: ${run.commandId}`);
+      return;
+    }
+    if (event.name === 'task.started') {
+      const data = event.data as { task?: Task; session?: Session };
+      if (data.task) setTask(data.task);
+      if (data.session) setSession(data.session);
+      return;
+    }
+    if (event.name === 'task.completed') {
+      const data = event.data as { exitCode: number; status: string };
+      setTask((prev) => (prev ? { ...prev, status: data.status } : prev));
+      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
+      setRuntime({
+        processState: 'terminal',
+        statusLabel: data.status === 'failed' ? 'failed' : data.status === 'stopped' ? 'stopped' : 'completed'
+      });
+    }
+  }
+
+  function applyReplay(replay: { events: TaskEventEnvelope[]; logs: LogEntry[] }) {
+    appendServerLogs(replay.logs);
+    replay.events.forEach(applyTaskEvent);
+  }
+
+  useEffect(() => {
+    // Reset all per-task state so navigating between tasks doesn't bleed data
+    seenLogKeys.current.clear();
+    seenEvents.current.clear();
+    seqRef.current = 0;
+    lastEventSeqRef.current = 0;
+    syntheticSeqRef.current = -1;
+    sessionIdRef.current = '';
+    Promise.all([getTask(id), listTestCommands(id)])
+      .then(([details, commands]) => {
+        const { task, session, logs, approvals, changeSummaries, testRuns, runtime, eventCursor } = details;
+        setTask(task);
+        setSession(session);
+        setRuntime(runtime);
+        setApprovals(approvals);
+        setChangeSummaries(changeSummaries.map(normalizeStoredDiffSummary));
+        setTestRuns(testRuns);
+        setTestCommands(commands.testCommands);
+        setSelectedTestCommandId(commands.testCommands[0]?.id ?? '');
+        sessionIdRef.current = session?.id ?? '';
+        lastEventSeqRef.current = eventCursor;
+        setLogs(logs);
+        if (logs.length > 0) {
+          const maxSeq = Math.max(...logs.map((l) => l.sequence));
+          seqRef.current = maxSeq;
+          logs.forEach(recordServerLog);
+        }
+      })
+      .catch(console.error);
+  }, [id]);
+
+  // Re-sync task state after a socket reconnect or tab visibility restore by
+  // asking the durable event/log ledger for anything after our last cursors.
+  function resyncTask() {
+    void Promise.all([
+      replayTask(id, {
+        afterEventSeq: lastEventSeqRef.current,
+        afterLogSequence: seqRef.current
+      }),
+      getTask(id),
+      listTestCommands(id)
+    ])
+      .then(([replay, details, commands]) => {
+        const { task: t, session: s, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns, runtime: nextRuntime } = details;
+        setTask(t);
+        setSession(s);
+        setRuntime(nextRuntime);
+        applyReplay(replay);
+        setApprovals(fresh);
+        setChangeSummaries(freshSummaries.map(normalizeStoredDiffSummary));
+        setTestRuns(freshRuns);
+        setTestCommands(commands.testCommands);
+        setSelectedTestCommandId((current) =>
+          commands.testCommands.some((command) => command.id === current)
+            ? current
+            : commands.testCommands[0]?.id ?? ''
+        );
+      })
+      .catch(() => {});
+  }
+
+  useTaskSocket(id, {
+    onLog: (data) => {
+      const seq = data.sequence;
+      const liveSessionId = data.sessionId ?? sessionIdRef.current;
+      if (seenLogKeys.current.has(serverLogKey(liveSessionId, seq))) return;
+      setLogs((prev) => [
+        ...prev,
+        {
+          id: `ws-${seq}`,
+          sessionId: liveSessionId,
+          type: data.type,
+          sequence: seq,
+          content: data.content,
+          createdAt: new Date().toISOString()
+        }
+      ]);
+      recordServerLog({ sessionId: liveSessionId, sequence: seq });
+    },
+    onCompleted: (data) => {
+      setTask((prev) => (prev ? { ...prev, status: data.status } : null));
+      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
+      setRuntime({
+        processState: 'terminal',
+        statusLabel: data.status === 'failed' ? 'failed' : data.status === 'stopped' ? 'stopped' : 'completed'
+      });
+    },
+    onApprovalRequested: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      upsertApproval(event.data);
+    },
+    onApprovalResolved: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      upsertApproval(event.data);
+    },
+    onPolicyViolation: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      upsertApproval(event.data);
+      appendSyntheticLog('system', `Policy violation: ${event.data.title}`);
+    },
+    onDiffSummary: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      setChangeSummaries((prev) => [event.data, ...prev.filter((summary) => summary.id !== event.data.id)].slice(0, 10));
+    },
+    onTestStarted: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      appendSyntheticLog('system', `Test started: ${event.data.commandId}`);
+    },
+    onTestLog: (event) => {
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      if (markEventSeen(event.id)) return;
+      appendSyntheticLog('system', `[${event.data.stream}] ${event.data.content}`);
+    },
+    onTestCompleted: (event) => {
+      if (markEventSeen(event.id)) return;
+      lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+      setTestRuns((prev) => [event.data, ...prev.filter((run) => run.id !== event.data.id)].slice(0, 10));
+      appendSyntheticLog('system', `Test ${event.data.status}: ${event.data.commandId}`);
+    },
+    getReplayCursor: () => ({
+      afterEventSeq: lastEventSeqRef.current,
+      afterLogSequence: seqRef.current
+    }),
+    onReplay: applyReplay,
+    onReconnected: resyncTask
+  });
+
+  // Re-sync when the tab/app becomes visible again (mobile backgrounding
+  // can silently drop the WebSocket and we miss events while hidden).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') resyncTask();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  // resyncTask captures stable refs; id is the only meaningful dependency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   async function handleStop() {
     setActionError(null);
@@ -292,7 +384,9 @@ export default function TaskDetailPage() {
     }
   }
 
-  const isLive = task?.status === 'running' || task?.status === 'starting' || task?.status === 'waiting_approval';
+  const isLive = runtime?.processState === 'live_process' && (
+    runtime.statusLabel === 'active' || runtime.statusLabel === 'waiting_approval'
+  );
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending');
 
   // Safety-net poll: if the task is waiting for approval but the UI has no
@@ -329,7 +423,7 @@ export default function TaskDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold truncate">{task.title ?? task.prompt.slice(0, 50)}</p>
-          <p className="text-xs text-gray-400">{task.status} · {task.selectedAgent}</p>
+          <p className="text-xs text-gray-400">{task.status} · {task.selectedAgent} · {runtimeLabel(runtime)}</p>
         </div>
       </div>
 
@@ -488,6 +582,20 @@ export default function TaskDetailPage() {
   );
 }
 
+function serverLogKey(sessionId: string, sequence: number): string {
+  return `log:${sessionId}:${sequence}`;
+}
+
+function runtimeLabel(runtime: RuntimeState | null): string {
+  if (!runtime) return 'loading session';
+  const state = runtime.processState === 'live_process'
+    ? 'live process'
+    : runtime.processState === 'terminal'
+      ? 'terminal'
+      : 'DB reconstructed';
+  return `${state} · ${runtime.statusLabel}`;
+}
+
 function normalizeStoredDiffSummary(summary: GitChangeSummary): DiffSummaryResponse {
   return {
     id: summary.id,
@@ -514,10 +622,6 @@ function parseJson<T>(value: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function isServerLog(log: LogEntry): boolean {
-  return log.sequence > 0;
 }
 
 function compareLogs(a: LogEntry, b: LogEntry): number {

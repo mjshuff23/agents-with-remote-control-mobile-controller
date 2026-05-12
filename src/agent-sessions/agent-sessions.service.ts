@@ -20,6 +20,14 @@ export interface StopTaskResult {
   session: AgentSession;
 }
 
+export type RuntimeProcessState = 'live_process' | 'reconstructed' | 'terminal';
+export type RuntimeStatusLabel = 'active' | 'waiting_approval' | 'idle' | 'dormant' | 'completed' | 'failed' | 'stopped';
+
+export interface SessionRuntimeState {
+  processState: RuntimeProcessState;
+  statusLabel: RuntimeStatusLabel;
+}
+
 @Injectable()
 export class AgentSessionsService implements OnApplicationBootstrap {
   private readonly runningProcesses = new Map<string, RunningAgentProcess>();
@@ -97,6 +105,24 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         message
       );
     }
+  }
+
+  hasLiveProcess(sessionId: string): boolean {
+    return this.runningProcesses.has(sessionId);
+  }
+
+  runtimeState(session: AgentSession | null): SessionRuntimeState {
+    if (!session) {
+      return { processState: 'reconstructed', statusLabel: 'idle' };
+    }
+    const statusLabel = toRuntimeStatusLabel(session.status);
+    if (TERMINAL_SESSION_STATUSES.has(session.status)) {
+      return { processState: 'terminal', statusLabel };
+    }
+    return {
+      processState: this.hasLiveProcess(session.id) ? 'live_process' : 'reconstructed',
+      statusLabel
+    };
   }
 
   async sendInput(taskId: string, text: string): Promise<void> {
@@ -188,7 +214,14 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       });
       const taskId = this.sessionToTask.get(sessionId);
       if (taskId) {
-        this.events?.emitToTask(taskId, 'agent.log', { taskId, type, content, sequence });
+        await this.events?.emitCompatibilityEventToTask(
+          taskId,
+          'agent.log',
+          'log',
+          type === 'stderr' ? 'warn' : 'info',
+          { taskId, sessionId, type, content, sequence },
+          { sessionId }
+        );
       }
     });
 
@@ -260,12 +293,12 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       where: { id: taskId },
       data: { status: finalTaskStatus }
     });
-    this.events?.emitToTask(taskId, 'task.completed', {
+    await this.events?.emitCompatibilityEventToTask(taskId, 'task.completed', 'lifecycle', finalTaskStatus === 'failed' ? 'error' : 'info', {
       taskId,
       exitCode,
       status: finalTaskStatus,
       signal
-    });
+    }, { sessionId });
     this.clearLogState(sessionId);
   }
 
@@ -495,4 +528,14 @@ function safeProtocolBufferRemainder(last: string): string {
     return last.length <= PROTOCOL_BUFFER_LIMIT ? last : '';
   }
   return last.slice(-PROTOCOL_BUFFER_LIMIT);
+}
+
+function toRuntimeStatusLabel(status: string): RuntimeStatusLabel {
+  if (status === 'waiting_approval') return 'waiting_approval';
+  if (status === 'idle') return 'idle';
+  if (status === 'dormant') return 'dormant';
+  if (status === 'completed') return 'completed';
+  if (status === 'failed') return 'failed';
+  if (status === 'stopped') return 'stopped';
+  return 'active';
 }

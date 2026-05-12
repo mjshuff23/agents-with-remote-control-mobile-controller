@@ -40,6 +40,26 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
       return rowValue === value.equals;
     }
 
+    if ('gt' in value) {
+      const threshold = (value as { gt: number | Date | string }).gt;
+      return (rowValue as number | Date | string) > threshold;
+    }
+
+    if ('gte' in value) {
+      const threshold = (value as { gte: number | Date | string }).gte;
+      return (rowValue as number | Date | string) >= threshold;
+    }
+
+    if ('lt' in value) {
+      const threshold = (value as { lt: number | Date | string }).lt;
+      return (rowValue as number | Date | string) < threshold;
+    }
+
+    if ('lte' in value) {
+      const threshold = (value as { lte: number | Date | string }).lte;
+      return (rowValue as number | Date | string) <= threshold;
+    }
+
     throw new Error(`Unsupported where condition for "${key}": ${JSON.stringify(value)}`);
   });
 };
@@ -52,6 +72,7 @@ export const createInMemoryPrisma = () => {
   const auditLogs: Row[] = [];
   const changeSummaries: Row[] = [];
   const testRuns: Row[] = [];
+  const taskEvents: Row[] = [];
 
   const createDelegate = (rows: Row[], prefix: string) => ({
     create: jest.fn(async ({ data }: { data: Row }) => {
@@ -92,6 +113,7 @@ export const createInMemoryPrisma = () => {
     auditLog: createDelegate(auditLogs, 'audit'),
     gitChangeSummary: createDelegate(changeSummaries, 'summary'),
     testRunSummary: createDelegate(testRuns, 'testRun'),
+    taskEvent: createDelegate(taskEvents, 'event'),
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
@@ -101,7 +123,8 @@ export const createInMemoryPrisma = () => {
       approvalRequest: createDelegate(approvals, 'approval'),
       auditLog: createDelegate(auditLogs, 'audit'),
       gitChangeSummary: createDelegate(changeSummaries, 'summary'),
-      testRunSummary: createDelegate(testRuns, 'testRun')
+      testRunSummary: createDelegate(testRuns, 'testRun'),
+      taskEvent: createDelegate(taskEvents, 'event')
     }))
   };
 };

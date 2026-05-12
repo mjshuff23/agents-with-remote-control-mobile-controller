@@ -28,7 +28,7 @@ export class GitWorktreeService {
   ) {}
 
   async createForTask(input: WorktreeInput): Promise<WorktreeResult> {
-    const repoPath = this.config.repoPath;
+    const { repoPath } = this.config;
     const slug = slugify(input.title || input.prompt || input.taskId);
     const branchName = `agent/${input.taskId}-${slug}`;
     const worktreeRoot = this.config.worktreeRoot
@@ -46,7 +46,7 @@ export class GitWorktreeService {
         throw new Error(`Existing worktree at ${worktreePath} is on "${existingBranch}", expected "${branchName}"`);
       }
       const existingCommit = (await this.gitCommands.git(worktreePath, ['rev-parse', 'HEAD'])).stdout.trim() || baseCommit;
-      this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
+      await this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
         worktreePath,
         branchName,
         baseRef,
@@ -63,7 +63,7 @@ export class GitWorktreeService {
       await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
     }
 
-    this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
+    await this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
       worktreePath,
       branchName,
       baseRef,
@@ -75,11 +75,11 @@ export class GitWorktreeService {
   }
 
   async requestCleanup(taskId: string, worktreePath: string): Promise<void> {
-    this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_requested', 'git', 'info', { worktreePath });
+    await this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_requested', 'git', 'info', { worktreePath });
   }
 
   async markCleanupCompleted(taskId: string, worktreePath: string): Promise<void> {
-    this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_completed', 'git', 'info', { worktreePath });
+    await this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_completed', 'git', 'info', { worktreePath });
   }
 
   private async branchExists(repoPath: string, branchName: string): Promise<boolean> {
