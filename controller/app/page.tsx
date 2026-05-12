@@ -13,9 +13,8 @@ export default function DashboardPage() {
     let stale = false;
 
     const fetchTasks = (resetLoading?: boolean) => {
-      setError(null);
       listTasks()
-        .then(({ tasks }) => { if (!stale) { setTasks(tasks); if (resetLoading) setLoading(false); } })
+        .then(({ tasks }) => { if (!stale) { setError(null); setTasks(tasks); if (resetLoading) setLoading(false); } })
         .catch((err) => { if (!stale) { setError(err instanceof Error ? err.message : 'Failed to load tasks'); if (resetLoading) setLoading(false); } });
     };
 
