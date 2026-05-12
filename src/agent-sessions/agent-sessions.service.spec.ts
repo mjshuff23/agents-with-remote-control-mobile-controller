@@ -68,7 +68,8 @@ describe('AgentSessionsService', () => {
     transitionToDormant: jest.fn(),
     captureAtBoundary: jest.fn()
   };
-  const prisma = {
+  const prisma: any = {
+    $transaction: jest.fn(async (callback: (tx: Record<string, unknown>) => Promise<unknown>) => callback(prisma)),
     task: {
       update: jest.fn(),
       findUnique: jest.fn()
@@ -78,7 +79,8 @@ describe('AgentSessionsService', () => {
       update: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn(),
-      findMany: jest.fn()
+      findMany: jest.fn(),
+      updateMany: jest.fn()
     },
     agentLog: {
       create: jest.fn(),
@@ -98,6 +100,7 @@ describe('AgentSessionsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma.agentSession.create.mockResolvedValue(session);
+    prisma.agentSession.updateMany.mockResolvedValue({ count: 1 });
     prisma.agentLog.findFirst.mockResolvedValue(null);
     prisma.agentLog.create.mockImplementation(async ({ data }: { data: unknown }) => data);
     prisma.agentSession.update.mockImplementation(async ({ data }: { data: unknown }) => ({
@@ -301,9 +304,17 @@ describe('AgentSessionsService', () => {
   });
 
   it('rejects restore for non-dormant sessions', async () => {
+    prisma.agentSession.updateMany.mockResolvedValue({ count: 0 });
     prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'running' });
 
     await expect(service.restoreSession(session.id)).rejects.toThrow('Not Dormant');
+  });
+
+  it('rejects restore with conflict for restoring session', async () => {
+    prisma.agentSession.updateMany.mockResolvedValue({ count: 0 });
+    prisma.agentSession.findUnique.mockResolvedValue({ ...session, status: 'restoring' });
+
+    await expect(service.restoreSession(session.id)).rejects.toThrow('Restore In Progress');
   });
 
   it('reconciles waiting approval state if an approval resolves before waiting is persisted', async () => {

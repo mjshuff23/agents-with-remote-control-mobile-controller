@@ -498,11 +498,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return stopped;
   }
 
-  /** Recover sessions interrupted by orchestrator crash: stopping→stopped, starting→failed, running→dormant. */
+  /** Recover sessions interrupted by orchestrator crash. */
   private async recoverInterruptedSessions(): Promise<void> {
     const interrupted = await this.prisma.agentSession.findMany({
       where: {
-        status: { in: ['starting', 'running', 'stopping'] }
+        status: { in: ['starting', 'running', 'stopping', 'restoring'] }
       }
     });
 
@@ -530,6 +530,20 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         await this.prisma.task.update({
           where: { id: session.taskId },
           data: { status: 'failed' }
+        });
+      } else if (session.status === 'restoring') {
+        await this.appendLog(session.id, 'system', 'Session reverted to dormant (restore was interrupted by orchestrator restart)');
+        await this.prisma.agentSession.update({
+          where: { id: session.id },
+          data: {
+            status: 'dormant',
+            dormantAt: new Date(),
+            dormantReason: 'orchestrator_restart'
+          }
+        });
+        await this.prisma.task.update({
+          where: { id: session.taskId },
+          data: { status: 'dormant' }
         });
       } else {
         // running → dormant: recoverable, not failed

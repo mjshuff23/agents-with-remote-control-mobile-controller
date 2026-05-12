@@ -124,7 +124,16 @@ describe('CheckpointsService', () => {
     dormantCheckIntervalMs: 60_000
   };
 
-  const prisma = {
+  const prisma: {
+    $transaction: jest.Mock;
+    sessionCheckpoint: Record<string, jest.Mock>;
+    agentSession: Record<string, jest.Mock>;
+    task: Record<string, jest.Mock>;
+    approvalRequest: Record<string, jest.Mock>;
+    gitChangeSummary: Record<string, jest.Mock>;
+    testRunSummary: Record<string, jest.Mock>;
+  } = {
+    $transaction: jest.fn(),
     sessionCheckpoint: {
       create: jest.fn(),
       findFirst: jest.fn(),
@@ -133,7 +142,8 @@ describe('CheckpointsService', () => {
     agentSession: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
-      update: jest.fn()
+      update: jest.fn(),
+      updateMany: jest.fn()
     },
     task: {
       findUnique: jest.fn(),
@@ -166,6 +176,7 @@ describe('CheckpointsService', () => {
     prisma.approvalRequest.findMany.mockResolvedValue([]);
     prisma.gitChangeSummary.findFirst.mockResolvedValue(null);
     prisma.testRunSummary.findFirst.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
