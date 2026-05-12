@@ -156,11 +156,17 @@ export interface TaskReplayResponse {
 
 /**
  * Internal fetch wrapper that prepends the API base path, checks response
- * status, and parses JSON. Returns `undefined` for 204 responses.
+ * status, and parses JSON.
+ *
+ * - 204 No Content → returns `undefined` (cast to T for ergonomic callers).
+ * - Any non-204 response with an empty body → throws (likely a server error).
+ * - Successful response → parses and returns the JSON body as T.
  *
  * @param path - API endpoint path (appended after `/api`).
  * @param init - Optional fetch init (method, headers, body, etc.).
  * @returns Parsed JSON body, or `undefined` for 204 No Content.
+ * @throws If the server returns a non-OK status, or if a non-204 response
+ *         has an empty body.
  */
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);
@@ -170,7 +176,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  if (!text) {
+    throw new Error(`API ${init?.method ?? 'GET'} ${path} → ${res.status}: empty body`);
+  }
+  return JSON.parse(text) as T;
 }
 
 /**
