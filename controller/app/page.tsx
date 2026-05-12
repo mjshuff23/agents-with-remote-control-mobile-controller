@@ -12,15 +12,15 @@ export default function DashboardPage() {
   useEffect(() => {
     let stale = false;
 
-    listTasks()
-      .then(({ tasks }) => { if (!stale) { setTasks(tasks); setLoading(false); } })
-      .catch((err) => { if (!stale) { setError(err instanceof Error ? err.message : 'Failed to load tasks'); setLoading(false); } });
-
-    const id = setInterval(() => {
+    const fetchTasks = (resetLoading?: boolean) => {
+      setError(null);
       listTasks()
-        .then(({ tasks }) => { if (!stale) setTasks(tasks); })
-        .catch((err) => { if (!stale) setError(err instanceof Error ? err.message : 'Failed to load tasks'); });
-    }, 5_000);
+        .then(({ tasks }) => { if (!stale) { setTasks(tasks); if (resetLoading) setLoading(false); } })
+        .catch((err) => { if (!stale) { setError(err instanceof Error ? err.message : 'Failed to load tasks'); if (resetLoading) setLoading(false); } });
+    };
+
+    fetchTasks(true);
+    const id = setInterval(() => fetchTasks(), 5_000);
 
     return () => { stale = true; clearInterval(id); };
   }, []);
