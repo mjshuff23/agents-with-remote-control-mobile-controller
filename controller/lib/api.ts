@@ -165,8 +165,9 @@ export interface TaskReplayResponse {
  * @param path - API endpoint path (appended after `/api`).
  * @param init - Optional fetch init (method, headers, body, etc.).
  * @returns Parsed JSON body, or `undefined` for 204 No Content.
- * @throws If the server returns a non-OK status, or if a non-204 response
- *         has an empty body.
+ * @throws If the server returns a non-OK status — the error message contains
+ *         the HTTP method, path, status code, and response body.
+ * @throws If a non-204 response has an empty body.
  */
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);
@@ -214,7 +215,7 @@ export function replayTask(id: string, cursors: { afterEventSeq: number; afterLo
     afterEventSeq: String(cursors.afterEventSeq),
     afterLogSequence: String(cursors.afterLogSequence)
   });
-  if (cursors.limit) params.set('limit', String(cursors.limit));
+  if (cursors.limit !== undefined) params.set('limit', String(cursors.limit));
   return apiFetch(`/tasks/${id}/replay?${params.toString()}`);
 }
 
