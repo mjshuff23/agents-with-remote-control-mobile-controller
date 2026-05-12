@@ -184,6 +184,9 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_TEST_COMMAND_TIMEOUT_MS: readPositiveNumber(config, 'ARC_TEST_COMMAND_TIMEOUT_MS', 600000),
     ARC_DORMANT_TIMEOUT_MS: readPositiveNumber(config, 'ARC_DORMANT_TIMEOUT_MS', 1800000),
     ARC_DORMANT_CHECK_INTERVAL_MS: readPositiveNumber(config, 'ARC_DORMANT_CHECK_INTERVAL_MS', 60000),
-    CONTROLLER_SECRET: readOptionalString(config, 'CONTROLLER_SECRET')
+    CONTROLLER_SECRET: readOptionalString(config, 'CONTROLLER_SECRET'),
+    ARC_GITHUB_TOKEN: readOptionalString(config, 'ARC_GITHUB_TOKEN'),
+    ARC_GITHUB_OWNER: readOptionalString(config, 'ARC_GITHUB_OWNER'),
+    ARC_GITHUB_REPO: readOptionalString(config, 'ARC_GITHUB_REPO')
   };
 }

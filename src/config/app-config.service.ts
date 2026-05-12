@@ -102,6 +102,21 @@ export class AppConfigService {
     return this.emptyToUndefined(this.config.get<string>('CONTROLLER_SECRET'));
   }
 
+  /** GitHub fine-grained PAT for API access. */
+  get gitHubToken(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('ARC_GITHUB_TOKEN'));
+  }
+
+  /** Default GitHub owner/org for API requests. */
+  get gitHubOwner(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('ARC_GITHUB_OWNER'));
+  }
+
+  /** Default GitHub repository name for API requests. */
+  get gitHubRepo(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('ARC_GITHUB_REPO'));
+  }
+
   /** Return undefined for empty or whitespace-only strings. */
   private emptyToUndefined(value: string | undefined): string | undefined {
     return value && value.trim().length > 0 ? value : undefined;
