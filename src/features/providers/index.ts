@@ -31,3 +31,6 @@ export type {
 
 export { MockGitHubProvider } from './mock-github-provider';
 export { MockLinearProvider } from './mock-linear-provider';
+export { LinearProvider } from './linear-provider';
+export { resolveLinearStateId } from './linear-status-mapper';
+export type { LinearStatusMapConfig, ArcTaskStage } from './linear-status-mapper';

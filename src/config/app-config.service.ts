@@ -117,6 +117,11 @@ export class AppConfigService {
     return this.emptyToUndefined(this.config.get<string>('ARC_GITHUB_REPO'));
   }
 
+  /** Linear personal API key for issue sync. */
+  get linearToken(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('ARC_LINEAR_TOKEN'));
+  }
+
   /** Return undefined for empty or whitespace-only strings. */
   private emptyToUndefined(value: string | undefined): string | undefined {
     return value && value.trim().length > 0 ? value : undefined;

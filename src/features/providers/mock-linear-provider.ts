@@ -62,12 +62,12 @@ export class MockLinearProvider implements ILinearProvider {
     return results;
   }
 
-  async getIssue(identifier: string): Promise<LinearIssue> {
+  async getIssue(id: string): Promise<LinearIssue> {
     const issue = this.issues.find(
-      (i) => i.identifier === identifier || i.id === identifier,
+      (i) => i.identifier === id || i.id === id,
     );
     if (!issue) {
-      throw new Error(`Linear issue ${identifier} not found in mock`);
+      throw new Error(`Linear issue ${id} not found in mock`);
     }
     return issue;
   }
