@@ -1,0 +1,31 @@
+src/features/sync/sync-event.service.spec.ts
+  s_da46032282ee84::t_86665ce5c0abdd 39-42,84-86,97-99,110-111,120-122,129-131,138-140,147,153,159,165,171,177,183,195,201-203,280-281,283-284,286-288,301,315
+  s_da46032282ee84::t_89e79f6ed796b2 44-60,62,72-73,76,78,152,154-155,164,166-167,176,178-182,184-187,193-194,196-197,206,210,222-248
+  s_da46032282ee84::t_1378cfa2635736 9,90-93,103-104,198-200,204-205,278-279,282,285,289-300,302-314,316-325
+  s_da46032282ee84::t_04693b21f646ce 112
+src/features/sync/sync-event.service.ts
+  s_da46032282ee84::t_cb13dc074fa4f2 37-49,91-94,141-145,147-153,157-162,165-177,179
+  s_da46032282ee84::t_d4d5a461a3b0b8 15-27,55-57,59,62-63,65-79,105-106,110,131-135,138,154-156,163-164
+prisma/schema.prisma
+  s_da46032282ee84::t_3650e815945569 56
+  s_da46032282ee84::t_a04a1a1685909a 204,206,208-219
+  s_da46032282ee84::t_71cabd36f16c63 29
+prisma/migrations/20260512212914_add_syncevent_relations/migration.sql
+  s_da46032282ee84::t_3c6b5a5c9e842c 1-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d1bf718345040008d2f9b98bd798f804f2cf939c",
+  "prompts": {},
+  "sessions": {
+    "s_da46032282ee84": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e20b6c3effe7iNLt9gy5ocrnR",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
