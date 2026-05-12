@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ProblemException } from '../../common/errors/problem.exception';
 import { AppConfigService } from '../../config/app-config.service';
-import { EventsGateway } from '../../events/events.gateway';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { ApprovalDecision, AgentActionRequest } from '../policy/policy.types';
@@ -20,6 +19,8 @@ export interface ApprovalResponsePayload {
 
 export type WriteToAgentFn = (text: string) => void;
 
+export type AppendLogFn = (sessionId: string, message: string) => Promise<void>;
+
 @Injectable()
 export class ProtocolHandlerService {
   private readonly protocolBuffers = new Map<string, string>();
@@ -30,8 +31,7 @@ export class ProtocolHandlerService {
     private readonly prisma: PrismaService,
     private readonly approvals: ApprovalsService,
     private readonly config: AppConfigService,
-    private readonly policies: PolicyLoaderService,
-    private readonly events: EventsGateway
+    private readonly policies: PolicyLoaderService
   ) {}
 
   async handleProtocolOutput(
@@ -62,7 +62,7 @@ export class ProtocolHandlerService {
         } else {
           await this.markWaitingForApproval(taskId, sessionId);
           await this.resumeIfWaiting(taskId, sessionId);
-          void this.scheduleApprovalExpiry(result.approval.id, sessionId).catch(async (error) => {
+          void this.scheduleApprovalExpiry(result.approval.id, sessionId, appendLog).catch(async (error) => {
             await appendLog(sessionId, `Approval expiry scheduling failed: ${this.errorMessage(error)}`);
           });
         }
@@ -154,7 +154,7 @@ export class ProtocolHandlerService {
     return complete;
   }
 
-  private async scheduleApprovalExpiry(approvalId: string, sessionId: string): Promise<void> {
+  private async scheduleApprovalExpiry(approvalId: string, sessionId: string, appendLog?: AppendLogFn): Promise<void> {
     this.clearApprovalTimeout(approvalId);
     const timeoutMs = await this.approvalTimeoutMs();
     const timeout = setTimeout(() => {
@@ -164,7 +164,7 @@ export class ProtocolHandlerService {
     this.approvalTimeoutSessions.set(approvalId, sessionId);
   }
 
-  private async expireApproval(approvalId: string, sessionId: string): Promise<void> {
+  private async expireApproval(approvalId: string, sessionId: string, appendLog?: AppendLogFn): Promise<void> {
     this.clearApprovalTimeout(approvalId);
     let approval;
     try {
@@ -173,7 +173,8 @@ export class ProtocolHandlerService {
       if (error instanceof ProblemException && error.getStatus() === HttpStatus.CONFLICT) return;
       throw error;
     }
-    await this.writeApprovalResponse(undefined, () => Promise.resolve(), approval.sessionId, {
+    const logFn = appendLog ?? (() => Promise.resolve());
+    await this.writeApprovalResponse(undefined, logFn, approval.sessionId, {
       id: approval.actionRequestId,
       decision: 'expired',
       message: 'Approval timed out; expired approvals are denied.',
