@@ -8,6 +8,7 @@ import {
   WebSocketServer
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+
 import { AppConfigService } from '../config/app-config.service';
 import { ReplayTaskEventsResult, TaskEventLedgerService } from './task-event-ledger.service';
 
@@ -39,6 +40,7 @@ export interface SubscribeAck {
   replay?: ReplayTaskEventsResult;
 }
 
+/** WebSocket gateway for real-time task event streaming with auth via CONTROLLER_SECRET. */
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' } })
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
@@ -52,6 +54,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     @Optional() private readonly ledger?: TaskEventLedgerService
   ) {}
 
+  /** Log a warning if CONTROLLER_SECRET is missing so clients cannot authenticate. */
   afterInit(server: Server): void {
     this.server = server;
     if (!this.config.controllerSecret) {
@@ -62,6 +65,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     }
   }
 
+  /** Disconnect clients that fail to provide a valid controller secret token. */
   handleConnection(client: Socket): void {
     const secret = this.config.controllerSecret;
     if (!secret || client.handshake.auth.token !== secret) {
@@ -69,6 +73,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     }
   }
 
+  /** Join a task room and optionally replay missed events/logs. */
   @SubscribeMessage('subscribe')
   async subscribe(client: Socket, payload: SubscribePayload): Promise<SubscribeAck> {
     client.join(`task:${payload.taskId}`);
@@ -83,15 +88,21 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     return replay ? { ok: true, replay } : { ok: true };
   }
 
+  /** Leave a task room. */
   @SubscribeMessage('unsubscribe')
   unsubscribe(client: Socket, payload: { taskId: string }): void {
     client.leave(`task:${payload.taskId}`);
   }
 
+  /** Broadcast a raw event to all clients subscribed to a task room. */
   emitToTask(taskId: string, event: string, payload: unknown): void {
     this.server?.to(`task:${taskId}`).emit(event, payload);
   }
 
+  /**
+   * Emit an event to a task room, persisting it first. The raw `data` is
+   * emitted on the wire, not the envelope (compatibility shim for older clients).
+   */
   async emitCompatibilityEventToTask<TName extends string, TData>(
     taskId: string,
     name: TName,
@@ -105,6 +116,10 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     return envelope;
   }
 
+  /**
+   * Emit an event to a task room, persisting it and sending the full
+   * TaskEventEnvelope on the wire (with seq, id, timestamps).
+   */
   async emitEnvelopeToTask<TName extends string, TData>(
     taskId: string,
     name: TName,
@@ -132,6 +147,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection {
     return persisted;
   }
 
+  /** Persist an event envelope via the ledger service if available. */
   private async persistEnvelope<TName extends string, TData>(
     taskId: string,
     name: TName,

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface AppendAuditInput {
@@ -14,12 +15,14 @@ export interface AppendAuditInput {
   metadata?: unknown;
 }
 
+/** Writes structured audit records to the database for security and compliance tracking. */
 @Injectable()
 export class AuditLogService {
   private readonly logger = new Logger(AuditLogService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Append an audit record for an action, decision, or policy event. */
   async append(input: AppendAuditInput) {
     const metadataJson = this.serializeMetadata(input.metadata);
     return this.prisma.auditLog.create({
@@ -38,6 +41,7 @@ export class AuditLogService {
     });
   }
 
+  /** Safely serialize metadata to JSON, falling back on error. */
   private serializeMetadata(metadata: unknown): string | undefined {
     if (metadata === undefined) {
       return undefined;

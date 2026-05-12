@@ -15,6 +15,7 @@ export interface CreateApprovalResult {
   responseMessage?: string;
 }
 
+/** Manages the approval lifecycle: classification, creation, resolution, and auditing. */
 @Injectable()
 export class ApprovalsService {
   constructor(
@@ -26,6 +27,7 @@ export class ApprovalsService {
     private readonly events: EventsGateway
   ) {}
 
+  /** List the 50 most recent approval requests for a task. */
   async listForTask(taskId: string): Promise<{ approvals: ApprovalRequest[] }> {
     const approvals = await this.prisma.approvalRequest.findMany({
       where: { taskId },
@@ -35,6 +37,7 @@ export class ApprovalsService {
     return { approvals };
   }
 
+  /** Whether the session has any approval requests still in pending status. */
   async hasPendingForSession(sessionId: string): Promise<boolean> {
     const pending = await this.prisma.approvalRequest.findFirst({
       where: { sessionId, status: 'pending' }
@@ -42,6 +45,11 @@ export class ApprovalsService {
     return pending !== null;
   }
 
+  /**
+   * Classify an agent action request, create an approval record, and
+   * return the result with an optional terminal decision (auto_allow / refused).
+   * Emits `approval.requested`, `approval.resolved`, or `policy.violation` events.
+   */
   async createFromAgentRequest(taskId: string, sessionId: string, request: AgentActionRequest): Promise<CreateApprovalResult> {
     this.validateRequest(request);
     const commandJson = JSON.stringify(request.command ?? []);
@@ -155,6 +163,12 @@ export class ApprovalsService {
     return { approval, decision: terminalDecision, responseMessage: classification.rationale };
   }
 
+  /**
+   * Resolve a pending approval with the given decision. Automatically
+   * converts approved → expired if the deadline has passed.
+   * @throws ProblemException(404) if the approval does not exist.
+   * @throws ProblemException(409) if the approval is already resolved.
+   */
   async resolve(approvalId: string, decision: Exclude<ApprovalDecision, 'auto_allow'>, message?: string): Promise<ApprovalRequest> {
     const approval = await this.prisma.approvalRequest.findUnique({ where: { id: approvalId } });
     if (!approval) {
@@ -214,6 +228,7 @@ export class ApprovalsService {
     return resolved;
   }
 
+  /** Check if an identical action was previously denied/refused for this task. */
   private async findRepeatedDenied(taskId: string, actionType: string, commandJson: string, filesJson: string): Promise<ApprovalRequest | null> {
     return this.prisma.approvalRequest.findFirst({
       where: {
@@ -227,6 +242,7 @@ export class ApprovalsService {
     });
   }
 
+  /** Validate that the agent action request has the required fields and types. */
   private validateRequest(request: AgentActionRequest): void {
     if (!request.id || !request.actionType || !request.title) {
       throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid Action Request', 'ARC_ACTION_REQUEST must include id, actionType, and title');

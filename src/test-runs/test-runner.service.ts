@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { existsSync, realpathSync } from 'fs';
 import * as path from 'path';
+
 import { ProblemException } from '../common/errors/problem.exception';
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -16,6 +17,7 @@ interface SafeSpawnCommand {
   argv: string[];
 }
 
+/** Runs configured test commands from arc.config.json inside task worktrees. */
 @Injectable()
 export class TestRunnerService {
   constructor(
@@ -25,6 +27,11 @@ export class TestRunnerService {
     private readonly events: EventsGateway
   ) {}
 
+  /**
+   * Run a configured test command for a task inside its worktree.
+   * Validates CWD stays inside the worktree, enforces timeouts,
+   * and emits `test.started` / `test.log` / `test.completed` events.
+   */
   async runTaskCommand(taskId: string, commandId: string) {
     const task = await this.prisma.task.findUnique({ where: { id: taskId } });
     if (!task) {
@@ -93,6 +100,7 @@ export class TestRunnerService {
     return row;
   }
 
+  /** Monitor a spawned test process: collect highlights, enforce timeout, emit events. */
   private async monitorProcess(taskId: string, sessionId: string | undefined, testRunId: string, child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<void> {
     const highlights: string[] = [];
     let finished = false;
@@ -161,6 +169,7 @@ export class TestRunnerService {
     });
   }
 
+  /** Persist test completion and emit a `test.completed` event. */
   private async complete(taskId: string, sessionId: string | undefined, testRunId: string, exitCode: number, status: 'passed' | 'failed', highlights: string[]): Promise<void> {
     const updated = await this.prisma.testRunSummary.update({
       where: { id: testRunId },
@@ -178,11 +187,13 @@ export class TestRunnerService {
   }
 }
 
+/** Whether the candidate path is inside (or equal to) the root directory. */
 function isInside(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+/** Build a safe environment for test subprocesses with NODE_ENV=test and allowed keys only. */
 function safeTestEnv(): NodeJS.ProcessEnv {
   const allowedKeys = ['PATH', 'USER', 'USERNAME', 'SHELL', 'TERM', 'TZ', 'CI'];
   const env: NodeJS.ProcessEnv = { NODE_ENV: 'test' };
@@ -195,6 +206,7 @@ function safeTestEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
+/** Validate and normalize a test command array into a SafeSpawnCommand with safety checks. */
 function toSafeSpawnCommand(command: string[], commandId: string): SafeSpawnCommand {
   const [bin, ...args] = command;
   if (!bin || bin.includes('\0') || /[|&;<>()`$]/.test(bin)) {

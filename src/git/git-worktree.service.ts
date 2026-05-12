@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { mkdir, stat } from 'fs/promises';
 import * as path from 'path';
+
 import { AppConfigService } from '../config/app-config.service';
 import { EventsGateway } from '../events/events.gateway';
 import { GitCommandService } from './git-command.service';
@@ -19,6 +20,7 @@ export interface WorktreeResult {
   baseCommit: string;
 }
 
+/** Creates and manages isolated git worktrees per task with deterministic branch names. */
 @Injectable()
 export class GitWorktreeService {
   constructor(
@@ -27,6 +29,11 @@ export class GitWorktreeService {
     private readonly events: EventsGateway
   ) {}
 
+  /**
+   * Create a git worktree and branch for a task. Reuses an existing
+   * worktree if one already exists at the target path.
+   * @returns Paths, branch name, base ref, and base commit.
+   */
   async createForTask(input: WorktreeInput): Promise<WorktreeResult> {
     const { repoPath } = this.config;
     const slug = slugify(input.title || input.prompt || input.taskId);
@@ -74,14 +81,17 @@ export class GitWorktreeService {
     return { repoPath, worktreePath, branchName, baseRef, baseCommit };
   }
 
+  /** Emit a worktree cleanup-requested event. */
   async requestCleanup(taskId: string, worktreePath: string): Promise<void> {
     await this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_requested', 'git', 'info', { worktreePath });
   }
 
+  /** Emit a worktree cleanup-completed event. */
   async markCleanupCompleted(taskId: string, worktreePath: string): Promise<void> {
     await this.events.emitEnvelopeToTask(taskId, 'worktree.cleanup_completed', 'git', 'info', { worktreePath });
   }
 
+  /** Check whether a branch already exists in the repository. */
   private async branchExists(repoPath: string, branchName: string): Promise<boolean> {
     try {
       await this.gitCommands.git(repoPath, ['rev-parse', '--verify', branchName]);
@@ -92,6 +102,7 @@ export class GitWorktreeService {
   }
 }
 
+/** Convert arbitrary text to a URL-safe slug (max 40 chars). */
 function slugify(input: string): string {
   const slug = input
     .toLowerCase()
@@ -101,6 +112,7 @@ function slugify(input: string): string {
   return slug || 'task';
 }
 
+/** Check whether a filesystem path exists. */
 async function pathExists(target: string): Promise<boolean> {
   try {
     await stat(target);

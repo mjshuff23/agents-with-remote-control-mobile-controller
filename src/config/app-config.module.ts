@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+
 import { AppConfigService } from './app-config.service';
 import { validateEnv } from './env.validation';
 
+/** Global NestJS module that loads and validates environment configuration. */
 @Module({
   imports: [
     ConfigModule.forRoot({

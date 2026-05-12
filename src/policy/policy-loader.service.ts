@@ -4,12 +4,17 @@ import * as path from 'path';
 import { AppConfigService } from '../config/app-config.service';
 import { ArcConfig, PolicyRule, TestCommandConfig } from './policy.types';
 
+/** Loads, caches, and validates the arc.config.json policy file. */
 @Injectable()
 export class PolicyLoaderService {
   private cached?: { config: ArcConfig; mtimeMs: number; policyPath: string };
 
   constructor(private readonly config: AppConfigService) {}
 
+  /**
+   * Load arc.config.json from disk, using mtime-based caching.
+   * @returns The parsed and validated ArcConfig.
+   */
   async load(): Promise<ArcConfig> {
     const policyPath = this.resolvePolicyPath();
     const policyStat = await stat(policyPath);
@@ -24,16 +29,22 @@ export class PolicyLoaderService {
     return parsed;
   }
 
+  /** Look up a single test command config by ID. */
   async getTestCommand(commandId: string): Promise<TestCommandConfig | undefined> {
     const policy = await this.load();
     return policy.testCommands.find((command) => command.id === commandId);
   }
 
+  /** Return all configured test commands. */
   async listTestCommands(): Promise<TestCommandConfig[]> {
     const policy = await this.load();
     return policy.testCommands;
   }
 
+  /**
+   * Resolve the approval timeout, preferring the policy file value over
+   * the env-based fallback. Falls back silently on read errors.
+   */
   async approvalTimeoutMs(fallbackMs: number): Promise<number> {
     try {
       const policy = await this.load();
@@ -45,16 +56,19 @@ export class PolicyLoaderService {
     }
   }
 
+  /** Clear the cached policy config so the next load re-reads from disk. */
   clearCache(): void {
     this.cached = undefined;
   }
 
+  /** Resolve the absolute path to the policy file. */
   private resolvePolicyPath(): string {
     return path.isAbsolute(this.config.policyPath)
       ? this.config.policyPath
       : path.join(this.config.repoPath, this.config.policyPath);
   }
 
+  /** Validate the full ArcConfig shape, including all rules and test commands. */
   private validate(config: ArcConfig): void {
     if (config.version !== 1) {
       throw new Error('arc.config.json version must be 1');
@@ -97,6 +111,7 @@ export class PolicyLoaderService {
     }
   }
 
+  /** Validate an individual policy rule has an id and at least one matcher. */
   private validateRule(rule: PolicyRule): void {
     if (typeof rule.id !== 'string' || rule.id.trim().length === 0) {
       throw new Error('Policy rule id must be a non-empty string');
@@ -112,6 +127,7 @@ export class PolicyLoaderService {
   }
 }
 
+/** Whether an array is defined and non-empty. */
 function hasValues(values: string[] | undefined): boolean {
   return Array.isArray(values) && values.length > 0;
 }
