@@ -11,6 +11,7 @@
     "outDir": "./dist",
     "paths": { "*": ["./*"] },
     "incremental": true,
+    "types": ["node", "jest"],
     "strict": true,
     "skipLibCheck": true,
     "strictPropertyInitialization": false,
