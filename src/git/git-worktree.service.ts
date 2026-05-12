@@ -28,7 +28,7 @@ export class GitWorktreeService {
   ) {}
 
   async createForTask(input: WorktreeInput): Promise<WorktreeResult> {
-    const repoPath = this.config.repoPath;
+    const { repoPath } = this.config;
     const slug = slugify(input.title || input.prompt || input.taskId);
     const branchName = `agent/${input.taskId}-${slug}`;
     const worktreeRoot = this.config.worktreeRoot

@@ -9,7 +9,7 @@ This document is the in-depth companion to [`README.md`](../README.md). It captu
 ## Layered view
 
 | Layer | Role | Tech |
-|---|---|---|
+| ----- | ---- | ---- |
 | **Phone / Web Controller** | Remote command surface — start tasks, watch logs, approve actions, inspect diffs | Next.js (App Router) or React+Vite, mobile-first, PWA later |
 | **Local Orchestrator** | Nervous system — owns task state, spawns agents, brokers approval, persists everything | NestJS + SQLite + WebSocket gateway |
 | **Agent Adapter Layer** | Swappable interface for CLI agents | TypeScript interface, one adapter per agent |
@@ -102,6 +102,7 @@ interface AgentAdapter {
 ```
 
 **Why this shape:**
+
 - The orchestrator never talks directly to a specific agent — it goes through the adapter.
 - `CodexAdapter` currently launches `codex exec --ignore-user-config --json --cd <repoPath> -` through `node-pty` by default, using `ARC_CODEX_IGNORE_USER_CONFIG=true` to avoid user-configured MCP/OAuth/plugin side effects in local Phase 3 runs.
 - Adding Claude/Gemini in Phase 6 is "implement the interface, register the adapter," not a refactor.
@@ -113,7 +114,7 @@ interface AgentAdapter {
 SQLite first. Migration to Postgres only if/when concurrency or multi-host requirements demand it.
 
 | Entity | Purpose |
-|---|---|
+| ------ | ------- |
 | **Task** | The user-initiated unit of work: title, prompt, status, selected agent, repo/worktree paths, branch/base metadata, approval mode |
 | **AgentSession** | A single attempt at executing the task with an agent — status, start/end timestamps, external session id |
 | **AgentLog** | Append-only log entries (`stdout`, `stderr`, `system`, `user`, `agent`) |
@@ -132,7 +133,7 @@ ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 ## Communication transport
 
 | Direction | Mechanism | Why |
-|---|---|---|
+| --------- | --------- | --- |
 | Controller → Orchestrator (one-shot commands) | REST | Simple, cacheable, easy to debug |
 | Orchestrator → Controller (live events) | **Socket.IO** | Server push is required for live logs, approval prompts, status changes |
 | Controller → Orchestrator (replay) | REST + Socket.IO subscribe ack | Mobile reconnect requests missed `TaskEvent` and `AgentLog` rows after its last cursor |
@@ -158,6 +159,7 @@ agents-with-remote-control-mobile-controller/   main checkout
 Branch convention: `agent/<task-id>-<slug>` (e.g., `agent/task-001-bootstrap-orchestrator`).
 
 **Benefits:**
+
 - No cross-task contamination — concurrent tasks can't step on each other.
 - Cheap — `git worktree add` shares the object DB; only the working tree consumes disk.
 - Clean diffs per task.
@@ -214,7 +216,7 @@ Even after every approval, merging stays a deliberate human action. This is a gu
 See [`diagrams.md`](diagrams.md#7-alternatives-considered) for a comparative diagram. Briefly:
 
 | Alternative | Why rejected (for now) |
-|---|---|
+| ----------- | ---------------------- |
 | Direct VS Code chat control | Fragile, GUI-coupled, no stable protocol |
 | VS Code extension first | Locks the UX to one editor and one machine |
 | Telegram/Discord bot prototype | Useful for fast prototyping, but locks notification + auth into a third-party platform; might revisit as a shortcut for Phase 2 |
