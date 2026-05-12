@@ -286,12 +286,12 @@ describe('SyncEventService', () => {
     it('redacts GitHub tokens', async () => {
       mockTransitionSuccess();
 
-      await service.markFailed('evt-1', 'auth_failed', 'token was ghp_abcdefghijklmnopqrstuvwxyz1234567890');
+      await service.markFailed('evt-1', 'auth_failed', 'token was ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
 
       expect(mockPrisma.syncEvent.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            errorMessage: expect.not.stringContaining('ghp_abcdefghijklmnopqrstuvwxyz1234567890'),
+            errorMessage: expect.not.stringContaining('ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'),
           }),
         }),
       );
