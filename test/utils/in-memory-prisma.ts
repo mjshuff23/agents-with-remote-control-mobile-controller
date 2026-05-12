@@ -24,7 +24,7 @@ const randomId = (prefix: string) => `${prefix}-${Math.random().toString(36).sli
  */
 const orderRows = <T extends Row>(rows: T[], orderBy?: Record<string, 'asc' | 'desc'>): T[] => {
   if (!orderBy) {
-    return rows;
+    return [...rows];
   }
   const [[field, direction]] = Object.entries(orderBy);
   return [...rows].sort((a, b) => {
