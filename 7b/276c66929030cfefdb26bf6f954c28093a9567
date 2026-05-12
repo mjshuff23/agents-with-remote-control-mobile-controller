@@ -1,0 +1,31 @@
+src/features/sync/index.ts
+  s_da46032282ee84::t_f0527c8b56574b 1-3
+prisma/migrations/20260512180000_add_syncevent/migration.sql
+  s_da46032282ee84::t_dbf73641f10cff 1-29
+src/features/sync/sync.module.ts
+  s_da46032282ee84::t_5dfa52bdaf41ed 1-10
+src/features/sync/sync-event.service.ts
+  s_da46032282ee84::t_fe44627c508672 1-112
+src/features/sync/sync-event.service.spec.ts
+  s_da46032282ee84::t_43e21d920981b6 1-183
+src/app.module.ts
+  s_da46032282ee84::t_791d0f8f0adeb4 16,32-33
+prisma/schema.prisma
+  s_da46032282ee84::t_9bf380946158e6 201-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "7b276c66929030cfefdb26bf6f954c28093a9567",
+  "prompts": {},
+  "sessions": {
+    "s_da46032282ee84": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e20b6c3effe7iNLt9gy5ocrnR",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
