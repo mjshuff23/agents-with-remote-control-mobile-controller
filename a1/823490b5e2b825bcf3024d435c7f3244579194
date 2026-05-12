@@ -1,0 +1,29 @@
+controller/package.json
+  s_3de15f3209ff24::t_1172a295d7fbbc 20
+  s_3de15f3209ff24::t_1b7efcc3daf051 30
+  s_3de15f3209ff24::t_02ecfac8002aaa 27
+.nvmrc
+  s_3de15f3209ff24::t_4cf939553af4ae 1
+tsconfig.json
+  s_3de15f3209ff24::t_6159b02cecbf1b 14
+package.json
+  s_3de15f3209ff24::t_2c4ababb84449c 79
+  s_3de15f3209ff24::t_e36d6a12dc69d3 45
+  s_3de15f3209ff24::t_c26b2d24db4bdf 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "a1823490b5e2b825bcf3024d435c7f3244579194",
+  "prompts": {},
+  "sessions": {
+    "s_3de15f3209ff24": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e27a6301ffe1YUiN0UgOLDg2I",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
