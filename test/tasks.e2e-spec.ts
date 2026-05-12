@@ -5,7 +5,7 @@ import { AppModule } from '../src/app.module';
 import { AGENT_ADAPTERS } from '../src/agents/agent-adapter.token';
 import { applyAppGlobals } from '../src/app-globals';
 import { AppConfigService } from '../src/config/app-config.service';
-import { GitWorktreeService } from '../src/git/git-worktree.service';
+import { GitWorktreeService } from '../src/features/worktrees/git-worktree.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
 
