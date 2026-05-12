@@ -38,7 +38,6 @@ function getSocket(): Socket {
       if (process.env.NODE_ENV === 'production') {
         throw new Error(msg);
       } else {
-        // eslint-disable-next-line no-console
         console.error(msg);
       }
     }
@@ -98,7 +97,7 @@ export interface TaskSocketHandlers {
 export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): void {
   // Keep handlers ref stable so the effect doesn't re-run on every render
   const ref = useRef(handlers);
-  ref.current = handlers;
+  useEffect(() => { ref.current = handlers; }, [handlers]);
 
   useEffect(() => {
     const socket = getSocket();

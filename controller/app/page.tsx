@@ -9,18 +9,20 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  function refresh() {
-    setError(null);
-    listTasks()
-      .then(({ tasks }) => setTasks(tasks))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load tasks'))
-      .finally(() => setLoading(false));
-  }
-
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 5_000);
-    return () => clearInterval(id);
+    let stale = false;
+
+    listTasks()
+      .then(({ tasks }) => { if (!stale) { setTasks(tasks); setLoading(false); } })
+      .catch((err) => { if (!stale) { setError(err instanceof Error ? err.message : 'Failed to load tasks'); setLoading(false); } });
+
+    const id = setInterval(() => {
+      listTasks()
+        .then(({ tasks }) => { if (!stale) setTasks(tasks); })
+        .catch((err) => { if (!stale) setError(err instanceof Error ? err.message : 'Failed to load tasks'); });
+    }, 5_000);
+
+    return () => { stale = true; clearInterval(id); };
   }, []);
 
   return (

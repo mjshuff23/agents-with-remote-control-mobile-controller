@@ -42,7 +42,7 @@ export function useTaskDetail(id: string) {
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
 
   const denyMessagesRef = useRef(denyMessages);
-  denyMessagesRef.current = denyMessages;
+  useEffect(() => { denyMessagesRef.current = denyMessages; }, [denyMessages]);
 
   const seqRef = useRef(0);
   const lastEventSeqRef = useRef(0);
