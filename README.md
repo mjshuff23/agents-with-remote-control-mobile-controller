@@ -15,6 +15,7 @@ Run AI coding agents on your PC. Control them from your phone. The agent works i
 Phases 1 and 2 are complete. Phase 3 is the current local-loop hardening implementation. The code in this repo currently ships:
 
 **Phase 1 — Local orchestrator**
+
 - A root-level NestJS REST API.
 - Prisma + SQLite persistence for `Task`, `AgentSession`, and `AgentLog`.
 - A single `CodexAdapter` that launches `codex exec --json --cd <repoPath> -` through `node-pty`.
@@ -22,6 +23,7 @@ Phases 1 and 2 are complete. Phase 3 is the current local-loop hardening impleme
 - Problem-details style JSON errors.
 
 **Phase 2 — WebSocket gateway + controller UI**
+
 - socket.io WebSocket gateway at the orchestrator root with `CONTROLLER_SECRET` bearer auth.
 - Per-task rooms (`task:<id>`); the server emits `task.started`, `agent.log`, and `task.completed` as they happen.
 - `POST /tasks/:id/input` REST endpoint that writes to the agent PTY stdin (requires the agent to support interactive input).
@@ -30,6 +32,7 @@ Phases 1 and 2 are complete. Phase 3 is the current local-loop hardening impleme
 - Sequence-based log deduplication so REST history and live WS stream don't produce duplicates.
 
 **Phase 3 — Local-loop hardening**
+
 - Per-task Git worktree provisioning under `ARC_WORKTREE_ROOT` (or a default sibling `worktrees/` directory).
 - Task metadata for `worktreePath`, `branchName`, `baseRef`, `baseCommit`, and approval mode.
 - Cooperative `ARC_ACTION_REQUEST` / `ARC_APPROVAL` protocol for typed approval requests where native CLI hooks are unavailable.
@@ -121,6 +124,7 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 ## Tech stack (current intent)
 
 **Backend (orchestrator)**
+
 - Node.js + TypeScript
 - NestJS
 - Prisma + SQLite (MVP) → Postgres later if needed
@@ -130,6 +134,7 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 - Git worktree operations and cooperative approval gates in Phase 3
 
 **Frontend (controller)**
+
 - Next.js 15 (App Router), mobile-first, runs on port 3001
 - Tailwind CSS for styling
 - socket.io-client for live WS updates; `@tanstack/react-virtual` for virtualized log rendering
@@ -137,6 +142,7 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 - Local LAN-only auth via `CONTROLLER_SECRET` header; harden later
 
 **Runtime**
+
 - Windows host
 - WSL2 for agent execution
 - Git worktrees for task isolation
@@ -151,11 +157,13 @@ Phase 3 uses a containment-first safety model:
 - **Review always:** diffs and configured test runs are summarized before any later commit/push/PR workflow. Phase 3 does not commit, push, open PRs, or sync external tools.
 
 **Agents (adapter pattern)**
+
 - Codex CLI (first target)
 - Claude Code CLI (second)
 - Gemini CLI (third)
 
 **Integrations (later phases)**
+
 - GitHub → first
 - Linear → second
 - Figma + Notion → after core loop works
@@ -168,7 +176,7 @@ Phase 3 uses a containment-first safety model:
 Three-tier classification on every requested action:
 
 | Tier | Examples | Behavior |
-|---|---|---|
+| --- | --- | --- |
 | **SAFE** | Read repo, inspect git, run tests, summarize, plan | Auto-allow, log only |
 | **NEEDS APPROVAL** | Edit files, install, migrate, branch, commit, push, open PR, external sync, MCP write tools | Ping phone, wait for human |
 | **BLOCKED BY DEFAULT** | Read `.env`/secrets, force push, prod deploy, modify auth, exfiltrate repo, modify global system config, run unknown shell scripts | Refuse outright, log event |
@@ -270,6 +278,7 @@ curl -H 'X-Controller-Secret: <your-secret>' http://127.0.0.1:3000/tasks/<task-i
 **Outside your network (gym, travel):** see [`docs/remote-access.md`](docs/remote-access.md) for Tailscale, NetBird, Cloudflare Tunnel, and ngrok options. Tailscale is recommended for daily use — install once, works everywhere, no open ports.
 
 More detail:
+
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full system design
 - [`docs/SAFETY.md`](docs/SAFETY.md) — safety model and approval gates
 - [`docs/remote-access.md`](docs/remote-access.md) — Tailscale, NetBird, Cloudflare Tunnel, ngrok
@@ -284,9 +293,9 @@ More detail:
 
 ## Project links
 
-- **GitHub:** https://github.com/mjshuff23/agents-with-remote-control-mobile-controller
-- **Linear project:** https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c
-- **Notion strategy doc:** https://www.notion.so/35bc2ea5f18f8186b134efa7759a19e6
+- **GitHub:** <https://github.com/mjshuff23/agents-with-remote-control-mobile-controller>
+- **Linear project:** <https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c>
+- **Notion strategy doc:** <https://www.notion.so/35bc2ea5f18f8186b134efa7759a19e6>
 - **Figma companion diagrams:** [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md)
 
 ---
