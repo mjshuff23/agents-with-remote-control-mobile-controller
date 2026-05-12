@@ -1,0 +1,32 @@
+controller/package.json
+  s_3de15f3209ff24::t_76b1413250c79e 9
+  s_3de15f3209ff24::t_168db4a5e1f91b 19,21-22,26
+  s_3de15f3209ff24::t_e880fba281b5ce 29-31
+  s_3de15f3209ff24::t_17b0ae46ae4c5b 20
+controller/features/tasks/use-task-detail.ts
+  s_3de15f3209ff24::t_58ee7e877ee63b 45
+controller/lib/use-socket.ts
+  s_3de15f3209ff24::t_869038821133b6 100
+package.json
+  s_3de15f3209ff24::t_3e98386b10f92e 45
+  s_3de15f3209ff24::t_168db4a5e1f91b 25-28,35,37,41-44,48,54-56
+  s_3de15f3209ff24::t_4b21a92bbdf733 59
+controller/app/page.tsx
+  s_3de15f3209ff24::t_7faca1a63c515f 12-14,16-17,19-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "bcf47475267e1cecf720050b139852eb0e93d633",
+  "prompts": {},
+  "sessions": {
+    "s_3de15f3209ff24": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e27a6301ffe1YUiN0UgOLDg2I",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
