@@ -29,12 +29,12 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 - Endpoints: create / get / list / stop / input / approvals / diff summary / configured test runs.
 - Coordinates worktree creation before agent launch.
 
-### AgentSessionModule
+### AgentSessionsModule
 
 - Owns the live link between a `Task` and a running agent process.
 - Tracks `AgentSession` state (`starting -> running -> waiting_approval -> completed | failed | stopped`).
-- Streams logs into `AgentLog`.
-- Parses cooperative `ARC_ACTION_REQUEST` lines from stdout without dropping normal logs.
+- Streams logs into `AgentLog` through `appendLog`.
+- Delegates cooperative `ARC_ACTION_REQUEST` protocol parsing to `ProtocolHandlerService`.
 
 ### AgentAdapterModule
 
@@ -109,13 +109,14 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 
 ## Feature module layout (Phase 3.5+)
 
-All feature modules live under `src/features/`. Cross-cutting infrastructure (`config/`, `prisma/`, `events/`, `policy/`, `common/`, `agents/`) remains at `src/`.
+All feature modules live under `src/features/`. Cross-cutting infrastructure (`config/`, `prisma/`, `events/`, `common/`, `agents/`) remains at `src/`.
 
 ```text
 src/
   app.module.ts
-  config/ prisma/ events/ policy/ common/ agents/     ← infrastructure
+  config/ prisma/ events/ common/ agents/              ← infrastructure
   features/
+    policy/                                             ← action classification + policy loading
     tasks/                                              ← task CRUD + orchestration
     agent-sessions/                                     ← session lifecycle + protocol handler
     approvals/                                          ← approval lifecycle
@@ -246,7 +247,7 @@ CLI agents have stable stdin/stdout contracts and a long history of being script
 
 ### Why NestJS over a hand-rolled Node server?
 
-Modules, DI, lifecycle, validators, guards, and WebSocket support are all first-class. The structure of the orchestrator (`TaskModule`, `AgentSessionModule`, `GitModule`, `PolicyModule`, `ApprovalsModule`, ...) maps cleanly to Nest modules. The cost of carrying NestJS for an MVP is small relative to the readability win.
+Modules, DI, lifecycle, validators, guards, and WebSocket support are all first-class. The structure of the orchestrator (`TasksModule`, `AgentSessionsModule`, `WorktreesModule`, `PolicyModule`, `ApprovalsModule`, ...) maps cleanly to Nest modules. The cost of carrying NestJS for an MVP is small relative to the readability win.
 
 ### Why SQLite first?
 

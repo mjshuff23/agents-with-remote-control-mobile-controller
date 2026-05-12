@@ -5,11 +5,13 @@ import { IIntegrationGateway, IntegrationReadResult } from '../mcp-gateway/integ
 export class LinearAdapter implements IIntegrationGateway {
   readonly name = 'linear';
 
-  async connect(): Promise<void> {}
+  async connect(): Promise<void> {
+    throw new Error('Linear integration not implemented until Phase 4.');
+  }
 
   async disconnect(): Promise<void> {}
 
-  async read<T = unknown>(resource: string): Promise<IntegrationReadResult<T>> {
-    return { ok: false, error: `Linear integration not implemented until Phase 4. Requested resource: ${resource}` };
+  async read<T = unknown>(): Promise<IntegrationReadResult<T>> {
+    return { ok: false, error: 'Linear integration not implemented until Phase 4.' };
   }
 }

@@ -41,6 +41,9 @@ export function useTaskDetail(id: string) {
   const [denyMessages, setDenyMessages] = useState<Record<string, string>>({});
   const [pendingApprovalActionIds, setPendingApprovalActionIds] = useState<Set<string>>(new Set());
 
+  const denyMessagesRef = useRef(denyMessages);
+  denyMessagesRef.current = denyMessages;
+
   const seqRef = useRef(0);
   const lastEventSeqRef = useRef(0);
   const syntheticSeqRef = useRef(-1);
@@ -164,10 +167,11 @@ export function useTaskDetail(id: string) {
       setTestRuns(freshRuns);
       setTestCommands(commands.testCommands);
       setSelectedTestCommandId((current) => commands.testCommands.some((c) => c.id === current) ? current : commands.testCommands[0]?.id ?? '');
-    }).catch(() => {});
+    }).catch(console.error);
   }, [id, applyReplay]);
 
   useEffect(() => {
+    let stale = false;
     seenLogKeys.current.clear();
     seenEvents.current.clear();
     seqRef.current = 0;
@@ -176,6 +180,7 @@ export function useTaskDetail(id: string) {
     sessionIdRef.current = '';
     Promise.all([getTask(id), listTestCommands(id)])
       .then(([details, commands]) => {
+        if (stale) return;
         const { task, session, logs, approvals, changeSummaries, testRuns, runtime, eventCursor } = details;
         setTask(task);
         setSession(session);
@@ -195,6 +200,7 @@ export function useTaskDetail(id: string) {
         }
       })
       .catch(console.error);
+    return () => { stale = true; };
   }, [id, recordServerLog]);
 
   useTaskSocket(id, {
@@ -322,10 +328,11 @@ export function useTaskDetail(id: string) {
   }, [upsertApproval]);
 
   const handleDeny = useCallback(async (approvalId: string) => {
+    const msg = denyMessagesRef.current[approvalId];
     setActionError(null);
     setPendingApprovalActionIds((prev) => new Set(prev).add(approvalId));
     try {
-      const result = await denyAction(approvalId, denyMessages[approvalId]);
+      const result = await denyAction(approvalId, msg);
       upsertApproval(result.approval);
       setDenyMessages((prev) => ({ ...prev, [approvalId]: '' }));
     } catch (err) {
@@ -333,7 +340,7 @@ export function useTaskDetail(id: string) {
     } finally {
       setPendingApprovalActionIds((prev) => { const n = new Set(prev); n.delete(approvalId); return n; });
     }
-  }, [upsertApproval, denyMessages]);
+  }, [upsertApproval]);
 
   const handleDiffSummary = useCallback(async () => {
     setActionError(null);

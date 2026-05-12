@@ -386,11 +386,12 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await currentWrite;
   }
 
-  /** Clear per-session in-memory state (sequences, queues, buffers). */
+  /** Clear per-session in-memory state (sequences, queues, buffers, protocol timeouts). */
   private clearLogState(sessionId: string): void {
     this.nextLogSequences.delete(sessionId);
     this.logWriteQueues.delete(sessionId);
     this.sessionToTask.delete(sessionId);
+    this.protocolHandler.clearBuffersForSession(sessionId);
   }
 
   /** Mark both session and task as failed with an error message. */

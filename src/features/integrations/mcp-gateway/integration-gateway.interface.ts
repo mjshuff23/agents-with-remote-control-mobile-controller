@@ -1,8 +1,6 @@
-export interface IntegrationReadResult<T = unknown> {
-  ok: boolean;
-  data?: T;
-  error?: string;
-}
+export type IntegrationReadResult<T = unknown> =
+  | { ok: true; data: T }
+  | { ok: false; error: string };
 
 export interface IIntegrationGateway {
   readonly name: string;
