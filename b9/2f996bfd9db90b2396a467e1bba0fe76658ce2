@@ -1,0 +1,25 @@
+controller/lib/use-socket.ts
+  s_3de15f3209ff24::t_3b306193b29441 102
+  s_3de15f3209ff24::t_14437f513ec855 98-100,103
+controller/app/page.tsx
+  s_3de15f3209ff24::t_9c54985d8f9bbb 15-16,18-23
+controller/features/tasks/use-task-detail.ts
+  s_3de15f3209ff24::t_e9912f4364978a 46
+  s_3de15f3209ff24::t_fe1d2e9ffac7c2 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "b92f996bfd9db90b2396a467e1bba0fe76658ce2",
+  "prompts": {},
+  "sessions": {
+    "s_3de15f3209ff24": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e27a6301ffe1YUiN0UgOLDg2I",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
