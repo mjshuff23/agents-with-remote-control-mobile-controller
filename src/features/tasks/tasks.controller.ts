@@ -13,11 +13,11 @@ import { TasksService } from './tasks.service';
 export class TasksController {
   constructor(private readonly tasks: TasksService) {}
 
-  /** Create a new task. Returns 201 with Location header. */
+  /** Create a new task. Returns 202 Accepted with Location header. */
   @Post()
   async createTask(@Body() body: CreateTaskDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.tasks.createTask(body);
-    response.location(`/tasks/${result.task.id}`);
+    response.status(202).location(`/tasks/${result.task.id}`);
     return result;
   }
 
