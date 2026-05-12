@@ -96,8 +96,8 @@ export class GitHubProvider implements IGitHubProvider {
   }
 
   async searchIssues(params: GitHubSearchParams): Promise<GitHubSearchIssue[]> {
-    const { owner, repo } = this.repo(params.owner, params.repo);
-    const qParts: string[] = [`repo:${owner}/${repo}`];
+    const repoSlug = params.repo || `${this.defaultOwner}/${this.defaultRepo}`;
+    const qParts: string[] = [`repo:${repoSlug}`];
     if (params.query) qParts.push(params.query);
     if (params.labels && params.labels.length > 0) {
       qParts.push(params.labels.map((l) => `label:${l}`).join(' '));
