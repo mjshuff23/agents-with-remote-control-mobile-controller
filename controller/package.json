@@ -30,9 +30,9 @@
   "engines": {
     "node": ">=26.1.0"
   },
-  "overrides": {
-    "next": {
-      "postcss": "8.5.10"
+  "pnpm": {
+    "overrides": {
+      "next>postcss": "8.5.10"
     }
   }
 }
