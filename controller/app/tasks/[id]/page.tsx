@@ -273,7 +273,7 @@ export default function TaskDetailPage() {
     onSessionRestored: (event) => {
       lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
       if (markEventSeen(event.id)) return;
-      setRuntime({ processState: 'reconstructed', statusLabel: 'active' });
+      setRuntime({ processState: 'live_process', statusLabel: 'active' });
       appendSyntheticLog('system', `Session restored (${event.data.restoreMode})`);
     },
     onDiffSummary: (event) => {

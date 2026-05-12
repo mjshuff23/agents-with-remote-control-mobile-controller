@@ -84,14 +84,16 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
     const frontier = this.parseFrontier(checkpoint.frontierJson);
     const prompt = this.buildCooperativeRestorePrompt(task, frontier);
+    const launch = this.parseLaunchMetadata(checkpoint.launchMetadataJson);
 
+    let runningProcess: RunningAgentProcess;
     try {
-      const runningProcess = await adapter.startTask({
+      runningProcess = await adapter.startTask({
         taskId: task.id,
         sessionId: session.id,
-        repoPath: task.repoPath,
-        worktreePath: task.worktreePath ?? undefined,
-        branchName: task.branchName ?? undefined,
+        repoPath: launch.repoPath ?? task.repoPath,
+        worktreePath: launch.worktreePath ?? task.worktreePath ?? undefined,
+        branchName: launch.branchName ?? task.branchName ?? undefined,
         prompt,
         onOutput: async (event) => {
           await this.appendLog(session.id, event.type, event.content);
@@ -114,7 +116,15 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       );
     }
 
-    const result = await this.checkpoints.restore(sessionId);
+    let result: import('../checkpoints/checkpoints.service').RestoreResult;
+    try {
+      result = await this.checkpoints.restore(sessionId);
+    } catch (error) {
+      this.runningProcesses.delete(session.id);
+      this.sessionToTask.delete(session.id);
+      await Promise.resolve(runningProcess.stop?.()).catch(() => undefined);
+      throw error;
+    }
     await this.appendLog(session.id, 'system', `Session restored from dormant (checkpoint ${checkpoint.id})`);
 
     return { session: result.session };
@@ -168,7 +178,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         }
       });
 
-      void this.checkpoints.captureAtBoundary(session.id, task.id, 'session_start').catch(() => {});
+      void this.checkpoints.captureAtBoundary(session.id, task.id, 'session_start').catch((err) => {
+        this.appendLog(session.id, 'system', `Checkpoint capture failed (session_start): ${this.errorMessage(err)}`);
+      });
 
       return updated;
     } catch (error) {
@@ -231,7 +243,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
     void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'user_turn', {
       lastUserMessage: text
-    }).catch(() => {});
+    }).catch((err) => this.appendLog(session.id, 'system', `Checkpoint capture failed (user_turn): ${this.errorMessage(err)}`));
   }
 
   /**
@@ -260,7 +272,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     if (approval.sessionId) {
       await this.updateUserActivity(approval.sessionId);
 
-      void this.checkpoints.captureAtBoundary(approval.sessionId, approval.taskId, 'approval_event').catch(() => {});
+      void this.checkpoints.captureAtBoundary(approval.sessionId, approval.taskId, 'approval_event').catch((err) =>
+        this.appendLog(approval.sessionId!, 'system', `Checkpoint capture failed (approval_event): ${this.errorMessage(err)}`)
+      );
     }
 
     return { approval };
@@ -293,7 +307,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(session.id, 'system', 'Stop requested by REST client');
     await this.updateUserActivity(session.id);
 
-    void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_stop').catch(() => {});
+    void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_stop').catch((err) =>
+      this.appendLog(session.id, 'system', `Checkpoint capture failed (pre_stop): ${this.errorMessage(err)}`)
+    );
 
     const updated = await this.prisma.agentSession.update({
       where: { id: session.id },
@@ -350,7 +366,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
   /** Mark both session and task as failed with an error message. */
   private async markSessionFailed(taskId: string, sessionId: string, message: string): Promise<void> {
-    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch(() => {});
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_terminal): ${this.errorMessage(err)}`)
+    );
     await this.prisma.agentSession.update({
       where: { id: sessionId },
       data: {
@@ -398,7 +416,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
     await this.appendLog(sessionId, 'system', message);
 
-    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch(() => {});
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_terminal): ${this.errorMessage(err)}`)
+    );
 
     await this.prisma.agentSession.update({
       where: { id: sessionId },
@@ -425,7 +445,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
   private async markStoppedWithoutProcess(taskId: string, sessionId: string): Promise<AgentSession> {
     await this.appendLog(sessionId, 'system', 'Stop requested, but no live local process was registered');
 
-    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_stop').catch(() => {});
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_stop').catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_stop): ${this.errorMessage(err)}`)
+    );
 
     await this.prisma.task.update({
       where: { id: taskId },
@@ -477,6 +499,27 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         });
       } else {
         // running → dormant: recoverable, not failed
+        const existing = await this.checkpoints.latestForSession(session.id);
+        if (!existing) {
+          const captured = await this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_transition');
+          if (!captured) {
+            await this.appendLog(session.id, 'system', 'Session marked failed after orchestrator startup (no checkpoint could be created for restore)');
+            await this.prisma.agentSession.update({
+              where: { id: session.id },
+              data: {
+                status: 'failed',
+                completedAt: new Date(),
+                errorMessage: 'Orchestrator restarted and no checkpoint was available for restore'
+              }
+            });
+            await this.prisma.task.update({
+              where: { id: session.taskId },
+              data: { status: 'failed' }
+            });
+            this.clearLogState(session.id);
+            continue;
+          }
+        }
         await this.appendLog(session.id, 'system', 'Session moved to dormant after orchestrator startup (live process was lost)');
         await this.prisma.agentSession.update({
           where: { id: session.id },
@@ -528,7 +571,10 @@ export class AgentSessionsService implements OnApplicationBootstrap {
    * Reuses the cooperative prompt structure and appends continuation context.
    */
   private buildCooperativeRestorePrompt(task: Task, frontier: { prompt: string; currentInstructions?: string }): string {
-    const base = this.buildCooperativePrompt(task);
+    const base = this.buildCooperativePrompt({
+      ...task,
+      prompt: frontier.prompt || task.prompt
+    });
     return [
       base,
       '',
@@ -557,6 +603,24 @@ export class AgentSessionsService implements OnApplicationBootstrap {
    */
   private buildRestorePrompt(task: Task, checkpoint: import('@prisma/client').SessionCheckpoint): string {
     return `RESTORE: task ${task.id} session ${checkpoint.sessionId} checkpoint ${checkpoint.id}`;
+  }
+
+  /**
+   * Parse the launch metadata JSON from a checkpoint, providing safe defaults.
+   * Used by restoreSession to reconstruct the worktree/branch context from
+   * the checkpoint rather than relying solely on current task fields.
+   */
+  private parseLaunchMetadata(launchMetadataJson: string): { repoPath?: string; worktreePath?: string; branchName?: string } {
+    try {
+      const parsed = JSON.parse(launchMetadataJson) as Record<string, string | undefined>;
+      return {
+        repoPath: parsed.repoPath ?? undefined,
+        worktreePath: parsed.worktreePath ?? undefined,
+        branchName: parsed.branchName ?? undefined
+      };
+    } catch {
+      return {};
+    }
   }
 
   /** Scan agent output for ARC_ACTION_REQUEST lines and process each one. */

@@ -1,3 +1,4 @@
+import { access } from 'fs/promises';
 import { HttpStatus, Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { AgentSession, SessionCheckpoint } from '@prisma/client';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -64,7 +65,7 @@ export class CheckpointsService implements OnApplicationBootstrap {
 
   startDormancyChecker(): void {
     if (this.dormancyChecker) return;
-    const interval = Math.min(this.config.dormantCheckIntervalMs, DORMANCY_CHECKER_INTERVAL_MS);
+    const interval = Math.max(this.config.dormantCheckIntervalMs, DORMANCY_CHECKER_INTERVAL_MS);
     this.dormancyChecker = setInterval(() => {
       void this.checkIdleSessions().catch((error) => {
         this.logger.error(`Dormancy check failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -134,7 +135,7 @@ export class CheckpointsService implements OnApplicationBootstrap {
       : session.createdAt.getTime() + timeoutMs;
     const userThreshold = session.lastUserActivityAt
       ? session.lastUserActivityAt.getTime() + timeoutMs
-      : 0;
+      : session.createdAt.getTime() + timeoutMs;
 
     if (now < workerThreshold) {
       const remaining = Math.ceil((workerThreshold - now) / 1000);
@@ -317,7 +318,6 @@ export class CheckpointsService implements OnApplicationBootstrap {
 
   private async worktreePathExists(worktreePath: string): Promise<boolean> {
     try {
-      const { access } = await import('fs/promises');
       await access(worktreePath);
       return true;
     } catch {
@@ -402,6 +402,16 @@ export class CheckpointsService implements OnApplicationBootstrap {
         if (!data) continue;
 
         const checkpoint = await this.capture(data);
+
+        const refreshed = await this.prisma.agentSession.findUnique({ where: { id: session.id } });
+        if (refreshed) {
+          const recheck = await this.canTransitionToDormant(refreshed);
+          if (!recheck.allowed) {
+            this.logger.debug(`Skipping dormancy for session ${session.id}: state changed (${recheck.reason})`);
+            continue;
+          }
+        }
+
         await this.transitionToDormant(session, checkpoint);
       } catch (error) {
         this.logger.warn(
