@@ -6,6 +6,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
 };
 
@@ -35,9 +36,30 @@ describe('SyncEventService', () => {
     ...overrides,
   });
 
+  function mockCurrent(status: string): void {
+    mockPrisma.syncEvent.findUnique.mockResolvedValueOnce(fakeEvent({ status }));
+  }
+
   describe('createOrReuse', () => {
-    it('returns existing event when unique key matches', async () => {
+    it('creates a new event and returns it', async () => {
+      const created = fakeEvent();
+      mockPrisma.syncEvent.create.mockResolvedValue(created);
+
+      const result = await service.createOrReuse({
+        taskId: 'task-1', provider: 'github', action: 'create_pr', targetId: '5',
+      });
+
+      expect(result).toBe(created);
+      expect(mockPrisma.syncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          taskId: 'task-1', provider: 'github', action: 'create_pr', targetId: '5', status: 'pending',
+        }),
+      });
+    });
+
+    it('recovers and returns existing event on unique constraint race', async () => {
       const existing = fakeEvent();
+      mockPrisma.syncEvent.create.mockRejectedValue(new Error('Unique constraint failed'));
       mockPrisma.syncEvent.findUnique.mockResolvedValue(existing);
 
       const result = await service.createOrReuse({
@@ -45,50 +67,49 @@ describe('SyncEventService', () => {
       });
 
       expect(result).toBe(existing);
-      expect(mockPrisma.syncEvent.create).not.toHaveBeenCalled();
     });
 
-    it('creates a new event when no existing match', async () => {
+    it('re-throws if findUnique also fails after constraint error', async () => {
+      mockPrisma.syncEvent.create.mockRejectedValue(new Error('Unique constraint failed'));
       mockPrisma.syncEvent.findUnique.mockResolvedValue(null);
-      mockPrisma.syncEvent.create.mockResolvedValue(fakeEvent());
 
-      const result = await service.createOrReuse({
+      await expect(service.createOrReuse({
         taskId: 'task-1', provider: 'github', action: 'create_pr', targetId: '5',
-      });
-
-      expect(mockPrisma.syncEvent.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          taskId: 'task-1', provider: 'github', action: 'create_pr', targetId: '5', status: 'pending',
-        }),
-      });
-      expect(result.status).toBe('pending');
+      })).rejects.toThrow('Unique constraint failed');
     });
   });
 
   describe('state transitions', () => {
     it('markRunning transitions from pending to running', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'pending' }));
-      mockPrisma.syncEvent.update.mockResolvedValue(fakeEvent({ status: 'running' }));
+      mockCurrent('pending');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockCurrent('running');
 
       const result = await service.markRunning('evt-1');
       expect(result.status).toBe('running');
+      expect(mockPrisma.syncEvent.updateMany).toHaveBeenCalledWith({
+        where: { id: 'evt-1', status: 'pending' },
+        data: { status: 'running' },
+      });
     });
 
     it('markSucceeded transitions from running to succeeded', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'running' }));
-      mockPrisma.syncEvent.update.mockResolvedValue(fakeEvent({ status: 'succeeded', externalId: '42', url: 'https://pr.com/42' }));
+      mockCurrent('running');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockCurrent('succeeded');
 
       const result = await service.markSucceeded('evt-1', '42', 'https://pr.com/42');
       expect(result.status).toBe('succeeded');
-      expect(mockPrisma.syncEvent.update).toHaveBeenCalledWith({
-        where: { id: 'evt-1' },
+      expect(mockPrisma.syncEvent.updateMany).toHaveBeenCalledWith({
+        where: { id: 'evt-1', status: 'running' },
         data: { status: 'succeeded', externalId: '42', url: 'https://pr.com/42' },
       });
     });
 
     it('markFailed transitions from running to failed', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'running' }));
-      mockPrisma.syncEvent.update.mockResolvedValue(fakeEvent({ status: 'failed', errorCategory: 'auth_failed', errorMessage: 'Bad credentials' }));
+      mockCurrent('running');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.syncEvent.findUnique.mockResolvedValueOnce(fakeEvent({ status: 'failed', errorCategory: 'auth_failed', errorMessage: 'Bad credentials' }));
 
       const result = await service.markFailed('evt-1', 'auth_failed', 'Bad credentials');
       expect(result.status).toBe('failed');
@@ -96,45 +117,72 @@ describe('SyncEventService', () => {
     });
 
     it('markRetryable transitions from running to retryable', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'running' }));
-      mockPrisma.syncEvent.update.mockResolvedValue(fakeEvent({ status: 'retryable' }));
+      mockCurrent('running');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockCurrent('retryable');
 
       const result = await service.markRetryable('evt-1');
       expect(result.status).toBe('retryable');
     });
 
     it('markRetryable to running is valid (retry cycle)', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'retryable' }));
-      mockPrisma.syncEvent.update.mockResolvedValue(fakeEvent({ status: 'running' }));
+      mockCurrent('retryable');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockCurrent('running');
 
       const result = await service.markRunning('evt-1');
       expect(result.status).toBe('running');
     });
 
     it('markSkipped transitions from pending to skipped', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'pending' }));
-      mockPrisma.syncEvent.update.mockResolvedValue(fakeEvent({ status: 'skipped' }));
+      mockCurrent('pending');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockCurrent('skipped');
 
       const result = await service.markSkipped('evt-1');
       expect(result.status).toBe('skipped');
     });
 
     it('rejects illegal transition from succeeded to running', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'succeeded' }));
+      mockCurrent('succeeded');
 
       await expect(service.markRunning('evt-1')).rejects.toThrow('Invalid SyncEvent transition');
+    });
+
+    it('rejects illegal transition from succeeded to failed', async () => {
+      mockCurrent('succeeded');
+
+      await expect(service.markFailed('evt-1', 'err', 'msg')).rejects.toThrow('Invalid SyncEvent transition');
     });
 
     it('rejects illegal transition from skipped to running', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'skipped' }));
+      mockCurrent('skipped');
 
       await expect(service.markRunning('evt-1')).rejects.toThrow('Invalid SyncEvent transition');
     });
 
+    it('rejects illegal transition from skipped to failed', async () => {
+      mockCurrent('skipped');
+
+      await expect(service.markFailed('evt-1', 'err', 'msg')).rejects.toThrow('Invalid SyncEvent transition');
+    });
+
     it('rejects illegal transition from failed to succeeded', async () => {
-      mockPrisma.syncEvent.findUnique.mockResolvedValue(fakeEvent({ status: 'failed' }));
+      mockCurrent('failed');
 
       await expect(service.markSucceeded('evt-1')).rejects.toThrow('Invalid SyncEvent transition');
+    });
+
+    it('rejects illegal transition from failed to running', async () => {
+      mockCurrent('failed');
+
+      await expect(service.markRunning('evt-1')).rejects.toThrow('Invalid SyncEvent transition');
+    });
+
+    it('rejects illegal transition from failed to retryable', async () => {
+      mockCurrent('failed');
+
+      await expect(service.markRetryable('evt-1')).rejects.toThrow('Invalid SyncEvent transition');
     });
 
     it('throws when event not found', async () => {
@@ -142,15 +190,62 @@ describe('SyncEventService', () => {
 
       await expect(service.markRunning('nonexistent')).rejects.toThrow('SyncEvent nonexistent not found');
     });
+
+    it('throws when event has unknown status', async () => {
+      mockCurrent('bogus');
+
+      await expect(service.markRunning('evt-1')).rejects.toThrow('has unknown status');
+    });
+
+    it('detects concurrent status change during transition', async () => {
+      mockCurrent('pending');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 0 });
+      mockCurrent('running');
+
+      await expect(service.markRunning('evt-1')).rejects.toThrow('concurrent transition');
+    });
   });
 
   describe('listForTask', () => {
-    it('returns ordered sync events for a task', async () => {
+    it('returns ordered sync events with default limit', async () => {
       const events = [fakeEvent({ id: 'evt-1' }), fakeEvent({ id: 'evt-2' })];
       mockPrisma.syncEvent.findMany.mockResolvedValue(events);
 
       const result = await service.listForTask('task-1');
       expect(result).toHaveLength(2);
+      expect(mockPrisma.syncEvent.findMany).toHaveBeenCalledWith({
+        where: { taskId: 'task-1' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+    });
+
+    it('accepts custom limit', async () => {
+      mockPrisma.syncEvent.findMany.mockResolvedValue([]);
+
+      await service.listForTask('task-1', 10);
+      expect(mockPrisma.syncEvent.findMany).toHaveBeenCalledWith({
+        where: { taskId: 'task-1' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+    });
+
+    it('caps limit at 200', async () => {
+      mockPrisma.syncEvent.findMany.mockResolvedValue([]);
+
+      await service.listForTask('task-1', 500);
+      expect(mockPrisma.syncEvent.findMany).toHaveBeenCalledWith({
+        where: { taskId: 'task-1' },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+    });
+
+    it('falls back to default limit for invalid values', async () => {
+      mockPrisma.syncEvent.findMany.mockResolvedValue([]);
+
+      await service.listForTask('task-1', -1);
       expect(mockPrisma.syncEvent.findMany).toHaveBeenCalledWith({
         where: { taskId: 'task-1' },
         orderBy: { createdAt: 'desc' },
@@ -178,6 +273,56 @@ describe('SyncEventService', () => {
 
       const result = await service.getLastForAction('task-1', 'github', 'create_pr', '999');
       expect(result).toBeNull();
+    });
+  });
+
+  describe('errorMessage sanitization', () => {
+    function mockTransitionSuccess(): void {
+      mockCurrent('running');
+      mockPrisma.syncEvent.updateMany.mockResolvedValue({ count: 1 });
+      mockCurrent('failed');
+    }
+
+    it('redacts GitHub tokens', async () => {
+      mockTransitionSuccess();
+
+      await service.markFailed('evt-1', 'auth_failed', 'token was ghp_abcdefghijklmnopqrstuvwxyz1234567890');
+
+      expect(mockPrisma.syncEvent.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            errorMessage: expect.not.stringContaining('ghp_abcdefghijklmnopqrstuvwxyz1234567890'),
+          }),
+        }),
+      );
+    });
+
+    it('redacts env var patterns', async () => {
+      mockTransitionSuccess();
+
+      await service.markFailed('evt-1', 'auth_failed', 'check ${ARC_LINEAR_API_KEY}');
+
+      expect(mockPrisma.syncEvent.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            errorMessage: expect.stringContaining('[REDACTED]'),
+          }),
+        }),
+      );
+    });
+
+    it('preserves safe error messages', async () => {
+      mockTransitionSuccess();
+
+      await service.markFailed('evt-1', 'network_error', 'Connection refused: API endpoint unreachable');
+
+      expect(mockPrisma.syncEvent.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            errorMessage: 'Connection refused: API endpoint unreachable',
+          }),
+        }),
+      );
     });
   });
 });
