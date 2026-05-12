@@ -38,13 +38,14 @@ describe('LinearProvider', () => {
   });
 
   describe('searchIssues', () => {
-    it('uses searchIssues query when text query provided', async () => {
-      mockGql({ data: { searchIssues: { nodes: [rawIssue()] } } });
+    it('uses issues query with text filter when query provided', async () => {
+      mockGql({ data: { issues: { nodes: [rawIssue()] } } });
       const results = await provider.searchIssues({ query: 'login bug' });
       expect(results).toHaveLength(1);
       expect(results[0].identifier).toBe('TSH-1');
       const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
-      expect(body.query).toContain('searchIssues');
+      expect(body.query).toContain('issues(');
+      expect(body.variables.filter).toHaveProperty('or');
     });
 
     it('uses issues query when no text query', async () => {
@@ -55,20 +56,18 @@ describe('LinearProvider', () => {
       expect(body.query).toContain('issues(');
     });
 
-    it('filters by teamId client-side when using searchIssues', async () => {
-      const issue1 = rawIssue({ teamId: 'team-1' });
-      const issue2 = rawIssue({ id: 'i-2', identifier: 'TSH-2', teamId: 'team-2' });
-      mockGql({ data: { searchIssues: { nodes: [issue1, issue2] } } });
-      const results = await provider.searchIssues({ query: 'bug', teamId: 'team-1' });
-      expect(results).toHaveLength(1);
-      expect(results[0].teamId).toBe('team-1');
+    it('passes team filter server-side when query and teamId both provided', async () => {
+      mockGql({ data: { issues: { nodes: [rawIssue({ teamId: 'team-1' })] } } });
+      await provider.searchIssues({ query: 'bug', teamId: 'team-1' });
+      const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+      expect(body.variables.filter).toMatchObject({ team: { id: { eq: 'team-1' } } });
     });
   });
 
   describe('getIssue', () => {
-    it('fetches issue by identifier', async () => {
+    it('fetches issue by id', async () => {
       mockGql({ data: { issue: rawIssue() } });
-      const issue = await provider.getIssue('TSH-1');
+      const issue = await provider.getIssue('i-1');
       expect(issue.identifier).toBe('TSH-1');
       expect(issue.title).toBe('Test Issue');
     });
@@ -108,6 +107,13 @@ describe('LinearProvider', () => {
       expect(result.status).toBe('succeeded');
       expect(result.provider).toBe('linear');
     });
+
+    it('returns failed when issueUpdate success is false', async () => {
+      mockGql({ data: { issueUpdate: { success: false } } });
+      const result = await provider.updateIssueStatus('issue-id', 'state-id');
+      expect(result.status).toBe('failed');
+      expect(result.errorCategory).toBe('unexpected');
+    });
   });
 
   describe('attachLink', () => {
@@ -116,6 +122,13 @@ describe('LinearProvider', () => {
       const result = await provider.attachLink({ issueId: 'i-1', url: 'https://github.com/pr/1', label: 'PR #1' });
       expect(result.status).toBe('succeeded');
       expect(result.url).toBe('https://github.com/pr/1');
+    });
+
+    it('returns failed when attachmentLinkURL success is false', async () => {
+      mockGql({ data: { attachmentLinkURL: { success: false } } });
+      const result = await provider.attachLink({ issueId: 'i-1', url: 'https://github.com/pr/1', label: 'PR #1' });
+      expect(result.status).toBe('failed');
+      expect(result.errorCategory).toBe('unexpected');
     });
   });
 

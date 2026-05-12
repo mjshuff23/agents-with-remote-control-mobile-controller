@@ -35,7 +35,7 @@ export class LinearProvider implements ILinearProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: this.token,
+        Authorization: `Bearer ${this.token}`,
       },
       body: JSON.stringify({ query, variables }),
     });
@@ -61,35 +61,25 @@ export class LinearProvider implements ILinearProvider {
     if (params.teamId) filter['team'] = { id: { eq: params.teamId } };
     if (params.stateId) filter['state'] = { id: { eq: params.stateId } };
 
-    const query = `
-      query SearchIssues($filter: IssueFilter, $first: Int, $term: String) {
-        issues(filter: $filter, first: $first, orderBy: updatedAt) {
-          nodes {
-            id identifier title description url teamId
-            state { id }
-            labels { nodes { name } }
-          }
-        }
-        ${params.query ? `searchIssues(term: $term, first: $first) { nodes { id identifier title description url teamId state { id } labels { nodes { name } } } }` : ''}
-      }
-    `;
-
-    // Use searchIssues when a text query is provided, otherwise use filtered list
+    // Use searchIssues (text search) when a query term is provided, with server-side
+    // team/state filters applied via the issues query as a fallback filter.
+    // Linear's searchIssues does not support filter args, so we pass team/state
+    // as additional filter variables and use the issues query with a term filter instead.
     if (params.query) {
-      const data = await this.gql<{
-        searchIssues: { nodes: RawLinearIssue[] };
-      }>(
-        `query SearchIssues($term: String, $first: Int) {
-          searchIssues(term: $term, first: $first) {
+      const searchFilter: Record<string, unknown> = { ...filter };
+      searchFilter['or'] = [
+        { title: { containsIgnoreCase: params.query } },
+        { description: { containsIgnoreCase: params.query } },
+      ];
+      const data = await this.gql<{ issues: { nodes: RawLinearIssue[] } }>(
+        `query SearchIssues($filter: IssueFilter, $first: Int) {
+          issues(filter: $filter, first: $first, orderBy: updatedAt) {
             nodes { id identifier title description url teamId state { id } labels { nodes { name } } }
           }
         }`,
-        { term: params.query, first: params.limit ?? 25 },
+        { filter: searchFilter, first: params.limit ?? 25 },
       );
-      let results = data.searchIssues.nodes.map(normalizeLinearIssue);
-      if (params.teamId) results = results.filter((i) => i.teamId === params.teamId);
-      if (params.stateId) results = results.filter((i) => i.stateId === params.stateId);
-      return results;
+      return data.issues.nodes.map(normalizeLinearIssue);
     }
 
     const data = await this.gql<{ issues: { nodes: RawLinearIssue[] } }>(
@@ -103,12 +93,12 @@ export class LinearProvider implements ILinearProvider {
     return data.issues.nodes.map(normalizeLinearIssue);
   }
 
-  async getIssue(identifier: string): Promise<LinearIssue> {
+  async getIssue(id: string): Promise<LinearIssue> {
     const data = await this.gql<{ issue: RawLinearIssue }>(
       `query GetIssue($id: String!) {
         issue(id: $id) { id identifier title description url teamId state { id } labels { nodes { name } } }
       }`,
-      { id: identifier },
+      { id },
     );
     return normalizeLinearIssue(data.issue);
   }
@@ -140,22 +130,28 @@ export class LinearProvider implements ILinearProvider {
   }
 
   async updateIssueStatus(issueId: string, workflowStateId: string): Promise<ProviderActionResult> {
-    await this.gql<unknown>(
+    const data = await this.gql<{ issueUpdate: { success: boolean } }>(
       `mutation UpdateIssueState($issueId: String!, $stateId: String!) {
         issueUpdate(id: $issueId, input: { stateId: $stateId }) { success }
       }`,
       { issueId, stateId: workflowStateId },
     );
+    if (!data.issueUpdate?.success) {
+      return { provider: 'linear', externalId: issueId, status: 'failed', errorCategory: 'unexpected', errorMessage: 'issueUpdate returned success: false' };
+    }
     return { provider: 'linear', externalId: issueId, status: 'succeeded' };
   }
 
   async attachLink(params: LinearCreateLinkParams): Promise<ProviderActionResult> {
-    await this.gql<unknown>(
+    const data = await this.gql<{ attachmentLinkURL: { success: boolean } }>(
       `mutation AttachLink($issueId: String!, $url: String!, $title: String!) {
         attachmentLinkURL(issueId: $issueId, url: $url, title: $title) { success }
       }`,
       { issueId: params.issueId, url: params.url, title: params.label },
     );
+    if (!data.attachmentLinkURL?.success) {
+      return { provider: 'linear', externalId: params.issueId, status: 'failed', errorCategory: 'unexpected', errorMessage: 'attachmentLinkURL returned success: false' };
+    }
     return { provider: 'linear', externalId: params.issueId, url: params.url, status: 'succeeded' };
   }
 

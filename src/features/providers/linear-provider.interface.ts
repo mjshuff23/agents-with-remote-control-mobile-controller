@@ -43,7 +43,7 @@ export interface ILinearProvider {
   readonly name: 'linear';
   isConfigured(): boolean;
   searchIssues(params: LinearSearchParams): Promise<LinearIssue[]>;
-  getIssue(identifier: string): Promise<LinearIssue>;
+  getIssue(id: string): Promise<LinearIssue>;
   getTeams(): Promise<LinearTeam[]>;
   getWorkflowStates(teamId: string): Promise<LinearWorkflowState[]>;
   updateIssueStatus(issueId: string, workflowStateId: string): Promise<ProviderActionResult>;
