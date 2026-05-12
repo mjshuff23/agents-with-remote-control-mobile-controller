@@ -22,6 +22,7 @@ version. This is a known false positive caused by:
 If you see a red X on a package you believe is current:
 
 ```bash
+cd controller                        # run from the package directory
 npm view <package> version          # latest on registry
 pnpm ls <package>                   # installed version
 pnpm why <package>                  # dependency chain
