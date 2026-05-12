@@ -10,9 +10,9 @@ import { AppModule } from '../src/app.module';
 import { applyAppGlobals } from '../src/app-globals';
 import { AGENT_ADAPTERS } from '../src/agents/agent-adapter.token';
 import { AppConfigService } from '../src/config/app-config.service';
-import { GitCommandService } from '../src/git/git-command.service';
-import { GitWorktreeService } from '../src/git/git-worktree.service';
-import { PolicyLoaderService } from '../src/policy/policy-loader.service';
+import { GitCommandService } from '../src/features/worktrees/git-command.service';
+import { GitWorktreeService } from '../src/features/worktrees/git-worktree.service';
+import { PolicyLoaderService } from '../src/features/policy/policy-loader.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
 

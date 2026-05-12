@@ -2,7 +2,7 @@
 
 This document is the in-depth companion to [`README.md`](../README.md). It captures the system's working architecture, modules, data model, and the decisions behind them.
 
-> **Current implementation note:** Phases 1 and 2 are complete, and Phase 3 is implemented as a local-loop hardening layer: task-scoped Git worktrees, cooperative approval requests, audit records, diff summaries, configured test runs, and controller cards. Phase 3 is `cooperative-gated` by default; it does not claim universal pre-execution interception of every CLI action.
+> **Current implementation note:** Phases 1 and 2 are complete, and Phase 3 is implemented as a local-loop hardening layer: task-scoped Git worktrees, cooperative approval requests, audit records, diff summaries, configured test runs, and controller cards. Phase 3.5 adds checkpoint/restore for dormant sessions and a codebase refactoring into feature silos with integration seams. Phase 3 is `cooperative-gated` by default; it does not claim universal pre-execution interception of every CLI action.
 
 ---
 
@@ -90,6 +90,43 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 
 - Append-only log of every approval, denial, and risk-classification decision.
 - Source of truth for "what did the agent ask, and what did the human decide?"
+
+### ProtocolHandlerModule
+
+- Extracted from `AgentSessionsModule` to isolate ARC_ACTION_REQUEST protocol parsing and approval lifecycle management.
+- Owns protocol buffer management (partial JSON reassembly across chunks), approval expiry scheduling, and ARC_APPROVAL response formatting.
+- Reduces `AgentSessionsService` by ~200 lines. See `src/features/agent-sessions/protocol-handler.service.ts`.
+
+### IntegrationsModule (Phase 4 scaffold)
+
+- Provider-agnostic `IIntegrationGateway` interface with `connect`, `disconnect`, and `read` methods.
+- Each provider (GitHub, Linear, Notion, Figma) has a stub adapter that returns `{ ok: false, error: "not implemented until Phase 4" }`.
+- The multi-provider token `INTEGRATION_GATEWAYS` allows any module to consume all registered integrations.
+- Phase 4 code belongs in `src/features/integrations/<provider>/`.
+- No provider write behavior is implemented in Phase 3.5.
+
+---
+
+## Feature module layout (Phase 3.5+)
+
+All feature modules live under `src/features/`. Cross-cutting infrastructure (`config/`, `prisma/`, `events/`, `policy/`, `common/`, `agents/`) remains at `src/`.
+
+```text
+src/
+  app.module.ts
+  config/ prisma/ events/ policy/ common/ agents/     ← infrastructure
+  features/
+    tasks/                                              ← task CRUD + orchestration
+    agent-sessions/                                     ← session lifecycle + protocol handler
+    approvals/                                          ← approval lifecycle
+    worktrees/                                          ← git worktree/diff/command (was git/)
+    audit/                                              ← audit log
+    checkpoints/                                        ← session checkpoint + dormancy
+    test-runs/                                          ← configured test execution
+    integrations/                                       ← Phase 4 provider seams
+      mcp-gateway/                                      ← interface + types
+      github/ linear/ notion/ figma/                    ← stub adapters
+```
 
 ---
 

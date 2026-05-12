@@ -8,7 +8,7 @@ import { applyAppGlobals } from '../src/app-globals';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AGENT_ADAPTERS } from '../src/agents/agent-adapter.token';
 import { AppConfigService } from '../src/config/app-config.service';
-import { GitWorktreeService } from '../src/git/git-worktree.service';
+import { GitWorktreeService } from '../src/features/worktrees/git-worktree.service';
 import { createInMemoryPrisma } from './utils/in-memory-prisma';
 
 const TEST_SECRET = 'test-secret';

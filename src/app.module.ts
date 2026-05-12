@@ -4,16 +4,15 @@ import { AppConfigModule } from './config/app-config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { EventsModule } from './events/events.module';
 import { AgentsModule } from './agents/agents.module';
-import { AgentSessionsModule } from './agent-sessions/agent-sessions.module';
-import { CheckpointsModule } from './checkpoints/checkpoints.module';
-import { TasksModule } from './tasks/tasks.module';
-import { ApprovalsModule } from './approvals/approvals.module';
-import { GitModule } from './git/git.module';
-import { PolicyModule } from './policy/policy.module';
-import { AuditLogModule } from './audit/audit-log.module';
-import { TestRunnerModule } from './test-runs/test-runner.module';
+import { AgentSessionsModule } from './features/agent-sessions/agent-sessions.module';
+import { CheckpointsModule } from './features/checkpoints/checkpoints.module';
+import { TasksModule } from './features/tasks/tasks.module';
+import { ApprovalsModule } from './features/approvals/approvals.module';
+import { WorktreesModule } from './features/worktrees/worktrees.module';
+import { PolicyModule } from './features/policy/policy.module';
+import { AuditLogModule } from './features/audit/audit-log.module';
+import { TestRunnerModule } from './features/test-runs/test-runner.module';
 
-/** Root application module importing all feature modules. */
 @Module({
   imports: [
     AppConfigModule,
@@ -24,7 +23,7 @@ import { TestRunnerModule } from './test-runs/test-runner.module';
     CheckpointsModule,
     TasksModule,
     ApprovalsModule,
-    GitModule,
+    WorktreesModule,
     PolicyModule,
     AuditLogModule,
     TestRunnerModule
