@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AgentSession, Task } from '@prisma/client';
+
 import { ProblemException } from '../common/errors/problem.exception';
 import { EventsGateway } from '../events/events.gateway';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +23,7 @@ export interface DiffSummaryPayload {
   createdAt: Date;
 }
 
+/** Runs git diff commands against a task worktree and produces structured change summaries with risk flags. */
 @Injectable()
 export class GitDiffService {
   constructor(
@@ -30,6 +32,7 @@ export class GitDiffService {
     private readonly events: EventsGateway
   ) {}
 
+  /** Summarize diff changes for a task by loading the task and delegating to summarize(). */
   async summarizeTask(taskId: string): Promise<DiffSummaryPayload> {
     const task = await this.prisma.task.findUnique({ where: { id: taskId } });
     if (!task) {
@@ -47,6 +50,10 @@ export class GitDiffService {
     return this.summarize(task, session);
   }
 
+  /**
+   * Run git status/diff commands, parse numstat and porcelain output,
+   * compute risk flags, persist a GitChangeSummary, and emit a `diff.summary` event.
+   */
   async summarize(task: Task, session?: AgentSession | null): Promise<DiffSummaryPayload> {
     if (!task.worktreePath) {
       throw new Error(`Task "${task.id}" has no worktreePath`);
@@ -106,6 +113,7 @@ export class GitDiffService {
   }
 }
 
+/** Parse `git diff --numstat -z` output into per-file change counts. */
 function parseNumstat(output: string): Array<{ path: string; insertions: number; deletions: number }> {
   const tokens = output.split('\0').filter(Boolean);
   const files: Array<{ path: string; insertions: number; deletions: number }> = [];
@@ -129,12 +137,14 @@ function parseNumstat(output: string): Array<{ path: string; insertions: number;
   return files;
 }
 
+/** Parse a git diff count string, returning 0 for missing or non-numeric values. */
 function parseCount(value: string | undefined): number {
   if (!value || value === '-') return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** Parse `git diff --name-status -z` output into status counts. */
 function parseNameStatus(output: string): { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number } {
   const tokens = output.split('\0').filter(Boolean);
   let addedCount = 0;
@@ -155,6 +165,7 @@ function parseNameStatus(output: string): { addedCount: number; modifiedCount: n
   return { addedCount, modifiedCount, deletedCount, renamedCount };
 }
 
+/** Parse `git status --porcelain=v2 -z --branch` into counts and untracked paths. */
 function parsePorcelainStatus(output: string): { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number; untrackedPaths: string[] } {
   const tokens = output.split('\0').filter(Boolean);
   const counts = { addedCount: 0, modifiedCount: 0, deletedCount: 0, renamedCount: 0, untrackedPaths: [] as string[] };
@@ -184,6 +195,7 @@ function parsePorcelainStatus(output: string): { addedCount: number; modifiedCou
   return counts;
 }
 
+/** Merge diff --name-status counts with porcelain status counts, taking the max per category. */
 function mergeCounts(
   diffCounts: { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number },
   statusCounts: { addedCount: number; modifiedCount: number; deletedCount: number; renamedCount: number; untrackedPaths: string[] }
@@ -196,6 +208,7 @@ function mergeCounts(
   };
 }
 
+/** Append untracked file paths (with zero changes) to the file list. */
 function mergeUntracked(
   files: Array<{ path: string; insertions: number; deletions: number }>,
   untrackedPaths: string[]
@@ -209,6 +222,7 @@ function mergeUntracked(
   return files;
 }
 
+/** Compute risk flags (lockfile, migration, CI, secret paths, large diff, deletions) from changed file paths. */
 function computeRiskFlags(paths: string[], topFiles: Array<{ path: string; insertions: number; deletions: number }>): string[] {
   const flags = new Set<string>();
   for (const filePath of paths) {

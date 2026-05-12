@@ -39,6 +39,7 @@ export interface TaskReplay {
   runtime: ReturnType<AgentSessionsService['runtimeState']>;
 }
 
+/** Core task orchestration service: CRUD, session lifecycle, diffs, test runs, approvals. */
 @Injectable()
 export class TasksService {
   constructor(
@@ -54,6 +55,10 @@ export class TasksService {
     @Optional() private readonly events?: EventsGateway
   ) {}
 
+  /**
+   * Create a task, set up a git worktree, start an agent session, and emit
+   * a `task.started` event.
+   */
   async createTask(input: CreateTaskDto): Promise<CreateTaskResult> {
     const draft = await this.prisma.task.create({
       data: {
@@ -101,6 +106,7 @@ export class TasksService {
     return { task, session };
   }
 
+  /** List the 50 most recent tasks. */
   async listTasks(): Promise<{ tasks: Task[] }> {
     const tasks = await this.prisma.task.findMany({
       orderBy: { createdAt: 'desc' },
@@ -110,6 +116,11 @@ export class TasksService {
     return { tasks };
   }
 
+  /**
+   * Fetch full task details including session, logs, events, approvals,
+   * change summaries, test runs, and runtime state.
+   * @throws ProblemException(404) if the task does not exist.
+   */
   async getTask(id: string): Promise<TaskDetails> {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {
@@ -156,6 +167,12 @@ export class TasksService {
     };
   }
 
+  /**
+   * Replay events and logs after cursor positions for durable reconnect.
+   * @param options.afterEventSeq    - Minimum event sequence to include.
+   * @param options.afterLogSequence - Minimum log sequence to include.
+   * @param options.limit            - Max results per category.
+   */
   async replayTask(id: string, options: { afterEventSeq?: number; afterLogSequence?: number; limit?: number }): Promise<TaskReplay> {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {
@@ -183,6 +200,7 @@ export class TasksService {
     };
   }
 
+  /** Stop a task by delegating to the agent session lifecycle. */
   async stopTask(id: string): Promise<StopTaskResult> {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {
@@ -192,6 +210,7 @@ export class TasksService {
     return this.agentSessions.stopTask(id);
   }
 
+  /** Send stdin text to the running agent session for a task. */
   async sendInput(id: string, text: string): Promise<void> {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {
@@ -200,26 +219,31 @@ export class TasksService {
     await this.agentSessions.sendInput(task.id, text);
   }
 
+  /** List approval requests for a task. */
   async listApprovals(id: string) {
     await this.assertTaskExists(id);
     return this.approvals.listForTask(id);
   }
 
+  /** Request a diff summary for a task. */
   async summarizeDiff(id: string) {
     await this.assertTaskExists(id);
     return this.diffs.summarizeTask(id);
   }
 
+  /** Run a configured test command for a task. */
   async runTest(id: string, commandId: string) {
     await this.assertTaskExists(id);
     return this.tests.runTaskCommand(id, commandId);
   }
 
+  /** List configured test commands from the policy file. */
   async listTestCommands(id: string) {
     await this.assertTaskExists(id);
     return { testCommands: await this.policies.listTestCommands() };
   }
 
+  /** Guard: throw 404 if the task does not exist. */
   private async assertTaskExists(id: string): Promise<Task> {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {

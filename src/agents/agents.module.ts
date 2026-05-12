@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+
 import { AppConfigModule } from '../config/app-config.module';
 import { AGENT_ADAPTERS } from './agent-adapter.token';
 import { AgentsService } from './agents.service';
 import { CodexAdapter } from './codex.adapter';
 
+/** NestJS module that registers the Codex adapter and exposes the agents service. */
 @Module({
   imports: [AppConfigModule],
   providers: [

@@ -2,10 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { AgentActionRequest, ClassificationResult, PolicyRule } from './policy.types';
 import { PolicyLoaderService } from './policy-loader.service';
 
+/** Classifies agent action requests against configured policy rules. */
 @Injectable()
 export class ActionClassifierService {
   constructor(private readonly policies: PolicyLoaderService) {}
 
+  /**
+   * Classify an action request by checking semantic blocked rules first,
+   * then policy safe/blocked/needs-approval rules. Unknown actions default
+   * to NEEDS_APPROVAL.
+   */
   async classify(request: AgentActionRequest): Promise<ClassificationResult> {
     const config = await this.policies.load();
 
@@ -52,6 +58,7 @@ export class ActionClassifierService {
     };
   }
 
+  /** Check whether a single policy rule matches the request on all criteria. */
   private matchesRule(rule: PolicyRule, request: AgentActionRequest): boolean {
     if (rule.actionTypes && !rule.actionTypes.includes(request.actionType)) {
       return false;
@@ -77,6 +84,7 @@ export class ActionClassifierService {
     return true;
   }
 
+  /** Detect actions that are always BLOCKED regardless of policy config (force push, pipe-from-shell, deploy, etc.). */
   private semanticBlockedRule(rules: PolicyRule[], request: AgentActionRequest): PolicyRule | undefined {
     const tokens = commandTokens(request.command ?? []);
 
@@ -101,6 +109,7 @@ export class ActionClassifierService {
   }
 }
 
+/** Check whether a path glob pattern matches a value (single-segment or multi-segment). */
 function globMatches(glob: string, value: string): boolean {
   const globSegments = normalizePath(glob).split('/').filter(Boolean);
   const valueSegments = normalizePath(value).split('/').filter(Boolean);
@@ -110,10 +119,12 @@ function globMatches(glob: string, value: string): boolean {
   return matchSegments(globSegments, valueSegments, 0, 0, new Map<string, boolean>());
 }
 
+/** Normalize a path: backslashes to forward, strip leading `./`. */
 function normalizePath(value: string): string {
   return value.replaceAll('\\', '/').replace(/^\.?\//, '');
 }
 
+/** Recursive glob segment matcher supporting `**` (memoized). */
 function matchSegments(globSegments: string[], valueSegments: string[], gi: number, vi: number, memo: Map<string, boolean>): boolean {
   const key = `${gi}:${vi}`;
   const cached = memo.get(key);
@@ -137,10 +148,12 @@ function matchSegments(globSegments: string[], valueSegments: string[], gi: numb
   return result;
 }
 
+/** Match a single glob segment against a value segment (supports `*`). */
 function segmentMatches(globSegment: string, valueSegment: string): boolean {
   return wildcardMatches(globSegment, valueSegment, 0, 0, new Map<string, boolean>());
 }
 
+/** Recursive wildcard matcher for `*` in a single path segment (memoized). */
 function wildcardMatches(pattern: string, value: string, pi: number, vi: number, memo: Map<string, boolean>): boolean {
   const key = `${pi}:${vi}`;
   const cached = memo.get(key);
@@ -162,17 +175,20 @@ function wildcardMatches(pattern: string, value: string, pi: number, vi: number,
   return result;
 }
 
+/** Whether all required pieces appear somewhere in the command tokens. */
 function commandIncludesAll(command: string[], pieces: string[]): boolean {
   const tokens = commandTokens(command);
   return pieces.every((piece) => tokens.some((token) => commandPieceMatches(token, piece.toLowerCase())));
 }
 
+/** Extract all tokens from a command array, including tokens from inline shell strings. */
 function commandTokens(command: string[]): string[] {
   const argv = command.map((part) => part.trim().toLowerCase()).filter(Boolean);
   const shellText = shellCommandText(argv);
   return shellText ? argv.concat(tokenizeShellCommandText(shellText)) : argv;
 }
 
+/** Extract inline shell command text following `-c` or `--command` flags. */
 function shellCommandText(argv: string[]): string | undefined {
   const shellIndex = argv.findIndex((token) => {
     const executable = token.split(/[\\/]/).pop() ?? token;
@@ -185,10 +201,12 @@ function shellCommandText(argv: string[]): string | undefined {
   return commandFlagIndex === -1 ? undefined : argv[commandFlagIndex + 1];
 }
 
+/** Whether a token is a shell `-c` or `--command` flag. */
 function isShellCommandFlag(token: string): boolean {
   return token === '--command' || /^-[a-z]*c[a-z]*$/.test(token);
 }
 
+/** Tokenize a shell command string, splitting on pipes, ampersands, semicolons, whitespace. */
 function tokenizeShellCommandText(text: string): string[] {
   return text
     .replaceAll('|', ' | ')
@@ -199,6 +217,7 @@ function tokenizeShellCommandText(text: string): string[] {
     .filter(Boolean);
 }
 
+/** Match a command token against a policy piece (handles `..`, `--flag`, and exact). */
 function commandPieceMatches(token: string, piece: string): boolean {
   if (piece === '..') {
     return token === '..' || token.startsWith('../') || token.includes('/../');
@@ -209,10 +228,12 @@ function commandPieceMatches(token: string, piece: string): boolean {
   return token === piece;
 }
 
+/** Find a policy rule by its id. */
 function findRule(rules: PolicyRule[], id: string): PolicyRule | undefined {
   return rules.find((rule) => rule.id === id);
 }
 
+/** Detect `git push --force` or `git push --force-with-lease` in command tokens. */
 function forcePushBlockedRuleId(tokens: string[]): 'git.force_push' | 'git.force_push_with_lease' | undefined {
   if (!tokens.includes('git') || !tokens.includes('push')) {
     return undefined;
@@ -226,6 +247,7 @@ function forcePushBlockedRuleId(tokens: string[]): 'git.force_push' | 'git.force
   return undefined;
 }
 
+/** Detect `curl | sh` / `wget | bash` patterns. */
 function isPipeFromInternetToInterpreter(tokens: string[]): boolean {
   const pipeIndex = tokens.indexOf('|');
   if (pipeIndex === -1 || !tokens.some(isInternetFetcher)) {
@@ -234,22 +256,27 @@ function isPipeFromInternetToInterpreter(tokens: string[]): boolean {
   return tokens.slice(pipeIndex + 1).some(isShellOrInterpreter);
 }
 
+/** Whether a token is a known internet-fetching tool. */
 function isInternetFetcher(token: string): boolean {
   return ['curl', 'wget', 'http', 'https'].includes(executableName(token));
 }
 
+/** Whether a token is a shell or scripting language interpreter. */
 function isShellOrInterpreter(token: string): boolean {
   return ['sh', 'bash', 'zsh', 'dash', 'python', 'python3', 'node', 'ruby', 'perl', 'pwsh', 'powershell'].includes(executableName(token));
 }
 
+/** Detect production deploy commands. */
 function isProductionDeploy(tokens: string[]): boolean {
   return tokens.includes('deploy') && tokens.some((token) => ['--prod', '--production', 'prod', 'production'].includes(token));
 }
 
+/** Detect `git config --global` edits. */
 function isGlobalConfigEdit(tokens: string[]): boolean {
   return tokens.includes('config') && tokens.some((token) => token === '--global' || token.startsWith('--global='));
 }
 
+/** Detect `rm -rf` or `find -delete` targeting paths outside the worktree. */
 function isOutsideWorktreeDelete(request: AgentActionRequest, tokens: string[]): boolean {
   if (request.actionType === 'fs.delete' && (request.files ?? []).some(isOutsideWorktreePath)) {
     return true;
@@ -263,10 +290,12 @@ function isOutsideWorktreeDelete(request: AgentActionRequest, tokens: string[]):
   return false;
 }
 
+/** Whether a token matches `-rf`, `-fr`, or similar recursive-force shell flags. */
 function isRecursiveForceFlag(token: string): boolean {
   return token === '-rf' || token === '-fr' || /^-[a-z]*r[a-z]*f[a-z]*$/.test(token) || /^-[a-z]*f[a-z]*r[a-z]*$/.test(token);
 }
 
+/** Whether a path looks like a dangerous delete target (outside worktree). */
 function isDangerousDeleteTarget(token: string): boolean {
   if (!token || token.startsWith('-') || ['rm', 'find', '-delete'].includes(token)) {
     return false;
@@ -274,6 +303,7 @@ function isDangerousDeleteTarget(token: string): boolean {
   return isOutsideWorktreePath(token);
 }
 
+/** Whether a value is an absolute path, home dir reference, or `..` traversal. */
 function isOutsideWorktreePath(value: string): boolean {
   const lower = value.toLowerCase();
   const normalized = normalizePath(value);
@@ -290,6 +320,7 @@ function isOutsideWorktreePath(value: string): boolean {
     normalized.includes('/../');
 }
 
+/** Extract the executable name from a path (strips directory prefix). */
 function executableName(token: string): string {
   return token.split(/[\\/]/).pop() ?? token;
 }

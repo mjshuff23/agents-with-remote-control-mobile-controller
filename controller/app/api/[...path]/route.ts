@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+/** Route context with dynamic path segments from Next.js. */
 type RouteContext = {
   params: Promise<{ path?: string[] }>;
 };
@@ -19,34 +20,45 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 const PROXY_TIMEOUT_MS = 30_000;
 
+/** Proxy GET requests to the backend orchestrator. */
 export async function GET(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/** Proxy POST requests to the backend orchestrator. */
 export async function POST(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/** Proxy PUT requests to the backend orchestrator. */
 export async function PUT(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/** Proxy PATCH requests to the backend orchestrator. */
 export async function PATCH(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/** Proxy DELETE requests to the backend orchestrator. */
 export async function DELETE(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/** Proxy HEAD requests to the backend orchestrator. */
 export async function HEAD(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/** Proxy OPTIONS requests to the backend orchestrator. */
 export async function OPTIONS(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
 
+/**
+ * Proxy the incoming request to the backend orchestrator.
+ * Injects CONTROLLER_SECRET and strips hop-by-hop / spoofed headers.
+ */
 async function proxyToBackend(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3000';
   const { path = [] } = await context.params;
@@ -83,6 +95,7 @@ async function proxyToBackend(request: NextRequest, context: RouteContext): Prom
   });
 }
 
+/** Strip hop-by-hop headers and the client-supplied x-controller-secret. */
 function filteredHeaders(input: Headers): Headers {
   const headers = new Headers();
   input.forEach((value, key) => {

@@ -4,19 +4,21 @@ import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validato
 const trimString = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
+/** Validated input for creating a new task. */
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
   @MaxLength(20000)
   @Transform(trimString)
-  prompt!: string;
+  /** Task prompt text (1-20000 chars, required). */
+  prompt: string;
 
-  @IsIn(['codex'])
-  agent!: 'codex';
-
-  @IsOptional()
   @IsString()
-  @MaxLength(160)
+  /** Agent name to run (e.g. "codex"). */
+  agent: string;
+
+  @IsString()
   @Transform(trimString)
+  /** Optional human-readable title. */
   title?: string;
 }

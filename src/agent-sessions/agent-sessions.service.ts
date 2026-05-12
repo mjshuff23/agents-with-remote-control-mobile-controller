@@ -28,8 +28,14 @@ export interface SessionRuntimeState {
   statusLabel: RuntimeStatusLabel;
 }
 
+/**
+ * Manages the full lifecycle of agent sessions: starting, monitoring,
+ * stopping, recovery, and the cooperative approval protocol
+ * (ARC_ACTION_REQUEST / ARC_APPROVAL).
+ */
 @Injectable()
 export class AgentSessionsService implements OnApplicationBootstrap {
+
   private readonly runningProcesses = new Map<string, RunningAgentProcess>();
   private readonly nextLogSequences = new Map<string, number>();
   private readonly logWriteQueues = new Map<string, Promise<void>>();
@@ -47,10 +53,19 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     @Optional() private readonly events?: EventsGateway
   ) {}
 
+  /** Recover sessions that were interrupted by a prior orchestrator crash. */
   async onApplicationBootstrap(): Promise<void> {
     await this.recoverInterruptedSessions();
   }
 
+  /**
+   * Create an AgentSession row, launch the agent adapter process,
+   * wire output/exit callbacks, and update the session/task status.
+   *
+   * @param task - The task to start a session for.
+   * @returns The updated AgentSession with running status.
+   * @throws ProblemException(503) if the agent cannot be started.
+   */
   async createAndStart(task: Task): Promise<AgentSession> {
     const session = await this.prisma.agentSession.create({
       data: {
@@ -107,10 +122,15 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
   }
 
+  /** Whether a live (in-memory) process is registered for the given session. */
   hasLiveProcess(sessionId: string): boolean {
     return this.runningProcesses.has(sessionId);
   }
 
+  /**
+   * Derive a runtime state object (process state + status label) from
+   * a session record, checking live process registry.
+   */
   runtimeState(session: AgentSession | null): SessionRuntimeState {
     if (!session) {
       return { processState: 'reconstructed', statusLabel: 'idle' };
@@ -125,6 +145,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     };
   }
 
+  /**
+   * Send stdin text to the running agent process for a task.
+   * @throws ProblemException(404) if no session exists.
+   * @throws ProblemException(409) if the session has no live or writable process.
+   */
   async sendInput(taskId: string, text: string): Promise<void> {
     const session = await this.prisma.agentSession.findFirst({
       where: { taskId },
@@ -144,6 +169,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(session.id, 'system', `Input sent (${text.length} chars)`);
   }
 
+  /**
+   * Resolve a pending approval by delegating to ApprovalsService,
+   * writing the ARC_APPROVAL response back to the agent, and
+   * resuming the session if no approvals remain pending.
+   */
   async resolveApproval(
     approvalId: string,
     decision: Extract<ApprovalDecision, 'approved' | 'denied'>,
@@ -165,6 +195,11 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return { approval };
   }
 
+  /**
+   * Stop a running task by killing its agent process.
+   * Returns immediately with `accepted: true`; the actual kill is deferred.
+   * @returns `{ accepted: false }` if the session is already terminal.
+   */
   async stopTask(taskId: string): Promise<StopTaskResult> {
     const session = await this.prisma.agentSession.findFirst({
       where: { taskId },
@@ -200,6 +235,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return { accepted: true, session: { ...updated } };
   }
 
+  /** Append a log entry, queued per-session to preserve sequence order. */
   private async appendLog(sessionId: string, type: AgentLogType, content: string): Promise<void> {
     const previousWrite = this.logWriteQueues.get(sessionId) ?? Promise.resolve();
     const currentWrite = previousWrite.catch(() => undefined).then(async () => {
@@ -229,6 +265,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await currentWrite;
   }
 
+  /** Clear per-session in-memory state (sequences, queues, buffers). */
   private clearLogState(sessionId: string): void {
     this.nextLogSequences.delete(sessionId);
     this.logWriteQueues.delete(sessionId);
@@ -236,6 +273,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     this.protocolBuffers.delete(sessionId);
   }
 
+  /** Mark both session and task as failed with an error message. */
   private async markSessionFailed(taskId: string, sessionId: string, message: string): Promise<void> {
     await this.prisma.agentSession.update({
       where: { id: sessionId },
@@ -252,6 +290,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     this.clearLogState(sessionId);
   }
 
+  /** Get the next monotonic log sequence number for a session. */
   private async nextSequence(sessionId: string): Promise<number> {
     const current = this.nextLogSequences.get(sessionId);
     if (current !== undefined) {
@@ -269,6 +308,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return next;
   }
 
+  /** Handle agent process exit: determine final status, persist it, emit event. */
   private async completeFromExit(taskId: string, sessionId: string, exitCode: number, signal?: string): Promise<void> {
     this.runningProcesses.delete(sessionId);
     this.clearSessionApprovalTimeouts(sessionId);
@@ -302,6 +342,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     this.clearLogState(sessionId);
   }
 
+  /** Mark a session as stopped when no live process is registered. */
   private async markStoppedWithoutProcess(taskId: string, sessionId: string): Promise<AgentSession> {
     await this.appendLog(sessionId, 'system', 'Stop requested, but no live local process was registered');
     await this.prisma.task.update({
@@ -319,6 +360,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return stopped;
   }
 
+  /** Mark sessions left in starting/running/stopping as failed/stopped after boot. */
   private async recoverInterruptedSessions(): Promise<void> {
     const interrupted = await this.prisma.agentSession.findMany({
       where: {
@@ -345,10 +387,12 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
   }
 
+  /** Safely extract an error message string. */
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
 
+  /** Build the Phase 3 cooperative prompt that instructs the agent on the safety protocol. */
   private buildCooperativePrompt(task: Task): string {
     return [
       'You are running under Agents With Remote Control Mobile Controller Phase 3.',
@@ -371,6 +415,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     ].join('\n');
   }
 
+  /** Scan agent output for ARC_ACTION_REQUEST lines and process each one. */
   private async handleProtocolOutput(taskId: string, sessionId: string, content: string): Promise<void> {
     const lines = this.extractProtocolLines(sessionId, content);
     for (const line of lines) {
@@ -402,6 +447,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
   }
 
+  /** Extract complete protocol lines from a content chunk, buffering partial JSON across calls. */
   private extractProtocolLines(sessionId: string, content: string): string[] {
     const buffered = (this.protocolBuffers.get(sessionId) ?? '') + content;
     const parts = buffered.split(/\r?\n/);
@@ -423,6 +469,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     return complete;
   }
 
+  /** Set session and task status to waiting_approval. */
   private async markWaitingForApproval(taskId: string, sessionId: string): Promise<void> {
     await this.prisma.agentSession.update({
       where: { id: sessionId },
@@ -434,6 +481,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     });
   }
 
+  /** Resume a waiting_approval session back to running if no pending approvals remain. */
   private async resumeIfWaiting(taskId: string, sessionId: string): Promise<void> {
     const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
     if (session?.status !== 'waiting_approval') {
@@ -452,6 +500,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     });
   }
 
+  /** Write an ARC_APPROVAL response line to the agent's PTY stdin. */
   private async writeApprovalResponse(sessionId: string | null, payload: { id: string; decision: string; message: string; constraints: string[] }): Promise<void> {
     if (!sessionId) {
       return;
@@ -465,6 +514,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(sessionId, 'system', `Approval ${payload.decision} sent for ${payload.id}`);
   }
 
+  /** Schedule automatic expiry for an approval after the configured timeout. */
   private async scheduleApprovalExpiry(approvalId: string, sessionId: string): Promise<void> {
     this.clearApprovalTimeout(approvalId);
     const timeoutMs = await this.approvalTimeoutMs();
@@ -477,6 +527,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     this.approvalTimeoutSessions.set(approvalId, sessionId);
   }
 
+  /** Mark an approval as expired, write the response, and resume the session. */
   private async expireApproval(approvalId: string, sessionId: string): Promise<void> {
     this.clearApprovalTimeout(approvalId);
     let approval;
@@ -498,6 +549,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.resumeIfWaiting(approval.taskId, sessionId);
   }
 
+  /** Cancel a scheduled approval expiry timeout. */
   private clearApprovalTimeout(approvalId: string): void {
     const timeout = this.approvalTimeouts.get(approvalId);
     if (timeout) {
@@ -507,6 +559,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
   }
 
+  /** Cancel all approval timeouts for a given session. */
   private clearSessionApprovalTimeouts(sessionId: string): void {
     for (const [approvalId, timeoutSessionId] of this.approvalTimeoutSessions) {
       if (timeoutSessionId === sessionId) {
@@ -515,11 +568,16 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
   }
 
+  /** Resolve the effective approval timeout (policy config with env fallback). */
   private async approvalTimeoutMs(): Promise<number> {
     return this.policies.approvalTimeoutMs(this.config.approvalTimeoutMs);
   }
 }
 
+/**
+ * Trim an oversized protocol buffer remainder so partial JSON across
+ * chunks does not grow unbounded.
+ */
 function safeProtocolBufferRemainder(last: string): string {
   if (last.trim().startsWith(ACTION_REQUEST_PREFIX)) {
     // Discard oversized partial frames; a legitimate ARC_ACTION_REQUEST fits
@@ -530,6 +588,7 @@ function safeProtocolBufferRemainder(last: string): string {
   return last.slice(-PROTOCOL_BUFFER_LIMIT);
 }
 
+/** Map a Prisma session status string to the RuntimeStatusLabel enum. */
 function toRuntimeStatusLabel(status: string): RuntimeStatusLabel {
   if (status === 'waiting_approval') return 'waiting_approval';
   if (status === 'idle') return 'idle';

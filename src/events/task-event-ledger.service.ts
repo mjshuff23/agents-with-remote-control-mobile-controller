@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AgentLog, TaskEvent } from '@prisma/client';
+
 import { PrismaService } from '../prisma/prisma.service';
 import type { TaskEventEnvelope, TaskEventKind, TaskEventSeverity } from './events.gateway';
 
@@ -30,6 +31,7 @@ export interface ReplayTaskEventsResult {
 const DEFAULT_REPLAY_LIMIT = 500;
 const MAX_REPLAY_LIMIT = 1000;
 
+/** Durable event ledger that persists task events to Prisma with monotonic sequences and serialized writes. */
 @Injectable()
 export class TaskEventLedgerService {
   private readonly nextEventSequences = new Map<string, number>();
@@ -37,6 +39,10 @@ export class TaskEventLedgerService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Persist a new event with a monotonic sequence number, serialized per task.
+   * @returns The created event envelope.
+   */
   async append<TName extends string, TData>(input: AppendTaskEventInput<TName, TData>): Promise<TaskEventEnvelope<TName, TData>> {
     const previousWrite = this.eventWriteQueues.get(input.taskId) ?? Promise.resolve();
     const currentWrite = previousWrite.catch(() => undefined).then(async () => {
@@ -64,6 +70,10 @@ export class TaskEventLedgerService {
   // single-session: once stopped they cannot be restarted, so afterLogSequence
   // is a valid monotonic cursor. If multi-session restart is ever added, the
   // cursor will need to become a per-session map (Record<sessionId, number>).
+  /**
+   * Replay events and logs after the given cursor positions for a task.
+   * @returns Sorted arrays of events and logs within the limit.
+   */
   async replay(input: ReplayTaskEventsInput): Promise<ReplayTaskEventsResult> {
     const limit = clampLimit(input.limit);
     const session = await this.prisma.agentSession.findFirst({
@@ -97,6 +107,7 @@ export class TaskEventLedgerService {
     };
   }
 
+  /** Return the latest event sequence for a task (cached in-memory). */
   async latestSeq(taskId: string): Promise<number> {
     const cached = this.nextEventSequences.get(taskId);
     if (cached !== undefined) {
@@ -113,6 +124,7 @@ export class TaskEventLedgerService {
 
   // Single-writer invariant: only one process appends events for a given taskId.
   // In-process seq cache is safe because this orchestrator runs as a single instance.
+  /** Bump and return the next event sequence for a task (single-writer invariant). */
   private async nextSequence(taskId: string): Promise<number> {
     const current = await this.latestSeq(taskId);
     const next = current + 1;
@@ -121,6 +133,7 @@ export class TaskEventLedgerService {
   }
 }
 
+/** Clamp a replay limit between the default and max bounds. */
 function clampLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isInteger(limit) || limit <= 0) {
     return DEFAULT_REPLAY_LIMIT;
@@ -128,6 +141,7 @@ function clampLimit(limit: number | undefined): number {
   return Math.min(limit, MAX_REPLAY_LIMIT);
 }
 
+/** Convert a raw Prisma TaskEvent row to a typed TaskEventEnvelope. */
 function toEnvelope<TName extends string = string, TData = unknown>(row: TaskEvent): TaskEventEnvelope<TName, TData> {
   return {
     id: row.id,
@@ -143,6 +157,7 @@ function toEnvelope<TName extends string = string, TData = unknown>(row: TaskEve
   };
 }
 
+/** Parse JSON data string, falling back to raw string on parse failure. */
 function parseData<TData>(dataJson: string): TData {
   try {
     return JSON.parse(dataJson) as TData;

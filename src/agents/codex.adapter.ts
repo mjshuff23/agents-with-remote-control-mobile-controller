@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as pty from 'node-pty';
+
 import { AppConfigService } from '../config/app-config.service';
 import {
   AgentAdapter,
@@ -25,12 +26,21 @@ const BASE_CHILD_ENV_KEYS = [
 const PTY_EOF = '\x04';
 const PTY_ENTER = '\r';
 
+/** Codex CLI adapter that launches agent processes via node-pty. */
 @Injectable()
 export class CodexAdapter implements AgentAdapter {
   readonly name = 'codex' as const;
 
   constructor(private readonly config: AppConfigService) {}
 
+  /**
+   * Start a Codex agent process in a PTY, wire output/exit callbacks,
+   * and inject the initial prompt.
+   *
+   * @param input - Task launch parameters including repo path, prompt,
+   *                and output/exit callbacks.
+   * @returns A handle to the running process with stop() and write().
+   */
   async startTask(input: StartAgentTaskInput): Promise<RunningAgentProcess> {
     const executionPath = input.worktreePath ?? input.repoPath;
     const launch = this.buildLaunchCommand(executionPath);
@@ -90,6 +100,10 @@ export class CodexAdapter implements AgentAdapter {
     };
   }
 
+  /**
+   * Build the PTY command and args, handling WSL vs local mode.
+   * Replaces `{repoPath}` placeholders in configured Codex args.
+   */
   private buildLaunchCommand(repoPath: string): { command: string; args: string[] } {
     const codexArgs = this.config.codexArgs.map((arg) => arg.replaceAll('{repoPath}', repoPath));
 
@@ -115,17 +129,23 @@ export class CodexAdapter implements AgentAdapter {
     };
   }
 
+  /** Write the prompt to the PTY, normalizing newlines and appending EOF. */
   private writePrompt(ptyProcess: pty.IPty, prompt: string): void {
     const normalized = prompt.replace(/\r?\n/g, PTY_ENTER).replace(/\r$/, '');
     ptyProcess.write(`${normalized}${PTY_ENTER}`);
     ptyProcess.write(PTY_EOF);
   }
 
+  /** Safely extract an error message from an unknown error value. */
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
 }
 
+/**
+ * Build a filtered environment for child processes, allowing only base keys,
+ * configured extra keys, and OPENAI_ / CODEX_ prefixed variables.
+ */
 function buildChildEnv(extraKeys: string[]): Record<string, string> {
   const allowedKeys = new Set(BASE_CHILD_ENV_KEYS.concat(extraKeys));
   const env: Record<string, string> = {};
