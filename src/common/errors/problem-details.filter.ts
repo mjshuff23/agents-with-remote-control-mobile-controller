@@ -9,7 +9,17 @@ import { Response } from 'express';
 import { ProblemDetails } from './problem.exception';
 
 @Catch()
+/**
+ * Global exception filter that converts all exceptions to RFC 9457
+ * Problem Details JSON responses (`application/problem+json`).
+ */
 export class ProblemDetailsFilter implements ExceptionFilter {
+  /**
+   * Handle an exception by writing a Problem Details response.
+   *
+   * @param exception - The thrown exception (any type).
+   * @param host      - NestJS arguments host providing HTTP context.
+   */
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
@@ -25,6 +35,14 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       .json(body);
   }
 
+  /**
+   * Build a Problem Details body from an exception and its context.
+   *
+   * @param exception - The thrown exception.
+   * @param status    - HTTP status code.
+   * @param instance  - Request URL for the `instance` field.
+   * @returns A Problem Details object conforming to RFC 9457.
+   */
   private toProblemDetails(exception: unknown, status: number, instance: string): ProblemDetails {
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
@@ -59,6 +77,13 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     };
   }
 
+  /**
+   * Extract a detail string from an HttpException response body.
+   *
+   * @param data     - The HttpException response data.
+   * @param fallback - Fallback string if no detail is found.
+   * @returns A human-readable detail string.
+   */
   private detailFromResponse(data: Record<string, unknown>, fallback: string): string {
     if (typeof data.detail === 'string') {
       return data.detail;
@@ -72,6 +97,12 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     return fallback;
   }
 
+  /**
+   * Map an HTTP status code to a human-readable title string.
+   *
+   * @param status - HTTP status code.
+   * @returns A standard title like "Bad Request" or "Internal Server Error".
+   */
   private titleForStatus(status: number): string {
     if (status === HttpStatus.BAD_REQUEST) {
       return 'Bad Request';

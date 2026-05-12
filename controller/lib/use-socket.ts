@@ -12,6 +12,13 @@ type GlobalWithSocket = typeof globalThis & {
 // (which re-executes modules but keeps the JS heap) reuses the same socket.
 let _socket: Socket | null = null;
 
+/**
+ * Return the singleton WebSocket connection, creating it on first call.
+ * Pinned to globalThis so Next.js fast refresh reuses the same socket
+ * across module reloads.
+ *
+ * @returns The singleton Socket.io client instance.
+ */
 function getSocket(): Socket {
   const g = globalThis as GlobalWithSocket;
 
@@ -76,6 +83,16 @@ export interface TaskSocketHandlers {
   onReconnected?: () => void;
 }
 
+/**
+ * Subscribe to real-time events for a given task over WebSocket.
+ *
+ * Attaches event handlers, joins the server-side room, and replays missed
+ * events on (re)connect. Automatically cleans up on unmount or taskId change.
+ *
+ * @param taskId  - The task to subscribe to.
+ * @param handlers - Callback map for log, start, completion, approval, diff,
+ *                   test, and reconnect events.
+ */
 export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): void {
   // Keep handlers ref stable so the effect doesn't re-run on every render
   const ref = useRef(handlers);
