@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for AI coding agents (Codex, Claude Code, Gemini) working on this repository.
+Instructions for AI coding agents working on this repository.
 
 If you are an AI agent reading this: this file is your briefing. The human running you expects you to follow it.
 
@@ -8,74 +8,118 @@ If you are an AI agent reading this: this file is your briefing. The human runni
 
 ## What this repo is
 
-A local-first orchestration system that lets a human run CLI coding agents from their PC and control them from their phone. Yes, you may end up writing your own future supervisor. Take it seriously.
+A local-first orchestration system that lets a human run CLI coding agents from their PC and control them from their phone.
 
 Read these in order:
 
-1. [`README.md`](./README.md) — high-level intent and phased plan
-2. [`PLAN.md`](./PLAN.md) — phase-by-phase runtime contracts and smoke tests
-3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
-4. [`docs/SAFETY.md`](./docs/SAFETY.md) — what you can and cannot do
-5. [`docs/diagrams.md`](./docs/diagrams.md) — canonical diagrams
+1. [`README.md`](./README.md) — high-level intent and current phase map
+2. [`PLAN.md`](./PLAN.md) — current Phase 4 runtime contract and smoke tests
+3. [`docs/phase-4-implementation.md`](./docs/phase-4-implementation.md) — active Phase 4 handoff
+4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
+5. [`docs/SAFETY.md`](./docs/SAFETY.md) — what you can and cannot do
+6. [`docs/diagrams.md`](./docs/diagrams.md) — canonical diagrams
 
 ---
 
-## Phase boundaries (canonical scope)
+## Phase boundaries
 
-The current phase determines what is in-scope and what is out-of-scope. Linear is the source of truth.
+Linear is the source of truth for phase scope.
 
 | Phase | Linear | Status |
 |---|---|---|
 | 1 | [TSH-77](https://linear.app/michaelshuff/issue/TSH-77) | Complete — local REST orchestrator + Codex runner |
 | 2 | [TSH-78](https://linear.app/michaelshuff/issue/TSH-78) | Complete — WebSocket gateway + controller UI |
-| 3 | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | Next active focus — worktree isolation + approval gates |
-| 4 | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | Deferred |
-| 5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | Deferred |
-| 6 | [TSH-82](https://linear.app/michaelshuff/issue/TSH-82) | Deferred |
+| 3 | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | Complete — worktree isolation + approval gates |
+| 3.5 | [TSH-83](https://linear.app/michaelshuff/issue/TSH-83) | Complete — durable replay, checkpoints, reconnect, provider seams |
+| 4 | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | Active frontier — GitHub + Linear issue-to-PR sync |
+| 5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | Deferred — Notion, Figma, controlled MCP sync |
+| 6 | [TSH-82](https://linear.app/michaelshuff/issue/TSH-82) | Deferred — multi-agent review workflows |
 
-**Do not** implement work from a later phase while an earlier phase is open. If the work obviously belongs to a later phase, stop and ask.
-
-For Phase 3, keep the scope tight: isolate each task in a Git worktree, classify requested actions, create approval records, push approval prompts over the existing WebSocket path, and summarize diffs/tests before the human approves risky next steps.
-
-Phase 3 approval mode is `cooperative-gated` by default. Do not claim the orchestrator can perfectly intercept every CLI action unless a specific adapter hook proves that behavior in code.
+Do not implement work from a later phase while the active phase is open. If work belongs to a later phase, stop and ask.
 
 ---
 
-## Safety constraints (read this carefully)
+## Active Phase 4 scope
 
-The orchestrator this repo is building enforces a three-tier safety model. **You are expected to behave consistently with that model right now**, while working on the repo itself.
+Phase 4 connects the local loop to GitHub and Linear:
 
-### Always allowed (just do it)
+```text
+issue -> linked task -> isolated worktree -> branch -> approved commit -> approved push -> draft PR -> Linear sync
+```
 
-- Read any file inside this repo
-- Run lint, type-check, test commands declared in repo config
-- Summarize, plan, propose patches
-- Read documentation
+Current Phase 4 child tickets:
+
+| Linear | Focus |
+|---|---|
+| TSH-97 | GitHub access model |
+| TSH-98 | Linear access model + status mapping |
+| TSH-99 | SyncEvent idempotency |
+| TSH-100 | Issue picker + task-linking UX |
+| TSH-101 | Branch naming + worktree lifecycle |
+| TSH-102 | Approved commit flow + signing checks |
+| TSH-103 | Approved push flow + remote protection |
+| TSH-104 | Draft PR creation + generated summary |
+| TSH-105 | Linear-GitHub cross-reference sync |
+| TSH-106 | PR merge detection + Linear completion sync |
+| TSH-107 | Provider adapter seams |
+| TSH-108 | Approval/audit/sync integration |
+| TSH-109 | Mobile sync UI + provider errors |
+| TSH-110 | Provider test matrix + token-gated e2e |
+
+Recommended implementation order: `TSH-107`, `TSH-99`, `TSH-97`, `TSH-98`, `TSH-100`, `TSH-101`, `TSH-108`, `TSH-102`, `TSH-103`, `TSH-104`, `TSH-105`, `TSH-106`, `TSH-109`, `TSH-110`.
+
+---
+
+## Safety constraints
+
+The repo builds and follows a three-tier safety model.
+
+### Always allowed
+
+- Read files inside this repo.
+- Run lint, type-check, and test commands declared in repo config.
+- Summarize, plan, propose patches.
+- Read documentation.
 
 ### Always require explicit human approval
 
-- Edit, create, delete files outside `worktrees/` or scratch dirs
-- `git add` / `git commit` / `git push` / `git rebase` / `git merge`
-- Create or delete branches
-- Open or update pull requests
-- Install / update packages
-- Run database migrations
-- Update GitHub, Linear, Notion, Figma, or any external service
-- Modify CI / pipeline files
-- Modify hooks (git, husky, anything that runs on commit/push)
+- Edit, create, or delete files outside `worktrees/` or scratch dirs.
+- `git add`, `git commit`, `git push`, `git rebase`, `git merge`.
+- Create or delete branches.
+- Open or update pull requests.
+- Install or update packages.
+- Run database migrations.
+- Update GitHub, Linear, Notion, Figma, or any external service.
+- Modify CI/pipeline files.
+- Modify hooks.
 
-### Refuse outright (do not even ask)
+### Refuse outright
 
-- Read `.env`, `*.pem`, `*.key`, `id_*`, anything in `~/.ssh/`, anything matching the secrets pattern
-- Force push (`--force`, `--force-with-lease`) to any branch
-- Disable git hooks or skip signing (`--no-verify`, `--no-gpg-sign`)
-- Production deploys
-- Modify auth credentials (`gh auth`, `gcloud auth`, `aws configure`)
-- Run `curl ... | sh`, `wget ... | bash`, or any pipe-from-internet shell
-- `rm -rf` outside the repo or worktree
-- Modify global system config
+- Read `.env`, `*.pem`, `*.key`, `id_*`, anything in `~/.ssh/`, or anything matching secrets patterns.
+- Force push to any branch.
+- Disable hooks or skip signing.
+- Production deploys.
+- Modify auth credentials.
+- Run pipe-from-internet shell commands.
+- `rm -rf` outside the repo or worktree.
+- Modify global system config.
 
 If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassified destructive action is unbounded.
+
+---
+
+## Phase 4 implementation rules
+
+- Provider SDK/API calls belong inside provider adapters, not controllers or React components.
+- Orchestration services compose providers, approvals, audit logs, tasks, sessions, and SyncEvents.
+- Provider writes must be idempotent.
+- Duplicate PRs, duplicate Linear links, duplicate comments, and duplicate status updates are bugs.
+- Store only recovery-safe provider metadata: IDs, URLs, timestamps, action category, failure category.
+- Do not store raw provider responses by default.
+- Do not log provider credentials or provider config.
+- No auto-merge.
+- No auto-deploy.
+- No force-push.
 
 ---
 
@@ -84,10 +128,10 @@ If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassi
 When native CLI approval hooks are unavailable, agents cooperate with the orchestrator using exactly one machine-readable stdout line:
 
 ```text
-ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | git.branch | test.run | shell.command","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"Short title","rationale":"Why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"One sentence"}
+ARC_ACTION_REQUEST {"id":"<uuid>","actionType":"fs.write_patch | fs.delete | pkg.install | db.migrate | git.commit | git.push | git.branch | test.run | shell.command | provider.github | provider.linear","riskLevel":"SAFE | NEEDS_APPROVAL | BLOCKED","title":"Short title","rationale":"Why this is needed","command":["arg1","arg2"],"files":["path/a"],"expectedEffect":"One sentence"}
 ```
 
-The orchestrator classifies the request with `arc.config.json`, creates an `ApprovalRequest` row when relevant, emits `approval.requested` or `policy.violation`, and replies over stdin:
+The orchestrator classifies the request, creates an `ApprovalRequest` row when relevant, emits `approval.requested` or `policy.violation`, and replies over stdin:
 
 ```text
 ARC_APPROVAL {"id":"<uuid>","decision":"approved | denied | expired | refused","message":"operator guidance","constraints":["..."]}
@@ -101,42 +145,42 @@ Agent rules:
 - If approved, execute only the exact approved action inside the task worktree.
 - After mutating actions, produce or allow a diff summary.
 
-The controller exposes approvals on the task detail page. Diffs and configured test runs are summaries for local review, not permission to commit, push, PR, deploy, or sync external tools.
-
 ---
 
 ## Conventions
 
 ### Branches
 
-- Feature: `agent/<linear-id>-<slug>` (e.g., `agent/tsh-79-worktree-approval-gates`)
-- Docs: `docs/<slug>` (e.g., `docs/phase-3-handoff-cleanup`)
+- Feature: `agent/<linear-id>-<slug>` or Phase 4 issue-linked equivalent.
+- Docs: `docs/<slug>`.
 - Never commit directly to `main` unless the human explicitly asks for a direct docs-only update. Prefer a PR.
 
 ### Commits
 
-- Imperative mood ("Add X", "Fix Y", not "Added").
-- Reference Linear issue ID in body when relevant: `Refs: TSH-79`.
-- Small, focused commits. Don't pile unrelated changes into one.
+- Imperative mood.
+- Reference Linear issue ID in body when relevant: `Refs: TSH-80`.
+- Small, focused commits.
 
 ### Code
 
-- TypeScript everywhere on the orchestrator and controller.
-- NestJS modules map 1:1 to source folders.
-- One adapter per agent. Adapters implement the runtime interface in `src/agents/agent-adapter.interface.ts` and keep the architecture docs in sync.
+- TypeScript everywhere on orchestrator and controller.
+- NestJS modules map cleanly to source folders.
+- Provider clients stay thin.
+- Feature services own orchestration.
+- React components call app APIs/hooks, not provider SDKs.
 
 ### Tests
 
-- Tests live next to the code (`module.ts` + `module.spec.ts`) or in `test/` for e2e/integration coverage.
-- Phase 1 and Phase 2 have automated tests for the REST service layer, WebSocket gateway, input endpoint, and Codex PTY behavior.
-- Phase 3 should add deterministic tests around worktree creation, policy classification, approval lifecycle, blocked actions, and WebSocket approval prompts.
-- Tests must be deterministic and isolated. A test that hits production endpoints is **NEEDS_APPROVAL**, not a real test.
+- Tests live next to code or in `test/` for e2e/integration coverage.
+- Phase 4 tests must not require real GitHub/Linear access by default.
+- Real provider tests must auto-skip unless explicit provider config is present.
+- Fixtures should cover issues, branches, PRs, Linear issues, workflow states, and provider failures.
 
 ### Docs
 
-- Source-of-truth diagrams live in `docs/diagrams.md` as Mermaid. GitHub renders them natively.
-- Architecture decisions go into `docs/ARCHITECTURE.md`, not into commit messages.
-- Update `docs/` in the same PR as the code change. No "I'll update docs later" PRs.
+- Update `README.md`, `PLAN.md`, and relevant `docs/` files with the same PR as code changes.
+- Current Phase 4 handoff lives at [`docs/phase-4-implementation.md`](./docs/phase-4-implementation.md).
+- Mermaid diagrams in `docs/diagrams.md` remain canonical for GitHub-rendered diagrams.
 
 ---
 
@@ -144,9 +188,10 @@ The controller exposes approvals on the task detail page. Diffs and configured t
 
 Every meaningful task should be linked to a Linear issue. The Linear issue ID belongs in:
 
-- The PR title (e.g., `[TSH-79] Add worktree isolation and approval gates`)
-- The branch name (`agent/tsh-79-...`)
-- The commit body (`Refs: TSH-79`)
+- branch names,
+- PR titles,
+- commit bodies,
+- implementation notes.
 
 Sub-tasks of a phase issue are tracked as Linear sub-issues with `parent` set to the phase issue.
 
@@ -154,13 +199,11 @@ Sub-tasks of a phase issue are tracked as Linear sub-issues with `parent` set to
 
 ## Working with GitHub
 
-Use `gh` CLI for everything GitHub-related when working locally. Authentication is already configured.
+Use GitHub only through approved local tools and explicit human-approved actions.
 
-- Create issues: `gh issue create ...`
-- Open PRs: `gh pr create --draft ...` (always draft until tests + lint pass)
-- Comment on issues / PRs: `gh issue comment ...`, `gh pr comment ...`
+Phase 4 will add GitHub issue search, branch, push, and draft PR workflows to the controller. Until that is implemented, keep GitHub changes focused and auditable.
 
-**Always pass labels.** PRs and issues without `phase-N` and area labels are hard to triage.
+Always keep PRs draft until tests and lint pass.
 
 ---
 
@@ -177,15 +220,6 @@ pnpm test
 pnpm test:e2e
 pnpm typecheck
 pnpm build
-```
-
-If `pnpm` is unavailable in the current shell, root checks can run through npm scripts:
-
-```bash
-npm test
-npm run test:e2e
-npm run typecheck
-npm run build
 ```
 
 Controller UI:
@@ -205,6 +239,7 @@ Useful local smoke path:
 4. Confirm live logs arrive over WebSocket.
 5. Send input with Continue.
 6. Stop the task and confirm terminal status updates.
+7. For Phase 4 work, verify replay does not duplicate sync/approval UI.
 
 ---
 
@@ -213,13 +248,13 @@ Useful local smoke path:
 Stop and ask the human if any of these are true:
 
 - A change crosses phase boundaries.
-- A test or lint command is failing and the fix isn't obvious.
+- A test or lint command is failing and the fix is not obvious.
 - An action would touch the BLOCKED list above.
-- A change would modify the safety model itself (this is sensitive — humans gate it).
-- You discover an unexpected file, branch, or piece of state. **Investigate before deleting.**
+- A change would modify the safety model itself.
+- You discover unexpected file, branch, provider state, or local config.
 
 ---
 
 ## When in doubt
 
-Behave like a senior engineer on day one of a new job: read first, ask before changing anything sensitive, document as you go, and don't try to look impressive by doing more than was asked.
+Read first, keep changes small, preserve the approval model, and do not turn a local-first controller into a provider-write cannon.
