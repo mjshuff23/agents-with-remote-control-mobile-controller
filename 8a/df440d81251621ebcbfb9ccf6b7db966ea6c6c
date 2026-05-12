@@ -1,0 +1,30 @@
+src/features/providers/providers.module.ts
+  s_da46032282ee84::t_84e5a836ab4d42 4,7-8,11,13-20
+src/features/providers/github-provider.spec.ts
+  s_da46032282ee84::t_e1696121b18e3d 1-19,21-219
+  s_da46032282ee84::t_142c1efd16a513 20
+src/config/app-config.service.ts
+  s_da46032282ee84::t_00ba8c04f84549 105-119
+src/features/providers/github-provider.ts
+  s_da46032282ee84::t_edf748d6808ffb 1-234
+.env.example
+  s_da46032282ee84::t_4ec5591277a655 28-32
+src/config/env.validation.ts
+  s_da46032282ee84::t_78023bebd265c3 187-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "8adf440d81251621ebcbfb9ccf6b7db966ea6c6c",
+  "prompts": {},
+  "sessions": {
+    "s_da46032282ee84": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e20b6c3effe7iNLt9gy5ocrnR",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
