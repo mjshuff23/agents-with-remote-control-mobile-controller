@@ -178,7 +178,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         }
       });
 
-      void this.checkpoints.captureAtBoundary(session.id, task.id, 'session_start').catch((err) => {
+      void this.checkpoints.captureAtBoundary(session.id, task.id, 'session_start', {
+        workerWasLive: this.hasLiveProcess(session.id)
+      }).catch((err) => {
         this.appendLog(session.id, 'system', `Checkpoint capture failed (session_start): ${this.errorMessage(err)}`);
       });
 
@@ -242,7 +244,8 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.updateUserActivity(session.id);
 
     void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'user_turn', {
-      lastUserMessage: text
+      lastUserMessage: text,
+      workerWasLive: this.hasLiveProcess(session.id)
     }).catch((err) => this.appendLog(session.id, 'system', `Checkpoint capture failed (user_turn): ${this.errorMessage(err)}`));
   }
 
@@ -272,7 +275,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     if (approval.sessionId) {
       await this.updateUserActivity(approval.sessionId);
 
-      void this.checkpoints.captureAtBoundary(approval.sessionId, approval.taskId, 'approval_event').catch((err) =>
+      void this.checkpoints.captureAtBoundary(approval.sessionId, approval.taskId, 'approval_event', {
+        workerWasLive: this.hasLiveProcess(approval.sessionId)
+      }).catch((err) =>
         this.appendLog(approval.sessionId!, 'system', `Checkpoint capture failed (approval_event): ${this.errorMessage(err)}`)
       );
     }
@@ -307,7 +312,9 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await this.appendLog(session.id, 'system', 'Stop requested by REST client');
     await this.updateUserActivity(session.id);
 
-    void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_stop').catch((err) =>
+    void this.checkpoints.captureAtBoundary(session.id, session.taskId, 'pre_stop', {
+      workerWasLive: this.hasLiveProcess(session.id)
+    }).catch((err) =>
       this.appendLog(session.id, 'system', `Checkpoint capture failed (pre_stop): ${this.errorMessage(err)}`)
     );
 

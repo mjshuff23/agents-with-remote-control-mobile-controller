@@ -3,6 +3,7 @@ import { HttpStatus, Injectable, Logger, OnApplicationBootstrap, Optional } from
 import { AgentSession, SessionCheckpoint } from '@prisma/client';
 import { AuditLogService } from '../audit/audit-log.service';
 import { AppConfigService } from '../config/app-config.service';
+import { ProblemException } from '../common/errors/problem.exception';
 import { EventsGateway } from '../events/events.gateway';
 import { TaskEventLedgerService } from '../events/task-event-ledger.service';
 import { GitCommandService } from '../git/git-command.service';
@@ -182,23 +183,24 @@ export class CheckpointsService implements OnApplicationBootstrap {
   async restore(sessionId: string): Promise<RestoreResult> {
     const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId } });
     if (!session) {
-      throw Object.assign(new Error('Session not found'), { status: HttpStatus.NOT_FOUND });
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Session Not Found', `Session "${sessionId}" does not exist.`);
     }
     if (session.status !== 'dormant') {
-      throw Object.assign(new Error(`Session is ${session.status}, not dormant`), { status: HttpStatus.CONFLICT });
+      throw new ProblemException(HttpStatus.CONFLICT, 'Not Dormant', `Session is ${session.status}, not dormant.`);
     }
 
     const checkpoint = await this.latestForSession(sessionId);
     if (!checkpoint) {
-      throw Object.assign(new Error('No checkpoint found for dormant session'), { status: HttpStatus.NOT_FOUND });
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'No Checkpoint', 'No checkpoint found for dormant session.');
     }
 
     if (checkpoint.worktreePath) {
       const worktreeExists = await this.worktreePathExists(checkpoint.worktreePath);
       if (!worktreeExists) {
-        throw Object.assign(
-          new Error(`Worktree path "${checkpoint.worktreePath}" no longer exists. Cannot restore.`),
-          { status: HttpStatus.GONE }
+        throw new ProblemException(
+          HttpStatus.GONE,
+          'Worktree Missing',
+          `Worktree path "${checkpoint.worktreePath}" no longer exists. Cannot restore.`
         );
       }
     }
@@ -237,6 +239,7 @@ export class CheckpointsService implements OnApplicationBootstrap {
     metadata?: {
       lastUserMessage?: string | null;
       lastAssistantMessage?: string | null;
+      workerWasLive?: boolean;
     }
   ): Promise<SessionCheckpoint | null> {
     try {
@@ -246,7 +249,7 @@ export class CheckpointsService implements OnApplicationBootstrap {
       ]);
       if (!session || !task) return null;
 
-      const hasLiveProcess = false;
+      const hasLiveProcess = metadata?.workerWasLive ?? false;
       const pendingApprovals = await this.prisma.approvalRequest.findMany({
         where: { taskId, status: 'pending' },
         orderBy: { requestedAt: 'desc' }

@@ -296,14 +296,14 @@ describe('CheckpointsService', () => {
     it('rejects non-dormant sessions', async () => {
       prisma.agentSession.findUnique.mockResolvedValue(runningSession);
 
-      await expect(service.restore('session-1')).rejects.toThrow('not dormant');
+      await expect(service.restore('session-1')).rejects.toThrow('Not Dormant');
     });
 
     it('rejects sessions with no checkpoint', async () => {
       prisma.agentSession.findUnique.mockResolvedValue(dormantSession);
       prisma.sessionCheckpoint.findFirst.mockResolvedValue(null);
 
-      await expect(service.restore('session-1')).rejects.toThrow('No checkpoint found');
+      await expect(service.restore('session-1')).rejects.toThrow('No Checkpoint');
     });
   });
 

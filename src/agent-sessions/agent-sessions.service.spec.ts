@@ -188,7 +188,7 @@ describe('AgentSessionsService', () => {
         externalSessionId: 'pty-1'
       })
     });
-    expect(checkpoints.captureAtBoundary).toHaveBeenCalledWith(session.id, task.id, 'session_start');
+    expect(checkpoints.captureAtBoundary).toHaveBeenCalledWith(session.id, task.id, 'session_start', expect.objectContaining({ workerWasLive: true }));
     expect(result.status).toBe('running');
   });
 
