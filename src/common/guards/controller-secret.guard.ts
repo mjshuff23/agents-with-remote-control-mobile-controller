@@ -48,6 +48,6 @@ function controllerToken(request: Request): string | undefined {
   }
 
   const auth = request.header('authorization');
-  const match = auth?.match(/^Bearer\s+(.+)$/i);
+  const match = auth?.match(/^Bearer\s+(\S+)$/i);
   return match?.[1];
 }
