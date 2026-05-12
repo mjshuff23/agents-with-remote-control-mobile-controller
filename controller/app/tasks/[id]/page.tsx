@@ -52,6 +52,117 @@ export default function TaskDetailPage() {
   const seenEvents = useRef(new Set<string>());
   const sessionIdRef = useRef<string>('');
 
+  function markEventSeen(eventId: string): boolean {
+    if (seenEvents.current.has(eventId)) {
+      return true;
+    }
+    seenEvents.current.add(eventId);
+    if (seenEvents.current.size > EVENT_DEDUPE_LIMIT) {
+      const oldest = seenEvents.current.values().next().value;
+      if (oldest) {
+        seenEvents.current.delete(oldest);
+      }
+    }
+    return false;
+  }
+
+  function recordServerLog(log: Pick<LogEntry, 'sessionId' | 'sequence'>) {
+    seenLogKeys.current.add(serverLogKey(log.sessionId, log.sequence));
+    seqRef.current = Math.max(seqRef.current, log.sequence);
+    const current = logCursorBySession.current.get(log.sessionId) ?? 0;
+    logCursorBySession.current.set(log.sessionId, Math.max(current, log.sequence));
+  }
+
+  function appendSyntheticLog(type: string, content: string) {
+    const sequence = syntheticSeqRef.current;
+    syntheticSeqRef.current -= 1;
+    setLogs((prev) => [
+      ...prev,
+      {
+        id: `ui-${sequence}`,
+        sessionId: sessionIdRef.current,
+        type,
+        sequence,
+        content,
+        createdAt: new Date().toISOString()
+      }
+    ]);
+  }
+
+  function upsertApproval(approval: ApprovalRequest) {
+    setApprovals((prev) => [approval, ...prev.filter((item) => item.id !== approval.id)].slice(0, 50));
+  }
+
+  function appendServerLogs(nextLogs: LogEntry[]) {
+    setLogs((prev) => {
+      const missed = nextLogs.filter((log) => {
+        const key = serverLogKey(log.sessionId, log.sequence);
+        if (seenLogKeys.current.has(key)) return false;
+        recordServerLog(log);
+        return true;
+      });
+      if (missed.length === 0) return prev;
+      return [...prev, ...missed].sort(compareLogs);
+    });
+  }
+
+  function applyTaskEvent(event: TaskEventEnvelope) {
+    lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
+    if (markEventSeen(event.id)) return;
+
+    if (event.name === 'agent.log') return;
+    if (event.name === 'approval.requested' || event.name === 'approval.resolved') {
+      upsertApproval(event.data as ApprovalRequest);
+      return;
+    }
+    if (event.name === 'policy.violation') {
+      const approval = event.data as ApprovalRequest;
+      upsertApproval(approval);
+      appendSyntheticLog('system', `Policy violation: ${approval.title}`);
+      return;
+    }
+    if (event.name === 'diff.summary') {
+      const summary = event.data as DiffSummaryResponse;
+      setChangeSummaries((prev) => [summary, ...prev.filter((item) => item.id !== summary.id)].slice(0, 10));
+      return;
+    }
+    if (event.name === 'test.started') {
+      appendSyntheticLog('system', `Test started: ${(event.data as { commandId: string }).commandId}`);
+      return;
+    }
+    if (event.name === 'test.log') {
+      const data = event.data as { stream: string; content: string };
+      appendSyntheticLog('system', `[${data.stream}] ${data.content}`);
+      return;
+    }
+    if (event.name === 'test.completed') {
+      const run = event.data as TestRunSummary;
+      setTestRuns((prev) => [run, ...prev.filter((item) => item.id !== run.id)].slice(0, 10));
+      appendSyntheticLog('system', `Test ${run.status}: ${run.commandId}`);
+      return;
+    }
+    if (event.name === 'task.started') {
+      const data = event.data as { task?: Task; session?: Session };
+      if (data.task) setTask(data.task);
+      if (data.session) setSession(data.session);
+      return;
+    }
+    if (event.name === 'task.completed') {
+      const data = event.data as { exitCode: number; status: string };
+      setTask((prev) => (prev ? { ...prev, status: data.status } : prev));
+      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
+      setRuntime({
+        processState: 'terminal',
+        statusLabel: data.status === 'failed' ? 'failed' : data.status === 'stopped' ? 'stopped' : 'completed'
+      });
+    }
+  }
+
+  function applyReplay(replay: { events: TaskEventEnvelope[]; logs: LogEntry[] }) {
+    appendServerLogs(replay.logs);
+    replay.events.forEach(applyTaskEvent);
+  }
+
   useEffect(() => {
     // Reset all per-task state so navigating between tasks doesn't bleed data
     seenLogKeys.current.clear();
@@ -61,16 +172,6 @@ export default function TaskDetailPage() {
     logCursorBySession.current.clear();
     syntheticSeqRef.current = -1;
     sessionIdRef.current = '';
-    setLogs([]);
-    setApprovals([]);
-    setChangeSummaries([]);
-    setTestRuns([]);
-    setTestCommands([]);
-    setSelectedTestCommandId('');
-    setTask(null);
-    setSession(null);
-    setRuntime(null);
-
     Promise.all([getTask(id), listTestCommands(id)])
       .then(([details, commands]) => {
         const { task, session, logs, approvals, changeSummaries, testRuns, runtime, eventCursor } = details;
@@ -206,117 +307,6 @@ export default function TaskDetailPage() {
   // resyncTask captures stable refs; id is the only meaningful dependency
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  function markEventSeen(eventId: string): boolean {
-    if (seenEvents.current.has(eventId)) {
-      return true;
-    }
-    seenEvents.current.add(eventId);
-    if (seenEvents.current.size > EVENT_DEDUPE_LIMIT) {
-      const oldest = seenEvents.current.values().next().value;
-      if (oldest) {
-        seenEvents.current.delete(oldest);
-      }
-    }
-    return false;
-  }
-
-  function applyReplay(replay: { events: TaskEventEnvelope[]; logs: LogEntry[] }) {
-    appendServerLogs(replay.logs);
-    replay.events.forEach(applyTaskEvent);
-  }
-
-  function appendServerLogs(nextLogs: LogEntry[]) {
-    setLogs((prev) => {
-      const missed = nextLogs.filter((log) => {
-        const key = serverLogKey(log.sessionId, log.sequence);
-        if (seenLogKeys.current.has(key)) return false;
-        recordServerLog(log);
-        return true;
-      });
-      if (missed.length === 0) return prev;
-      return [...prev, ...missed].sort(compareLogs);
-    });
-  }
-
-  function recordServerLog(log: Pick<LogEntry, 'sessionId' | 'sequence'>) {
-    seenLogKeys.current.add(serverLogKey(log.sessionId, log.sequence));
-    seqRef.current = Math.max(seqRef.current, log.sequence);
-    const current = logCursorBySession.current.get(log.sessionId) ?? 0;
-    logCursorBySession.current.set(log.sessionId, Math.max(current, log.sequence));
-  }
-
-  function applyTaskEvent(event: TaskEventEnvelope) {
-    lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
-    if (markEventSeen(event.id)) return;
-
-    if (event.name === 'agent.log') return;
-    if (event.name === 'approval.requested' || event.name === 'approval.resolved') {
-      upsertApproval(event.data as ApprovalRequest);
-      return;
-    }
-    if (event.name === 'policy.violation') {
-      const approval = event.data as ApprovalRequest;
-      upsertApproval(approval);
-      appendSyntheticLog('system', `Policy violation: ${approval.title}`);
-      return;
-    }
-    if (event.name === 'diff.summary') {
-      const summary = event.data as DiffSummaryResponse;
-      setChangeSummaries((prev) => [summary, ...prev.filter((item) => item.id !== summary.id)].slice(0, 10));
-      return;
-    }
-    if (event.name === 'test.started') {
-      appendSyntheticLog('system', `Test started: ${(event.data as { commandId: string }).commandId}`);
-      return;
-    }
-    if (event.name === 'test.log') {
-      const data = event.data as { stream: string; content: string };
-      appendSyntheticLog('system', `[${data.stream}] ${data.content}`);
-      return;
-    }
-    if (event.name === 'test.completed') {
-      const run = event.data as TestRunSummary;
-      setTestRuns((prev) => [run, ...prev.filter((item) => item.id !== run.id)].slice(0, 10));
-      appendSyntheticLog('system', `Test ${run.status}: ${run.commandId}`);
-      return;
-    }
-    if (event.name === 'task.started') {
-      const data = event.data as { task?: Task; session?: Session };
-      if (data.task) setTask(data.task);
-      if (data.session) setSession(data.session);
-      return;
-    }
-    if (event.name === 'task.completed') {
-      const data = event.data as { exitCode: number; status: string };
-      setTask((prev) => (prev ? { ...prev, status: data.status } : prev));
-      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
-      setRuntime({
-        processState: 'terminal',
-        statusLabel: data.status === 'failed' ? 'failed' : data.status === 'stopped' ? 'stopped' : 'completed'
-      });
-    }
-  }
-
-  function appendSyntheticLog(type: string, content: string) {
-    const sequence = syntheticSeqRef.current;
-    syntheticSeqRef.current -= 1;
-    setLogs((prev) => [
-      ...prev,
-      {
-        id: `ui-${sequence}`,
-        sessionId: sessionIdRef.current,
-        type,
-        sequence,
-        content,
-        createdAt: new Date().toISOString()
-      }
-    ]);
-  }
-
-  function upsertApproval(approval: ApprovalRequest) {
-    setApprovals((prev) => [approval, ...prev.filter((item) => item.id !== approval.id)].slice(0, 50));
-  }
 
   async function handleStop() {
     setActionError(null);
@@ -636,10 +626,6 @@ function parseJson<T>(value: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function isServerLog(log: LogEntry): boolean {
-  return log.sequence > 0;
 }
 
 function compareLogs(a: LogEntry, b: LogEntry): number {

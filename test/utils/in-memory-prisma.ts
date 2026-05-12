@@ -41,19 +41,23 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
     }
 
     if ('gt' in value) {
-      return (rowValue as number | Date | string) > (value as { gt: number | Date | string }).gt;
+      const threshold = (value as { gt: number | Date | string }).gt;
+      return (rowValue as number | Date | string) > threshold;
     }
 
     if ('gte' in value) {
-      return (rowValue as number | Date | string) >= (value as { gte: number | Date | string }).gte;
+      const threshold = (value as { gte: number | Date | string }).gte;
+      return (rowValue as number | Date | string) >= threshold;
     }
 
     if ('lt' in value) {
-      return (rowValue as number | Date | string) < (value as { lt: number | Date | string }).lt;
+      const threshold = (value as { lt: number | Date | string }).lt;
+      return (rowValue as number | Date | string) < threshold;
     }
 
     if ('lte' in value) {
-      return (rowValue as number | Date | string) <= (value as { lte: number | Date | string }).lte;
+      const threshold = (value as { lte: number | Date | string }).lte;
+      return (rowValue as number | Date | string) <= threshold;
     }
 
     throw new Error(`Unsupported where condition for "${key}": ${JSON.stringify(value)}`);
