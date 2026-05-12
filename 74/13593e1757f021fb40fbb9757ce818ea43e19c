@@ -1,0 +1,21 @@
+controller/app/page.tsx
+  s_3de15f3209ff24::t_a4c132910dfb36 17
+controller/pnpm-lock.yaml
+  ai_agent 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "7413593e1757f021fb40fbb9757ce818ea43e19c",
+  "prompts": {},
+  "sessions": {
+    "s_3de15f3209ff24": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e27a6301ffe1YUiN0UgOLDg2I",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
