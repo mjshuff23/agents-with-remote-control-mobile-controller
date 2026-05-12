@@ -15,11 +15,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "lint:md": "markdownlint '**/*.md' --ignore node_modules --ignore controller/node_modules --ignore .remember",
+    "lint:md": "markdownlint \"**/*.md\" --ignore node_modules --ignore controller/node_modules --ignore .remember",
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.md": "markdownlint --fix"
+    "**/*.md": "markdownlint --fix"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.18",
