@@ -114,7 +114,7 @@ export class ApprovalAuditSyncService {
       kind: 'sync_event_completed',
       actionType: `provider.${provider}`,
       message: `${provider} ${action} completed: ${externalId || targetId}`,
-      metadata: { ...metadata, externalId, url },
+      metadata: { ...(metadata ?? {}), externalId, url },
     });
   }
 
@@ -143,37 +143,41 @@ export class ApprovalAuditSyncService {
       kind: 'sync_event_failed',
       actionType: `provider.${provider}`,
       message: `${provider} ${action} failed: ${errorMessage}`,
-      metadata: { ...metadata, errorCategory, errorMessage },
+      metadata: { ...(metadata ?? {}), errorCategory, errorMessage },
     });
   }
 
   /**
    * Get the approval/sync timeline for a task.
-   * Returns all approval requests, audit logs, and sync events in chronological order.
+   * Returns all approval requests, audit logs, and sync events merged into a
+   * single list ordered by createdAt ascending.
    */
-  async getTaskTimeline(taskId: string): Promise<{
-    approvals: Array<{ id: string; actionType: string; status: string; decision?: string | null; createdAt: Date }>;
-    auditLogs: Array<{ id: string; kind: string; actionType?: string | null; message: string; createdAt: Date }>;
-    syncEvents: Array<{ id: string; provider: string; action: string; status: string; externalId?: string | null; createdAt: Date }>;
-  }> {
+  async getTaskTimeline(taskId: string): Promise<
+    Array<
+      | { type: 'approval'; id: string; actionType: string; status: string; decision?: string | null; createdAt: Date }
+      | { type: 'audit'; id: string; kind: string; actionType?: string | null; message: string; createdAt: Date }
+      | { type: 'sync'; id: string; provider: string; action: string; status: string; externalId?: string | null; createdAt: Date }
+    >
+  > {
     const [approvals, auditLogs, syncEvents] = await Promise.all([
       this.prisma.approvalRequest.findMany({
         where: { taskId },
         select: { id: true, actionType: true, status: true, decision: true, createdAt: true },
-        orderBy: { createdAt: 'asc' },
       }),
       this.prisma.auditLog.findMany({
         where: { taskId },
         select: { id: true, kind: true, actionType: true, message: true, createdAt: true },
-        orderBy: { createdAt: 'asc' },
       }),
       this.prisma.syncEvent.findMany({
         where: { taskId },
         select: { id: true, provider: true, action: true, status: true, externalId: true, createdAt: true },
-        orderBy: { createdAt: 'asc' },
       }),
     ]);
 
-    return { approvals, auditLogs, syncEvents };
+    return [
+      ...approvals.map((a) => ({ type: 'approval' as const, ...a })),
+      ...auditLogs.map((a) => ({ type: 'audit' as const, ...a })),
+      ...syncEvents.map((s) => ({ type: 'sync' as const, ...s })),
+    ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 }

@@ -200,27 +200,27 @@ describe('ApprovalAuditSyncService', () => {
   });
 
   describe('getTaskTimeline', () => {
-    it('returns chronological timeline of approvals, audits, and sync events', async () => {
-      const now = new Date();
-      const approvals = [
-        { id: 'apr-1', actionType: 'git.commit', status: 'pending', decision: null, createdAt: now },
-      ];
-      const auditLogs = [
-        { id: 'aud-1', kind: 'approval_requested', actionType: 'git.commit', message: 'Approval requested', createdAt: now },
-      ];
-      const syncEvents = [
-        { id: 'sync-1', provider: 'github', action: 'create_pr', status: 'completed', externalId: 'PR#123', createdAt: now },
-      ];
+    it('returns a single chronological list of approvals, audits, and sync events', async () => {
+      const t1 = new Date('2024-01-01T00:00:00Z');
+      const t2 = new Date('2024-01-01T00:01:00Z');
+      const t3 = new Date('2024-01-01T00:02:00Z');
 
-      (prisma.approvalRequest.findMany as jest.Mock).mockResolvedValue(approvals);
-      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue(auditLogs);
-      (prisma.syncEvent.findMany as jest.Mock).mockResolvedValue(syncEvents);
+      (prisma.approvalRequest.findMany as jest.Mock).mockResolvedValue([
+        { id: 'apr-1', actionType: 'git.commit', status: 'pending', decision: null, createdAt: t2 },
+      ]);
+      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+        { id: 'aud-1', kind: 'approval_requested', actionType: 'git.commit', message: 'Approval requested', createdAt: t1 },
+      ]);
+      (prisma.syncEvent.findMany as jest.Mock).mockResolvedValue([
+        { id: 'sync-1', provider: 'github', action: 'create_pr', status: 'completed', externalId: 'PR#123', createdAt: t3 },
+      ]);
 
       const timeline = await service.getTaskTimeline('task-1');
 
-      expect(timeline.approvals).toEqual(approvals);
-      expect(timeline.auditLogs).toEqual(auditLogs);
-      expect(timeline.syncEvents).toEqual(syncEvents);
+      expect(timeline).toHaveLength(3);
+      expect(timeline[0]).toMatchObject({ type: 'audit', id: 'aud-1' });
+      expect(timeline[1]).toMatchObject({ type: 'approval', id: 'apr-1' });
+      expect(timeline[2]).toMatchObject({ type: 'sync', id: 'sync-1' });
     });
   });
 });
