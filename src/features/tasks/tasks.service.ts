@@ -304,15 +304,46 @@ export class TasksService {
     });
   }
 
-  /** Sync cross-references (attach PR URL to Linear issue). */
+  /** Sync cross-references (attach PR URL to Linear issue). Derives Linear identifiers from the task's stored externalIssueRef. */
   async syncCrossReference(id: string, dto: CrossReferenceDto): Promise<void> {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${id}" does not exist.`);
+    }
+    if (!task.externalIssueRef) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'No Linked Issue',
+        `Task "${id}" has no linked external issue. Link a Linear issue before syncing cross-references.`,
+      );
+    }
+
+    let ref: { provider?: string; externalId?: string; key?: string };
+    try {
+      ref = JSON.parse(task.externalIssueRef) as { provider?: string; externalId?: string; key?: string };
+    } catch {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Invalid Issue Ref',
+        `Task "${id}" has a malformed external issue reference.`,
+      );
+    }
+
+    if (ref.provider !== 'linear' || !ref.externalId || !ref.key) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Not a Linear Issue',
+        `Task "${id}" is linked to a ${ref.provider ?? 'unknown'} issue, not a Linear issue.`,
+      );
+    }
+
     return this.crossReference.syncPrToLinear({
       taskId: id,
       sessionId: dto.sessionId,
       prUrl: dto.prUrl,
       prNumber: dto.prNumber,
-      linearIssueId: dto.linearIssueId,
-      linearIssueKey: dto.linearIssueKey,
+      linearIssueId: ref.externalId,
+      linearIssueKey: ref.key,
     });
   }
 

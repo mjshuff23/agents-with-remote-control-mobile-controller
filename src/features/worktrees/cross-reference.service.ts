@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ProblemException } from '../../common/errors/problem.exception';
 import { AppConfigService } from '../../config/app-config.service';
-import { PrismaService } from '../../prisma/prisma.service';
 import { SyncEventService } from '../sync/sync-event.service';
 
 export interface CrossReferenceInput {
@@ -26,17 +25,26 @@ const LINEAR_API_URL = 'https://api.linear.app/graphql';
  * 1. PR body already includes Linear issue ref (handled by PrGeneratorService).
  * 2. Linear issue gets PR URL as a link attachment (implemented here).
  *
- * Both paths are idempotent via SyncEvent.
+ * Both paths are idempotent via SyncEvent. The idempotency key includes
+ * both the Linear issue ID and the PR URL so that attaching a different
+ * PR URL to the same issue is treated as a new action.
  */
 @Injectable()
 export class CrossReferenceService {
   private readonly logger = new Logger(CrossReferenceService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
     private readonly syncEvents: SyncEventService,
   ) {}
+
+  /**
+   * Build the SyncEvent targetId from the Linear issue ID and PR URL
+   * so a different URL for the same issue is a distinct action.
+   */
+  private syncTargetId(linearIssueId: string, prUrl: string): string {
+    return `${linearIssueId}:${prUrl}`;
+  }
 
   /**
    * Attach the PR URL as a link on the Linear issue via the
@@ -44,9 +52,10 @@ export class CrossReferenceService {
    */
   async syncPrToLinear(input: CrossReferenceInput): Promise<void> {
     const { taskId, sessionId, prUrl, prNumber, linearIssueId, linearIssueKey } = input;
+    const targetId = this.syncTargetId(linearIssueId, prUrl);
 
-    // Idempotency: skip if already succeeded.
-    const existing = await this.syncEvents.getLastForAction(taskId, 'linear', 'attach_pr_url', linearIssueId);
+    // Idempotency: skip if this exact PR URL was already attached.
+    const existing = await this.syncEvents.getLastForAction(taskId, 'linear', 'attach_pr_url', targetId);
     if (existing?.status === 'succeeded') {
       this.logger.debug(`Linear attachment already exists for ${linearIssueKey} (task ${taskId})`);
       return;
@@ -63,8 +72,17 @@ export class CrossReferenceService {
 
     // Record SyncEvent as running.
     let record = await this.syncEvents.createOrReuse({
-      taskId, sessionId, provider: 'linear', action: 'attach_pr_url', targetId: linearIssueId,
+      taskId, sessionId, provider: 'linear', action: 'attach_pr_url', targetId,
     });
+
+    // Handle all non-terminal states so the SyncEvent lifecycle can complete.
+    if (record.status === 'succeeded') {
+      // Race: another caller finished between getLastForAction and createOrReuse.
+      return;
+    }
+    if (record.status === 'failed') {
+      record = await this.syncEvents.markRetryable(record.id);
+    }
     if (record.status === 'pending' || record.status === 'retryable') {
       record = await this.syncEvents.markRunning(record.id);
     }

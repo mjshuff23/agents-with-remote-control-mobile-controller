@@ -1,20 +1,13 @@
-import { IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CrossReferenceDto {
-  @IsString()
-  @MinLength(1)
+  @IsUrl()
   prUrl!: string;
 
-  @IsNumber()
+  @Type(() => Number)
+  @IsInt()
   prNumber!: number;
-
-  @IsString()
-  @MinLength(1)
-  linearIssueId!: string;
-
-  @IsString()
-  @MinLength(1)
-  linearIssueKey!: string;
 
   @IsOptional()
   @IsString()
