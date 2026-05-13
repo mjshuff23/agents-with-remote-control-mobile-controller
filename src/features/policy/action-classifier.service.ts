@@ -203,7 +203,7 @@ function shellCommandText(argv: string[]): string | undefined {
 
 /** Whether a token is a shell `-c` or `--command` flag. */
 function isShellCommandFlag(token: string): boolean {
-  return token === '--command' || /^-[a-z]*c[a-z]*$/.test(token);
+  return token === '--command' || (token.startsWith('-') && token.length >= 2 && token.includes('c') && /^[a-z]+$/.test(token.slice(1)));
 }
 
 /** Tokenize a shell command string, splitting on pipes, ampersands, semicolons, whitespace. */
@@ -292,7 +292,7 @@ function isOutsideWorktreeDelete(request: AgentActionRequest, tokens: string[]):
 
 /** Whether a token matches `-rf`, `-fr`, or similar recursive-force shell flags. */
 function isRecursiveForceFlag(token: string): boolean {
-  return token === '-rf' || token === '-fr' || /^-[a-z]*r[a-z]*f[a-z]*$/.test(token) || /^-[a-z]*f[a-z]*r[a-z]*$/.test(token);
+  return token === '-rf' || token === '-fr' || (token.startsWith('-') && token.length >= 3 && token.includes('r') && token.includes('f') && /^[a-z]+$/.test(token.slice(1)));
 }
 
 /** Whether a path looks like a dangerous delete target (outside worktree). */
