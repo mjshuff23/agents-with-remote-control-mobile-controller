@@ -44,6 +44,7 @@ export interface TaskDetails {
   approvals: ApprovalRequest[];
   changeSummaries: GitChangeSummary[];
   testRuns: TestRunSummary[];
+  syncEvents: import('@prisma/client').SyncEvent[];
 }
 
 export interface TaskReplay {
@@ -156,7 +157,7 @@ export class TasksService {
       orderBy: { createdAt: 'desc' }
     });
 
-    const [logs, approvalsResult, changeSummaries, testRuns, eventCursor] = await Promise.all([
+    const [logs, approvalsResult, changeSummaries, testRuns, syncEvents, eventCursor] = await Promise.all([
       session
         ? this.prisma.agentLog.findMany({
           where: { sessionId: session.id },
@@ -175,6 +176,11 @@ export class TasksService {
         orderBy: { createdAt: 'desc' },
         take: 10
       }),
+      this.prisma.syncEvent.findMany({
+        where: { taskId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 20
+      }),
       this.ledger.latestSeq(id)
     ]);
 
@@ -187,7 +193,8 @@ export class TasksService {
       runtime: this.agentSessions.runtimeState(session),
       approvals: approvalsResult.approvals,
       changeSummaries,
-      testRuns
+      testRuns,
+      syncEvents
     };
   }
 

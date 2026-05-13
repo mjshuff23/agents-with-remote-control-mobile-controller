@@ -78,6 +78,9 @@ describe('TasksService', () => {
     testRunSummary: {
       findMany: jest.fn()
     },
+    syncEvent: {
+      findMany: jest.fn()
+    },
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> => callback(prisma))
   };
   const agentSessions = {
@@ -121,6 +124,7 @@ describe('TasksService', () => {
     approvals.listForTask.mockResolvedValue({ approvals: [] });
     prisma.gitChangeSummary.findMany.mockResolvedValue([]);
     prisma.testRunSummary.findMany.mockResolvedValue([]);
+    prisma.syncEvent.findMany.mockResolvedValue([]);
     ledger.latestSeq.mockResolvedValue(0);
     ledger.replay.mockResolvedValue({ events: [], logs: [] });
     agentSessions.runtimeState.mockReturnValue({ processState: 'live_process', statusLabel: 'active' });
