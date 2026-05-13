@@ -1,0 +1,11 @@
+{
+  "id": 1,
+  "number": 5,
+  "title": "Test issue",
+  "state": "open",
+  "url": "https://github.com/owner/repo/issues/5",
+  "labels": ["bug"],
+  "body": "Test body",
+  "createdAt": "2025-01-01T00:00:00Z",
+  "updatedAt": "2025-01-01T00:00:00Z"
+}

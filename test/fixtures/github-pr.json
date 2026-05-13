@@ -1,0 +1,11 @@
+{
+  "number": 42,
+  "url": "https://github.com/owner/repo/pull/42",
+  "title": "Test PR",
+  "state": "open",
+  "mergedAt": null,
+  "mergeCommitSha": null,
+  "draft": true,
+  "head": "agent/TSH-110-test",
+  "base": "main"
+}
