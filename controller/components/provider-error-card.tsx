@@ -1,11 +1,14 @@
 'use client';
-import type { SyncEvent } from '../lib/api';
+import type { SyncEvent, SyncEventStatus, ProviderErrorCategory } from '../lib/api';
 
 interface ProviderErrorCardProps {
   event: SyncEvent;
 }
 
-const ERROR_RECOVERY: Record<string, string> = {
+const RETRYABLE_STATUSES: Set<SyncEventStatus> = new Set(['retryable']);
+const RETRYABLE_CATEGORIES: Set<ProviderErrorCategory> = new Set(['network_error', 'rate_limited']);
+
+const ERROR_RECOVERY: Record<ProviderErrorCategory, string> = {
   auth_failed: 'Check your provider token/API key and update the environment variables.',
   network_error: 'Check your network connection and try again.',
   rate_limited: 'Provider rate limit reached. Wait a moment and retry.',
@@ -14,12 +17,17 @@ const ERROR_RECOVERY: Record<string, string> = {
   unknown_error: 'An unexpected error occurred. Check the server logs for details.',
 };
 
-function recoveryText(category: string | null): string {
-  if (!category) return ERROR_RECOVERY.unknown_error;
-  return ERROR_RECOVERY[category] ?? ERROR_RECOVERY.unknown_error;
+function recoveryText(category: ProviderErrorCategory | null): string {
+  return category ? (ERROR_RECOVERY[category] ?? ERROR_RECOVERY.unknown_error) : ERROR_RECOVERY.unknown_error;
+}
+
+function isRetryable(status: SyncEventStatus, category: ProviderErrorCategory | null): boolean {
+  return RETRYABLE_STATUSES.has(status) || (category !== null && RETRYABLE_CATEGORIES.has(category));
 }
 
 export function ProviderErrorCard({ event }: ProviderErrorCardProps) {
+  const retryable = isRetryable(event.status, event.errorCategory);
+
   return (
     <div className="border border-red-200 bg-red-50 rounded-lg p-3 space-y-1">
       <div className="flex items-center gap-2">
@@ -37,6 +45,11 @@ export function ProviderErrorCard({ event }: ProviderErrorCardProps) {
         </p>
       )}
       <p className="text-xs text-red-600">{recoveryText(event.errorCategory)}</p>
+      {retryable && (
+        <span className="inline-block text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+          retry available
+        </span>
+      )}
     </div>
   );
 }

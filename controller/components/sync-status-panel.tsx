@@ -1,11 +1,11 @@
 'use client';
-import type { SyncEvent } from '../lib/api';
+import type { SyncEvent, SyncEventStatus, SyncEventAction } from '../lib/api';
 
 interface SyncStatusPanelProps {
   syncEvents: SyncEvent[];
 }
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS: Record<SyncEventStatus, string> = {
   succeeded: 'text-green-700 bg-green-100',
   failed: 'text-red-700 bg-red-100',
   retryable: 'text-amber-700 bg-amber-100',
@@ -14,11 +14,11 @@ const STATUS_COLORS: Record<string, string> = {
   skipped: 'text-gray-400 bg-gray-100',
 };
 
-function statusColor(status: string): string {
-  return STATUS_COLORS[status] ?? 'text-gray-500 bg-gray-100';
+function statusColor(status: SyncEventStatus): string {
+  return STATUS_COLORS[status];
 }
 
-const ACTION_LABELS: Record<string, string> = {
+const ACTION_LABELS: Record<SyncEventAction, string> = {
   commit: 'Commit',
   push: 'Push',
   create_pr: 'PR',
@@ -26,8 +26,8 @@ const ACTION_LABELS: Record<string, string> = {
   update_status: 'Status',
 };
 
-function actionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action;
+function actionLabel(action: SyncEventAction): string {
+  return ACTION_LABELS[action];
 }
 
 export function SyncStatusPanel({ syncEvents }: SyncStatusPanelProps) {

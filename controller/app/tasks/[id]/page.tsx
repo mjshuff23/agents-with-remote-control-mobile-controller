@@ -467,7 +467,7 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
-      {(pendingApprovals.length > 0 || latestDiff || testRuns.length > 0 || syncEvents.length > 0) && (
+      {(pendingApprovals.length > 0 || latestDiff || testRuns.length > 0 || syncEvents.length > 0 || task.externalIssueRef) && (
         <div className="shrink-0 max-h-80 overflow-y-auto border-b bg-gray-50 p-3 space-y-3">
           {/* Linked issue */}
           {task.externalIssueRef && (

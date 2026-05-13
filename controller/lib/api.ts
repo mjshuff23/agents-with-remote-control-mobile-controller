@@ -144,17 +144,21 @@ export interface TaskEventEnvelope<TName extends string = string, TData = unknow
   data: TData;
 }
 
+export type SyncEventStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'retryable' | 'skipped';
+export type SyncEventAction = 'commit' | 'push' | 'create_pr' | 'attach_pr_url' | 'update_status';
+export type ProviderErrorCategory = 'auth_failed' | 'network_error' | 'rate_limited' | 'not_found' | 'push_rejected' | 'unknown_error';
+
 export interface SyncEvent {
   id: string;
   taskId: string;
   sessionId: string | null;
   provider: string;
-  action: string;
+  action: SyncEventAction;
   targetId: string;
-  status: string;
+  status: SyncEventStatus;
   externalId: string | null;
   url: string | null;
-  errorCategory: string | null;
+  errorCategory: ProviderErrorCategory | null;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
