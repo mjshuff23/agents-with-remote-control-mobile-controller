@@ -1,0 +1,44 @@
+src/features/tasks/dto/check-merge.dto.ts
+  s_c4ff6aae1d6acf::t_95aa6c89fdc9ad 1-16
+src/features/tasks/tasks.module.ts
+  s_c4ff6aae1d6acf::t_50df52b2260a4d 17
+  s_c4ff6aae1d6acf::t_896bbd5385ddd7 26
+src/features/tasks/tasks.service.ts
+  s_c4ff6aae1d6acf::t_d8c1f013dedcaf 353-396
+  s_c4ff6aae1d6acf::t_742db263c4fe9c 14
+  s_c4ff6aae1d6acf::t_881841b69ea233 24
+  s_c4ff6aae1d6acf::t_ca1c75be540147 75
+src/features/worktrees/merge-detection.service.ts
+  s_c4ff6aae1d6acf::t_202535e7c83518 1-225
+src/features/tasks/tasks.controller.ts
+  s_c4ff6aae1d6acf::t_c8c58d246d316d 132-138
+  s_c4ff6aae1d6acf::t_2fc0536672a5db 11
+src/features/tasks/tasks.service.spec.ts
+  s_c4ff6aae1d6acf::t_702a57c12ddb43 143-144
+  s_c4ff6aae1d6acf::t_f22f284535c242 11
+src/features/worktrees/merge-detection.service.spec.ts
+  s_c4ff6aae1d6acf::t_fc93acb6b7885d 1-13,16-97,102-123,128-160
+  s_c4ff6aae1d6acf::t_570ad70d671c6a 98-101,124-127
+  s_c4ff6aae1d6acf::t_9835668904cabd 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "67cb22bc43536a1e3debe39fce485534ce261810",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
