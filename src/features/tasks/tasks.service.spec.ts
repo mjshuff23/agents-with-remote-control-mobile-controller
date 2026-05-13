@@ -7,6 +7,7 @@ import { GitWorktreeService } from '../worktrees/git-worktree.service';
 import { GitCommitService } from '../worktrees/git-commit.service';
 import { GitPushService } from '../worktrees/git-push.service';
 import { PrGeneratorService } from '../worktrees/pr-generator.service';
+import { CrossReferenceService } from '../worktrees/cross-reference.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { TaskEventLedgerService } from '../../events/task-event-ledger.service';
@@ -137,7 +138,8 @@ describe('TasksService', () => {
         { provide: TaskEventLedgerService, useValue: ledger },
         { provide: GitCommitService, useValue: { requestAndExecute: jest.fn() } },
         { provide: GitPushService, useValue: { requestAndExecute: jest.fn() } },
-        { provide: PrGeneratorService, useValue: { requestAndExecute: jest.fn() } }
+        { provide: PrGeneratorService, useValue: { requestAndExecute: jest.fn() } },
+        { provide: CrossReferenceService, useValue: { syncPrToLinear: jest.fn() } }
       ]
     }).compile();
 

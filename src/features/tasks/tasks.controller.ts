@@ -7,6 +7,7 @@ import { CommitTaskDto } from './dto/commit-task.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { PushTaskDto } from './dto/push-task.dto';
 import { CreatePrDto } from './dto/create-pr.dto';
+import { CrossReferenceDto } from './dto/cross-reference.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
 
@@ -119,6 +120,13 @@ export class TasksController {
   @HttpCode(202)
   async createPr(@Param('id') id: string, @Body() body: CreatePrDto) {
     return this.tasks.createPr(id, body);
+  }
+
+  /** Sync cross-references: attach PR URL to linked Linear issue. */
+  @Post(':id/cross-reference')
+  @HttpCode(202)
+  async syncCrossReference(@Param('id') id: string, @Body() body: CrossReferenceDto) {
+    return this.tasks.syncCrossReference(id, body);
   }
 }
 
