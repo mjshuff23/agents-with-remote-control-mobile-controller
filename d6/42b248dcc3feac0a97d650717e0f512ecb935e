@@ -1,0 +1,39 @@
+test/fixtures/github-issue.json
+  s_c4ff6aae1d6acf::t_753d59dd0d6de2 1-11
+test/provider-e2e.spec.ts
+  s_c4ff6aae1d6acf::t_89b7e6b3fb6e34 1-114,116-119,121-130,132-136,138-147,149-158,160-164
+  s_c4ff6aae1d6acf::t_626d64a388f45a 131,137
+  s_c4ff6aae1d6acf::t_8f598e882d3322 115
+  s_c4ff6aae1d6acf::t_5a4bb4c047df5b 120
+  s_c4ff6aae1d6acf::t_a5dccfb56cd973 148
+  s_c4ff6aae1d6acf::t_d7c85d7868fb3d 159
+test/fixtures/provider-errors.json
+  s_c4ff6aae1d6acf::t_d4ea2c27579bff 1-6
+test/fixtures/linear-issue.json
+  s_c4ff6aae1d6acf::t_9e9fbe814f485a 1-10
+test/fixtures/github-pr.json
+  s_c4ff6aae1d6acf::t_5e158532cdc467 1-11
+test/fixtures/linear-workflow-states.json
+  s_c4ff6aae1d6acf::t_a4a4f157be31c3 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d642b248dcc3feac0a97d650717e0f512ecb935e",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
