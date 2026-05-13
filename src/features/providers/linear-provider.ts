@@ -35,7 +35,7 @@ export class LinearProvider implements ILinearProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
+        Authorization: this.token,
       },
       body: JSON.stringify({ query, variables }),
     });
@@ -74,7 +74,7 @@ export class LinearProvider implements ILinearProvider {
       const data = await this.gql<{ issues: { nodes: RawLinearIssue[] } }>(
         `query SearchIssues($filter: IssueFilter, $first: Int) {
           issues(filter: $filter, first: $first, orderBy: updatedAt) {
-            nodes { id identifier title description url teamId state { id } labels { nodes { name } } }
+            nodes { id identifier title description url team { id } state { id } labels { nodes { name } } }
           }
         }`,
         { filter: searchFilter, first: params.limit ?? 25 },
@@ -85,10 +85,10 @@ export class LinearProvider implements ILinearProvider {
     const data = await this.gql<{ issues: { nodes: RawLinearIssue[] } }>(
       `query ListIssues($filter: IssueFilter, $first: Int) {
         issues(filter: $filter, first: $first, orderBy: updatedAt) {
-          nodes { id identifier title description url teamId state { id } labels { nodes { name } } }
+          nodes { id identifier title description url team { id } state { id } labels { nodes { name } } }
         }
       }`,
-      { filter: Object.keys(filter).length > 0 ? filter : undefined, first: params.limit ?? 25 },
+      { filter: Object.keys(filter).length > 0 ? filter : null, first: params.limit ?? 25 },
     );
     return data.issues.nodes.map(normalizeLinearIssue);
   }
@@ -96,7 +96,7 @@ export class LinearProvider implements ILinearProvider {
   async getIssue(id: string): Promise<LinearIssue> {
     const data = await this.gql<{ issue: RawLinearIssue }>(
       `query GetIssue($id: String!) {
-        issue(id: $id) { id identifier title description url teamId state { id } labels { nodes { name } } }
+        issue(id: $id) { id identifier title description url team { id } state { id } labels { nodes { name } } }
       }`,
       { id },
     );
@@ -187,7 +187,7 @@ interface RawLinearIssue {
   title: string;
   description?: string;
   url: string;
-  teamId: string;
+  team?: { id: string };
   state?: { id: string };
   labels?: { nodes: Array<{ name: string }> };
 }
@@ -199,7 +199,7 @@ function normalizeLinearIssue(raw: RawLinearIssue): LinearIssue {
     title: raw.title,
     description: raw.description,
     url: raw.url,
-    teamId: raw.teamId,
+    teamId: raw.team?.id ?? '',
     stateId: raw.state?.id,
     labels: (raw.labels?.nodes ?? []).map((l) => l.name),
   };
