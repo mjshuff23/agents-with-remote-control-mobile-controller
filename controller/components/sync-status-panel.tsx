@@ -27,7 +27,7 @@ const ACTION_LABELS: Record<SyncEventAction, string> = {
 };
 
 function actionLabel(action: SyncEventAction): string {
-  return ACTION_LABELS[action];
+  return ACTION_LABELS[action] ?? action;
 }
 
 export function SyncStatusPanel({ syncEvents }: SyncStatusPanelProps) {
