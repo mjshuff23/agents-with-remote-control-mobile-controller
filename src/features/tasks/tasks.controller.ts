@@ -5,6 +5,7 @@ import { ControllerSecretGuard } from '../../common/guards/controller-secret.gua
 import { RunTestDto } from '../test-runs/dto/run-test.dto';
 import { CommitTaskDto } from './dto/commit-task.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { PushTaskDto } from './dto/push-task.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
 
@@ -103,6 +104,13 @@ export class TasksController {
   @HttpCode(202)
   async commitTask(@Param('id') id: string, @Body() body: CommitTaskDto) {
     return this.tasks.commitTask(id, body);
+  }
+
+  /** Request an approval-gated push for a task. Returns 202 when approved and pushed. */
+  @Post(':id/push')
+  @HttpCode(202)
+  async pushTask(@Param('id') id: string, @Body() body: PushTaskDto) {
+    return this.tasks.pushTask(id, body);
   }
 }
 

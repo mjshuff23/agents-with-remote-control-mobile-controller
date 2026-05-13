@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ProblemException } from '../../common/errors/problem.exception';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -18,7 +18,7 @@ export interface PushInput {
 export interface PushResult {
   remote: string;
   branch: string;
-  /** SHA at HEAD after push. */
+  /** SHA of the pushed branch ref. */
   remoteSha: string;
 }
 
@@ -34,10 +34,12 @@ export type PushErrorCategory = 'auth_failed' | 'network_error' | 'push_rejected
  * 4. Reject unsafe refspecs (force-push, wildcards, source:destination).
  * 5. Create an approval request (actionType: git.push, riskLevel: NEEDS_APPROVAL).
  * 6. If approved, run `git push <remote> <branch>` in the task worktree.
- * 7. Capture the resulting SHA and persist it to a SyncEvent.
+ * 7. Capture the resulting ref SHA and persist it to a SyncEvent.
  */
 @Injectable()
 export class GitPushService {
+  private readonly logger = new Logger(GitPushService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gitCommands: GitCommandService,
@@ -158,6 +160,7 @@ export class GitPushService {
 
   /**
    * Persist push outcome to a SyncEvent with status-aware lifecycle handling.
+   * Logs a warning when the SyncEvent is already in a terminal state.
    */
   private async recordSyncEvent(
     taskId: string,
@@ -177,17 +180,18 @@ export class GitPushService {
 
     if (record.status === 'pending' || record.status === 'retryable') {
       await this.syncEvents.markRunning(record.id);
+    }
+
+    if (record.status === 'pending' || record.status === 'retryable' || record.status === 'running') {
       if (status === 'succeeded') {
         await this.syncEvents.markSucceeded(record.id, sha, undefined);
       } else {
         await this.syncEvents.markFailed(record.id, errorCategory ?? 'unknown_error', errorMessage ?? 'Unknown error');
       }
-    } else if (record.status === 'running') {
-      if (status === 'succeeded') {
-        await this.syncEvents.markSucceeded(record.id, sha, undefined);
-      } else {
-        await this.syncEvents.markFailed(record.id, errorCategory ?? 'unknown_error', errorMessage ?? 'Unknown error');
-      }
+    } else {
+      this.logger.warn(
+        `SyncEvent ${record.id} already in terminal state "${record.status}" for task ${taskId}; skipping transition`,
+      );
     }
   }
 
@@ -246,28 +250,28 @@ export class GitPushService {
     }
 
     // Execute push.
-    let pushOutput: string;
     try {
-      const result = await this.gitCommands.git(worktreePath, ['push', remote, branch]);
-      pushOutput = result.stdout + result.stderr;
+      await this.gitCommands.git(worktreePath, ['push', remote, branch]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const category = this.categorizePushError(msg);
+
+      this.logger.error(`Git push failed: ${msg}`);
+
       await this.recordSyncEvent(taskId, sessionId, 'failed', undefined, category, msg);
+
       throw new ProblemException(
         HttpStatus.INTERNAL_SERVER_ERROR,
         'Push Failed',
-        `Git push failed: ${msg}`,
+        'Git push failed due to a server error. Please try again later or contact support.',
       );
     }
 
-    // Capture the resulting SHA.
-    const remoteSha = (await this.gitCommands.git(worktreePath, ['rev-parse', 'HEAD'])).stdout.trim();
+    // Capture the SHA of the pushed branch ref.
+    const remoteSha = (await this.gitCommands.git(worktreePath, ['rev-parse', `refs/heads/${branch}`])).stdout.trim();
 
     // Persist result to a SyncEvent so it survives replay.
     await this.recordSyncEvent(taskId, sessionId, 'succeeded', remoteSha);
-
-    void pushOutput;
 
     return { remote, branch, remoteSha };
   }
