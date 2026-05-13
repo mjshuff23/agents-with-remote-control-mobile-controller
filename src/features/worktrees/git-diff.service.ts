@@ -251,8 +251,8 @@ function computeRiskFlags(paths: string[], topFiles: Array<{ path: string; inser
       flags.add('secret_or_auth_shaped_path');
     }
     
-    // Blocked secret path: match .env files
-    if (/^\.env$/.test(lower) || /^\.env\./.test(lower)) {
+    // Blocked secret path: match .env files (including nested)
+    if (/\.env$/.test(lower) || /\.env\./.test(lower)) {
       flags.add('blocked_secret_path_changed');
     }
   }

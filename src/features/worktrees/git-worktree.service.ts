@@ -128,22 +128,26 @@ export class GitWorktreeService {
     // If it doesn't exist, find a unique name and create a new branch.
     const branchExists = await this.branchExists(repoPath, candidateName);
     let branchName: string;
+    let finalWorktreePath = worktreePath;
     if (branchExists) {
       // Branch already exists; use it directly.
       branchName = candidateName;
-      await this.gitCommands.git(repoPath, ['worktree', 'add', worktreePath, branchName]);
+      await this.gitCommands.git(repoPath, ['worktree', 'add', finalWorktreePath, branchName]);
     } else {
       // Branch doesn't exist yet. Try to create with the candidate name.
       // If a race occurs and the branch is created by another task, retry with a collision suffix.
       branchName = candidateName;
       try {
-        await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
+        await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, finalWorktreePath, baseRef]);
       } catch (error) {
         // Check if the error is due to branch already existing (race condition)
         if (error instanceof Error && error.message.includes('already exists')) {
           // Resolve a unique branch name with collision suffix
           branchName = await this.resolveUniqueBranchName(repoPath, candidateName);
-          await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, worktreePath, baseRef]);
+          // Also generate a unique worktree path to avoid collision
+          const suffix = branchName.substring(candidateName.length);
+          finalWorktreePath = worktreePath + suffix;
+          await this.gitCommands.git(repoPath, ['worktree', 'add', '-b', branchName, finalWorktreePath, baseRef]);
         } else {
           throw error;
         }
@@ -151,14 +155,14 @@ export class GitWorktreeService {
     }
 
     await this.events.emitEnvelopeToTask(input.taskId, 'worktree.created', 'git', 'info', {
-      worktreePath,
+      worktreePath: finalWorktreePath,
       branchName,
       baseRef,
       baseCommit,
       reused: false,
     });
 
-    return { repoPath, worktreePath, branchName, baseRef, baseCommit };
+    return { repoPath, worktreePath: finalWorktreePath, branchName, baseRef, baseCommit };
   }
 
   /**
