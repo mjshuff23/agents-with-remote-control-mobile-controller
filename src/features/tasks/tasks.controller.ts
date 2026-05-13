@@ -8,6 +8,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { PushTaskDto } from './dto/push-task.dto';
 import { CreatePrDto } from './dto/create-pr.dto';
 import { CrossReferenceDto } from './dto/cross-reference.dto';
+import { CheckMergeDto } from './dto/check-merge.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
 
@@ -127,6 +128,13 @@ export class TasksController {
   @HttpCode(202)
   async syncCrossReference(@Param('id') id: string, @Body() body: CrossReferenceDto) {
     return this.tasks.syncCrossReference(id, body);
+  }
+
+  /** Check PR merge status and sync Linear issue to Done if merged. */
+  @Post(':id/pr/check-merge')
+  @HttpCode(200)
+  async checkMerge(@Param('id') id: string, @Body() body: CheckMergeDto) {
+    return this.tasks.checkMerge(id, body);
   }
 }
 
