@@ -1,0 +1,26 @@
+src/features/worktrees/git-commit.service.ts
+  s_c4ff6aae1d6acf::t_309e5bbd3173f0 174-183
+src/features/worktrees/git-commit.service.spec.ts
+  s_c4ff6aae1d6acf::t_7428769b17f1c1 98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "b6388c303ebcfe94e7cebe9601ae76d6876ff2b4",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
