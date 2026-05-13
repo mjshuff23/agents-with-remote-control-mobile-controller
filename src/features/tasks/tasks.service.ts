@@ -9,6 +9,7 @@ import { GitDiffService } from '../worktrees/git-diff.service';
 import { GitWorktreeService, WorktreeResult } from '../worktrees/git-worktree.service';
 import { GitCommitService, CommitResult } from '../worktrees/git-commit.service';
 import { GitPushService, PushResult } from '../worktrees/git-push.service';
+import { PrGeneratorService, PrResult } from '../worktrees/pr-generator.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
@@ -16,6 +17,7 @@ import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { CommitTaskDto } from './dto/commit-task.dto';
 import { PushTaskDto } from './dto/push-task.dto';
+import { CreatePrDto } from './dto/create-pr.dto';
 import type { ExternalIssueRef } from '../providers/provider.types';
 
 /** Task row with `externalIssueRef` parsed to a typed object instead of a raw JSON string. */
@@ -64,6 +66,7 @@ export class TasksService {
     private readonly ledger: TaskEventLedgerService,
     private readonly gitCommit: GitCommitService,
     private readonly gitPush: GitPushService,
+    private readonly prGenerator: PrGeneratorService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -284,6 +287,17 @@ export class TasksService {
       sessionId: dto.sessionId,
       remote: dto.remote,
       branch: dto.branch,
+    });
+  }
+
+  /** Request an approval-gated draft PR creation for a task. */
+  async createPr(id: string, dto: CreatePrDto): Promise<PrResult> {
+    return this.prGenerator.requestAndExecute({
+      taskId: id,
+      sessionId: dto.sessionId,
+      title: dto.title,
+      base: dto.base,
+      head: dto.head,
     });
   }
 
