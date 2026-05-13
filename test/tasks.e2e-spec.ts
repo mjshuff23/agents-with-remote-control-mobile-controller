@@ -7,13 +7,13 @@ import { applyAppGlobals } from '../src/app-globals';
 import { AppConfigService } from '../src/config/app-config.service';
 import { GitWorktreeService } from '../src/features/worktrees/git-worktree.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createInMemoryPrisma } from './utils/in-memory-prisma';
+import { createInMemoryPrisma, InMemoryPrisma } from './utils/in-memory-prisma';
 
 const TEST_SECRET = 'test-secret';
 
 describe('Tasks API', () => {
   let app: INestApplication;
-  let prisma: ReturnType<typeof createInMemoryPrisma>;
+  let prisma: InMemoryPrisma;
   const adapter = {
     name: 'codex' as const,
     startTask: jest.fn()

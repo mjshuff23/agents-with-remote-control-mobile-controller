@@ -1,5 +1,28 @@
 type Row = Record<string, unknown>;
 
+interface Delegate {
+  create: jest.Mock;
+  update: jest.Mock;
+  findUnique: jest.Mock;
+  findFirst: jest.Mock;
+  findMany: jest.Mock;
+}
+
+export interface InMemoryPrisma {
+  task: Delegate;
+  agentSession: Delegate;
+  agentLog: Delegate;
+  approvalRequest: Delegate;
+  auditLog: Delegate;
+  gitChangeSummary: Delegate;
+  testRunSummary: Delegate;
+  sessionCheckpoint: Delegate;
+  taskEvent: Delegate;
+  $connect: jest.Mock;
+  $disconnect: jest.Mock;
+  $transaction: jest.Mock;
+}
+
 /**
  * Return the current timestamp for row creation/update.
  *
@@ -110,7 +133,7 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
  *           `auditLog`, `gitChangeSummary`, `testRunSummary`, `taskEvent`)
  *          plus stubbed `$connect`, `$disconnect`, and `$transaction`.
  */
-export const createInMemoryPrisma = () => {
+export const createInMemoryPrisma = (): InMemoryPrisma => {
   const tasks: Row[] = [];
   const sessions: Row[] = [];
   const logs: Row[] = [];

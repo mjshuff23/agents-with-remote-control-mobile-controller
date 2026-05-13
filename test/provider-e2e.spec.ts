@@ -5,7 +5,7 @@ import { AppModule } from '../src/app.module';
 import { applyAppGlobals } from '../src/app-globals';
 import { AppConfigService } from '../src/config/app-config.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createInMemoryPrisma } from './utils/in-memory-prisma';
+import { createInMemoryPrisma, InMemoryPrisma } from './utils/in-memory-prisma';
 
 import * as githubIssueFixture from './fixtures/github-issue.json';
 import * as githubPrFixture from './fixtures/github-pr.json';
@@ -14,6 +14,17 @@ import * as linearWorkflowStatesFixture from './fixtures/linear-workflow-states.
 
 const TEST_SECRET = 'test-secret';
 const authed = (requestTest: request.Test) => requestTest.set('X-Controller-Secret', TEST_SECRET);
+
+const ENV_KEYS = [
+  'DATABASE_URL', 'ARC_REPO_PATH', 'ARC_HOST', 'ARC_POLICY_PATH',
+  'ARC_CODEX_COMMAND', 'ARC_CODEX_ARGS', 'ARC_CODEX_ENV_KEYS',
+  'ARC_LOG_TAIL_LIMIT', 'ARC_SHUTDOWN_GRACE_MS', 'ARC_DORMANT_TIMEOUT_MS',
+  'ARC_DORMANT_CHECK_INTERVAL_MS', 'ARC_APPROVAL_TIMEOUT_MS',
+  'ARC_TEST_COMMAND_TIMEOUT_MS', 'ARC_RUNNER_MODE', 'ARC_WORKTREE_ROOT',
+  'ARC_GITHUB_TOKEN', 'ARC_LINEAR_TOKEN',
+] as const;
+
+const ORIGINAL_ENV: Record<string, string | undefined> = {};
 
 /**
  * Provider E2E tests — token-gated.
@@ -28,15 +39,19 @@ const authed = (requestTest: request.Test) => requestTest.set('X-Controller-Secr
  */
 describe('Provider E2E (token-gated)', () => {
   let app: INestApplication;
-  let prisma: ReturnType<typeof createInMemoryPrisma>;
+  let prisma: InMemoryPrisma;
 
   beforeAll(async () => {
-    // Token gate: skip if neither provider is configured (normal local/CI runs).
-    const hasGitHub = !!process.env.ARC_GITHUB_TOKEN;
-    const hasLinear = !!process.env.ARC_LINEAR_TOKEN;
-    if (!hasGitHub && !hasLinear) {
-      // Set dummy env so the app module can load, then skip provider-specific tests.
+    for (const key of ENV_KEYS) {
+      ORIGINAL_ENV[key] = process.env[key];
+    }
+
+    // Per-provider token gate: set dummy tokens for missing providers
+    // so the app module can load, but skip provider-specific tests.
+    if (!process.env.ARC_GITHUB_TOKEN) {
       process.env.ARC_GITHUB_TOKEN = 'test-token';
+    }
+    if (!process.env.ARC_LINEAR_TOKEN) {
       process.env.ARC_LINEAR_TOKEN = 'test-token';
     }
 
@@ -44,9 +59,6 @@ describe('Provider E2E (token-gated)', () => {
     process.env.ARC_REPO_PATH = '/repo';
     process.env.ARC_HOST = '127.0.0.1';
     process.env.ARC_POLICY_PATH = 'arc.config.json';
-    process.env.ARC_CODEX_COMMAND = 'node';
-    process.env.ARC_CODEX_ARGS = '["-e","process.stdin.pipe(process.stdout)"]';
-    process.env.ARC_CODEX_ENV_KEYS = '[]';
     process.env.ARC_LOG_TAIL_LIMIT = '200';
     process.env.ARC_SHUTDOWN_GRACE_MS = '500';
     process.env.ARC_DORMANT_TIMEOUT_MS = '60000';
@@ -65,7 +77,7 @@ describe('Provider E2E (token-gated)', () => {
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
-      .useValue(prisma as never)
+      .useValue(prisma as unknown as PrismaService)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -75,6 +87,13 @@ describe('Provider E2E (token-gated)', () => {
 
   afterAll(async () => {
     await app?.close();
+    for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   });
 
   describe('fixture loading', () => {
