@@ -1,0 +1,25 @@
+test/provider-e2e.spec.ts
+  s_aa7f3e80891d56::t_69e75f8b557de0 128-134
+  s_aa7f3e80891d56::t_202e1572a031c8 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "c5e2404aee0cca1ed24cbf15715208284b619f5d",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_aa7f3e80891d56": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1de348c1bffe1DI7VEvNuVj65G",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
