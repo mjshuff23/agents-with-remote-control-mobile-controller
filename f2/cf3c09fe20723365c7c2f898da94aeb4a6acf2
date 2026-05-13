@@ -1,0 +1,30 @@
+controller/lib/api.ts
+  s_c4ff6aae1d6acf::t_35b8735c99824f 147-150,156,158,161
+controller/components/provider-error-card.tsx
+  s_c4ff6aae1d6acf::t_c2a9939b5e4b59 2,8-11,20-25,29-30,48-52
+controller/components/sync-status-panel.tsx
+  s_c4ff6aae1d6acf::t_dbbc4358b7aa1e 2,8,17-18,21,29-30
+controller/app/tasks/[id]/page.tsx
+  s_c4ff6aae1d6acf::t_57ef9ab453040a 470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "f2cf3c09fe20723365c7c2f898da94aeb4a6acf2",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
