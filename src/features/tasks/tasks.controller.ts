@@ -3,6 +3,7 @@ import { Response } from 'express';
 
 import { ControllerSecretGuard } from '../../common/guards/controller-secret.guard';
 import { RunTestDto } from '../test-runs/dto/run-test.dto';
+import { CommitTaskDto } from './dto/commit-task.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
@@ -95,6 +96,13 @@ export class TasksController {
   @HttpCode(202)
   async restoreTask(@Param('id') id: string) {
     return this.tasks.restoreTask(id);
+  }
+
+  /** Request an approval-gated commit for a task. Returns 202 when approved and committed. */
+  @Post(':id/commit')
+  @HttpCode(202)
+  async commitTask(@Param('id') id: string, @Body() body: CommitTaskDto) {
+    return this.tasks.commitTask(id, body);
   }
 }
 

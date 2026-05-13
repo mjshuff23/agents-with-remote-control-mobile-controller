@@ -4,6 +4,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { AppConfigService } from '../../config/app-config.service';
 import { GitDiffService } from '../worktrees/git-diff.service';
 import { GitWorktreeService } from '../worktrees/git-worktree.service';
+import { GitCommitService } from '../worktrees/git-commit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { TaskEventLedgerService } from '../../events/task-event-ledger.service';
@@ -131,7 +132,8 @@ describe('TasksService', () => {
         { provide: GitDiffService, useValue: diffs },
         { provide: TestRunnerService, useValue: tests },
         { provide: PolicyLoaderService, useValue: policies },
-        { provide: TaskEventLedgerService, useValue: ledger }
+        { provide: TaskEventLedgerService, useValue: ledger },
+        { provide: GitCommitService, useValue: { requestAndExecute: jest.fn() } }
       ]
     }).compile();
 
