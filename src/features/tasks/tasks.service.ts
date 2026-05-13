@@ -8,12 +8,14 @@ import { TaskEventLedgerService } from '../../events/task-event-ledger.service';
 import { GitDiffService } from '../worktrees/git-diff.service';
 import { GitWorktreeService, WorktreeResult } from '../worktrees/git-worktree.service';
 import { GitCommitService, CommitResult } from '../worktrees/git-commit.service';
+import { GitPushService, PushResult } from '../worktrees/git-push.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
 import { PolicyLoaderService } from '../policy/policy-loader.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { CommitTaskDto } from './dto/commit-task.dto';
+import { PushTaskDto } from './dto/push-task.dto';
 import type { ExternalIssueRef } from '../providers/provider.types';
 
 /** Task row with `externalIssueRef` parsed to a typed object instead of a raw JSON string. */
@@ -61,6 +63,7 @@ export class TasksService {
     private readonly policies: PolicyLoaderService,
     private readonly ledger: TaskEventLedgerService,
     private readonly gitCommit: GitCommitService,
+    private readonly gitPush: GitPushService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -272,6 +275,16 @@ export class TasksService {
   async listTestCommands(id: string) {
     await this.assertTaskExists(id);
     return { testCommands: await this.policies.listTestCommands() };
+  }
+
+  /** Request an approval-gated push for a task. */
+  async pushTask(id: string, dto: PushTaskDto): Promise<PushResult> {
+    return this.gitPush.requestAndExecute({
+      taskId: id,
+      sessionId: dto.sessionId,
+      remote: dto.remote,
+      branch: dto.branch,
+    });
   }
 
   /** Request an approval-gated commit for a task. */
