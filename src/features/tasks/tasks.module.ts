@@ -12,6 +12,7 @@ import { SyncModule } from '../sync/sync.module';
 import { TestRunnerModule } from '../test-runs/test-runner.module';
 import { GitCommitService } from '../worktrees/git-commit.service';
 import { GitPushService } from '../worktrees/git-push.service';
+import { PrGeneratorService } from '../worktrees/pr-generator.service';
 import { ApprovalActionsController } from './approval-actions.controller';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
@@ -20,6 +21,6 @@ import { TasksService } from './tasks.service';
 @Module({
   imports: [PrismaModule, AgentSessionsModule, AppConfigModule, EventsModule, WorktreesModule, ApprovalsModule, PolicyModule, TestRunnerModule, SyncModule],
   controllers: [TasksController, ApprovalActionsController],
-  providers: [TasksService, ControllerSecretGuard, GitCommitService, GitPushService]
+  providers: [TasksService, ControllerSecretGuard, GitCommitService, GitPushService, PrGeneratorService]
 })
 export class TasksModule {}

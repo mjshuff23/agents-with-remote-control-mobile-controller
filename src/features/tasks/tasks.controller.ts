@@ -6,6 +6,7 @@ import { RunTestDto } from '../test-runs/dto/run-test.dto';
 import { CommitTaskDto } from './dto/commit-task.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { PushTaskDto } from './dto/push-task.dto';
+import { CreatePrDto } from './dto/create-pr.dto';
 import { SendInputDto } from './dto/send-input.dto';
 import { TasksService } from './tasks.service';
 
@@ -111,6 +112,13 @@ export class TasksController {
   @HttpCode(202)
   async pushTask(@Param('id') id: string, @Body() body: PushTaskDto) {
     return this.tasks.pushTask(id, body);
+  }
+
+  /** Request an approval-gated draft PR creation for a task. Returns 202 when approved and created. */
+  @Post(':id/pr')
+  @HttpCode(202)
+  async createPr(@Param('id') id: string, @Body() body: CreatePrDto) {
+    return this.tasks.createPr(id, body);
   }
 }
 
