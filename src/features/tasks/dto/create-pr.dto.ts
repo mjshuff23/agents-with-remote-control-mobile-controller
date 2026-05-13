@@ -9,6 +9,7 @@ export class CreatePrDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: 'sessionId must contain non-whitespace characters' })
   sessionId?: string;
 
   @IsOptional()
