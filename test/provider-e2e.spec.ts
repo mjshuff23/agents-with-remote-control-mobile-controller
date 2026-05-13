@@ -11,6 +11,7 @@ import * as githubIssueFixture from './fixtures/github-issue.json';
 import * as githubPrFixture from './fixtures/github-pr.json';
 import * as linearIssueFixture from './fixtures/linear-issue.json';
 import * as linearWorkflowStatesFixture from './fixtures/linear-workflow-states.json';
+import * as providerErrorsFixture from './fixtures/provider-errors.json';
 
 const TEST_SECRET = 'test-secret';
 const authed = (requestTest: request.Test) => requestTest.set('X-Controller-Secret', TEST_SECRET);
@@ -123,6 +124,13 @@ describe('Provider E2E (token-gated)', () => {
       const done = linearWorkflowStatesFixture.find((s) => s.type === 'completed');
       expect(done).toBeDefined();
       expect(done?.name).toBe('Done');
+    });
+
+    it('provider-errors fixture has expected shape', () => {
+      expect(providerErrorsFixture).toMatchObject({
+        auth_failed: { status: 401, message: 'Bad credentials' },
+        rate_limited: { status: 403, message: 'API rate limit exceeded' },
+      });
     });
   });
 
