@@ -18,12 +18,16 @@ import {
   type LogEntry,
   type RuntimeState,
   type Session,
+  type SyncEvent,
   type Task,
   type TaskEventEnvelope,
   type TestCommandConfig,
   type TestRunSummary
 } from '../../../lib/api';
 import { TaskLogPane } from '../../../components/task-log-pane';
+import { SyncStatusPanel } from '../../../components/sync-status-panel';
+import { ProviderErrorCard } from '../../../components/provider-error-card';
+import { IssueLinkCard } from '../../../components/issue-link-card';
 import { useTaskSocket } from '../../../lib/use-socket';
 
 const EVENT_DEDUPE_LIMIT = 500;
@@ -39,6 +43,7 @@ export default function TaskDetailPage() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [changeSummaries, setChangeSummaries] = useState<DiffSummaryResponse[]>([]);
   const [testRuns, setTestRuns] = useState<TestRunSummary[]>([]);
+  const [syncEvents, setSyncEvents] = useState<SyncEvent[]>([]);
   const [testCommands, setTestCommands] = useState<TestCommandConfig[]>([]);
   const [selectedTestCommandId, setSelectedTestCommandId] = useState('');
   const [inputText, setInputText] = useState('');
@@ -171,13 +176,14 @@ export default function TaskDetailPage() {
     sessionIdRef.current = '';
     Promise.all([getTask(id), listTestCommands(id)])
       .then(([details, commands]) => {
-        const { task, session, logs, approvals, changeSummaries, testRuns, runtime, eventCursor } = details;
+        const { task, session, logs, approvals, changeSummaries, testRuns, syncEvents: se, runtime, eventCursor } = details;
         setTask(task);
         setSession(session);
         setRuntime(runtime);
         setApprovals(approvals);
         setChangeSummaries(changeSummaries.map(normalizeStoredDiffSummary));
         setTestRuns(testRuns);
+        setSyncEvents(se);
         setTestCommands(commands.testCommands);
         setSelectedTestCommandId(commands.testCommands[0]?.id ?? '');
         sessionIdRef.current = session?.id ?? '';
@@ -204,7 +210,7 @@ export default function TaskDetailPage() {
       listTestCommands(id)
     ])
       .then(([replay, details, commands]) => {
-        const { task: t, session: s, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns, runtime: nextRuntime } = details;
+        const { task: t, session: s, approvals: fresh, changeSummaries: freshSummaries, testRuns: freshRuns, syncEvents: se, runtime: nextRuntime } = details;
         setTask(t);
         setSession(s);
         setRuntime(nextRuntime);
@@ -212,6 +218,7 @@ export default function TaskDetailPage() {
         setApprovals(fresh);
         setChangeSummaries(freshSummaries.map(normalizeStoredDiffSummary));
         setTestRuns(freshRuns);
+        setSyncEvents(se);
         setTestCommands(commands.testCommands);
         setSelectedTestCommandId((current) =>
           commands.testCommands.some((command) => command.id === current)
@@ -460,8 +467,13 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
-      {(pendingApprovals.length > 0 || latestDiff || testRuns.length > 0) && (
-        <div className="shrink-0 max-h-72 overflow-y-auto border-b bg-gray-50 p-3 space-y-3">
+      {(pendingApprovals.length > 0 || latestDiff || testRuns.length > 0 || syncEvents.length > 0 || task.externalIssueRef) && (
+        <div className="shrink-0 max-h-80 overflow-y-auto border-b bg-gray-50 p-3 space-y-3">
+          {/* Linked issue */}
+          {task.externalIssueRef && (
+            <IssueLinkCard ref_={task.externalIssueRef} />
+          )}
+
           {pendingApprovals.map((approval) => {
             const command = parseJson<string[]>(approval.commandJson, []);
             const files = parseJson<string[]>(approval.filesJson, []);
@@ -534,6 +546,12 @@ export default function TaskDetailPage() {
               </div>
               <p className="text-xs text-gray-500">exit {run.exitCode ?? 'running'}</p>
             </div>
+          ))}
+
+          {/* Phase 4: Sync status and provider errors */}
+          <SyncStatusPanel syncEvents={syncEvents} />
+          {syncEvents.filter((e) => e.status === 'failed').slice(0, 3).map((event) => (
+            <ProviderErrorCard key={event.id} event={event} />
           ))}
         </div>
       )}

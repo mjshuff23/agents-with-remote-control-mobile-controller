@@ -144,6 +144,26 @@ export interface TaskEventEnvelope<TName extends string = string, TData = unknow
   data: TData;
 }
 
+export type SyncEventStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'retryable' | 'skipped';
+export type SyncEventAction = 'commit' | 'push' | 'create_pr' | 'attach_pr_url' | 'update_status';
+export type ProviderErrorCategory = 'auth_failed' | 'network_error' | 'rate_limited' | 'not_found' | 'push_rejected' | 'unknown_error';
+
+export interface SyncEvent {
+  id: string;
+  taskId: string;
+  sessionId: string | null;
+  provider: string;
+  action: SyncEventAction;
+  targetId: string;
+  status: SyncEventStatus;
+  externalId: string | null;
+  url: string | null;
+  errorCategory: ProviderErrorCategory | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TaskDetailsResponse {
   task: Task;
   session: Session | null;
@@ -154,6 +174,7 @@ export interface TaskDetailsResponse {
   approvals: ApprovalRequest[];
   changeSummaries: GitChangeSummary[];
   testRuns: TestRunSummary[];
+  syncEvents: SyncEvent[];
 }
 
 export interface TaskReplayResponse {
@@ -386,4 +407,46 @@ export function searchIssues(params: IssueSearchParams): Promise<{ issues: Norma
   if (params.stateId) p.set('stateId', params.stateId);
   if (params.limit !== undefined) p.set('limit', String(params.limit));
   return apiFetch(`/issues/search?${p.toString()}`);
+}
+
+// ── Phase 4: Commit, Push, PR, Cross-Reference, Merge Check ───────────────────
+
+export function commitTask(id: string, payload: { summary: string; sessionId?: string; linearKey?: string; githubIssueKey?: string }): Promise<{ sha: string; message: string; signingWarning?: string }> {
+  return apiFetch(`/tasks/${id}/commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function pushTask(id: string, payload: { sessionId?: string; remote?: string; branch?: string }): Promise<{ remote: string; branch: string; remoteSha: string }> {
+  return apiFetch(`/tasks/${id}/push`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createPr(id: string, payload: { title: string; sessionId?: string; base?: string; head?: string }): Promise<{ prNumber: number; prUrl: string; created: boolean }> {
+  return apiFetch(`/tasks/${id}/pr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function syncCrossReference(id: string, payload: { prUrl: string; prNumber: number; sessionId?: string }): Promise<void> {
+  return apiFetch(`/tasks/${id}/cross-reference`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function checkMerge(id: string, payload: { prNumber: number; prUrl: string; sessionId?: string }): Promise<{ merged: boolean; state: string }> {
+  return apiFetch(`/tasks/${id}/pr/check-merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 }
