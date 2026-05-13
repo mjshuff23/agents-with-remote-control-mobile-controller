@@ -1,0 +1,33 @@
+src/features/tasks/dto/create-pr.dto.ts
+  s_c4ff6aae1d6acf::t_85954f84116b78 1,6,17,23
+src/features/worktrees/pr-generator.service.spec.ts
+  s_c4ff6aae1d6acf::t_143341337b2dfc 39
+  s_c4ff6aae1d6acf::t_9bd29e3ba7bcb6 246-261
+src/features/worktrees/pr-generator.service.ts
+  s_c4ff6aae1d6acf::t_ce58aa30947e23 74-75
+  s_c4ff6aae1d6acf::t_9fcf229cb3201c 7
+  s_c4ff6aae1d6acf::t_edf08f5806b05c 93,97
+  s_c4ff6aae1d6acf::t_fefa1601364950 249
+  s_c4ff6aae1d6acf::t_1bfe1f6d82425b 292-307,315-321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "4034b29783cb8305c5db6377e39ede3498cf55bc",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
