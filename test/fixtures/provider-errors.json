@@ -1,0 +1,6 @@
+{
+  "auth_failed": { "status": 401, "message": "Bad credentials" },
+  "rate_limited": { "status": 403, "message": "API rate limit exceeded" },
+  "not_found": { "status": 404, "message": "Not Found" },
+  "conflict": { "status": 409, "message": "Already exists" }
+}

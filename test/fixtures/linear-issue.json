@@ -1,0 +1,10 @@
+{
+  "id": "lin-issue-uuid-123",
+  "identifier": "TSH-110",
+  "title": "Test Linear issue",
+  "description": "Test body for TSH-110",
+  "stateId": "state-todo-uuid",
+  "url": "https://linear.app/team/issue/TSH-110/test-title",
+  "teamId": "team-uuid-1",
+  "labels": ["bug"]
+}

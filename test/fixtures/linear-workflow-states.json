@@ -1,0 +1,6 @@
+[
+  { "id": "state-todo-uuid", "name": "Todo", "type": "unstarted", "position": 0 },
+  { "id": "state-in-progress-uuid", "name": "In Progress", "type": "started", "position": 1 },
+  { "id": "state-done-uuid", "name": "Done", "type": "completed", "position": 2 },
+  { "id": "state-canceled-uuid", "name": "Canceled", "type": "canceled", "position": 3 }
+]
