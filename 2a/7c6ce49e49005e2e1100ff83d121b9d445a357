@@ -1,0 +1,30 @@
+test/utils/in-memory-prisma.ts
+  s_aa7f3e80891d56::t_1017db1629862e 3-25
+  s_aa7f3e80891d56::t_df9dfbf8be5c24 136
+test/tasks.e2e-spec.ts
+  s_aa7f3e80891d56::t_8be3753be693d0 16
+  s_aa7f3e80891d56::t_c8cc386db70088 10
+test/provider-e2e.spec.ts
+  s_aa7f3e80891d56::t_4915bbe2400220 8,18-28,42,45-51,53-54,80,90-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "2a7c6ce49e49005e2e1100ff83d121b9d445a357",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_aa7f3e80891d56": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1de348c1bffe1DI7VEvNuVj65G",
+        "model": "deepseek-v4-flash-free"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
