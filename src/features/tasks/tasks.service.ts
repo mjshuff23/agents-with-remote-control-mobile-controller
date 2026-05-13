@@ -11,6 +11,7 @@ import { GitCommitService, CommitResult } from '../worktrees/git-commit.service'
 import { GitPushService, PushResult } from '../worktrees/git-push.service';
 import { PrGeneratorService, PrResult } from '../worktrees/pr-generator.service';
 import { CrossReferenceService } from '../worktrees/cross-reference.service';
+import { MergeDetectionService } from '../worktrees/merge-detection.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
@@ -20,6 +21,7 @@ import { CommitTaskDto } from './dto/commit-task.dto';
 import { PushTaskDto } from './dto/push-task.dto';
 import { CreatePrDto } from './dto/create-pr.dto';
 import { CrossReferenceDto } from './dto/cross-reference.dto';
+import { CheckMergeDto } from './dto/check-merge.dto';
 import type { ExternalIssueRef } from '../providers/provider.types';
 
 /** Task row with `externalIssueRef` parsed to a typed object instead of a raw JSON string. */
@@ -70,6 +72,7 @@ export class TasksService {
     private readonly gitPush: GitPushService,
     private readonly prGenerator: PrGeneratorService,
     private readonly crossReference: CrossReferenceService,
+    private readonly mergeDetection: MergeDetectionService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -342,6 +345,58 @@ export class TasksService {
       sessionId: dto.sessionId,
       prUrl: dto.prUrl,
       prNumber: dto.prNumber,
+      linearIssueId: ref.externalId,
+      linearIssueKey: ref.key,
+    });
+  }
+
+  /** Check PR merge status and sync Linear issue to Done if merged. */
+  async checkMerge(id: string, dto: CheckMergeDto): Promise<{ merged: boolean; state: string }> {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${id}" does not exist.`);
+    }
+    if (!task.worktreePath) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Worktree Not Ready',
+        `Task "${id}" does not have a worktree path set.`,
+      );
+    }
+
+    if (!task.externalIssueRef) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'No Linked Issue',
+        `Task "${id}" has no linked external issue.`,
+      );
+    }
+
+    let ref: { provider?: string; externalId?: string; key?: string };
+    try {
+      ref = JSON.parse(task.externalIssueRef) as { provider?: string; externalId?: string; key?: string };
+    } catch {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Invalid Issue Ref',
+        `Task "${id}" has a malformed external issue reference.`,
+      );
+    }
+
+    if (!ref.externalId || !ref.key) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Invalid Linked Issue',
+        `Task "${id}" has an incomplete external issue reference (missing id or key).`,
+      );
+    }
+
+    return this.mergeDetection.checkAndSync({
+      taskId: id,
+      sessionId: dto.sessionId,
+      worktreePath: task.worktreePath,
+      prNumber: dto.prNumber,
+      prUrl: dto.prUrl,
       linearIssueId: ref.externalId,
       linearIssueKey: ref.key,
     });
