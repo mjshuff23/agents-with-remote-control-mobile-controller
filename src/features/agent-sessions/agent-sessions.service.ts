@@ -167,6 +167,16 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     });
     await this.appendLog(session.id, 'system', `Starting ${task.selectedAgent} for task ${task.id}`);
 
+    // Fire off agent startup in background, don't block the request
+    void this.startAgentInBackground(task, session).catch((err) => {
+      this.appendLog(session.id, 'system', `Background startup error: ${this.errorMessage(err)}`);
+    });
+
+    return session;
+  }
+
+  /** Start the agent in the background without blocking the request. */
+  private async startAgentInBackground(task: Task, session: AgentSession): Promise<void> {
     try {
       const adapter = this.agents.getAdapter(task.selectedAgent);
       const runningProcess = await adapter.startTask({
@@ -192,7 +202,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         data: { status: 'running' }
       });
 
-      const updated = await this.prisma.agentSession.update({
+      await this.prisma.agentSession.update({
         where: { id: session.id },
         data: {
           status: 'running',
@@ -206,18 +216,10 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       }).catch((err) => {
         this.appendLog(session.id, 'system', `Checkpoint capture failed (session_start): ${this.errorMessage(err)}`);
       });
-
-      return updated;
     } catch (error) {
       const message = this.errorMessage(error);
       await this.appendLog(session.id, 'system', `Codex startup failed: ${message}`);
       await this.markSessionFailed(task.id, session.id, message);
-
-      throw new ProblemException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        'Codex agent could not be started',
-        message
-      );
     }
   }
 

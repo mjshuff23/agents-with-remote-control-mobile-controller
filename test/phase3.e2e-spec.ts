@@ -112,7 +112,7 @@ describe('Phase 3 local safety loop', () => {
 
     const { port } = app.getHttpServer().address() as { port: number };
     socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET }, transports: ['websocket'] });
-    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'patch', agent: 'codex' }).expect(201);
+    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'patch', agent: 'codex' }).expect(202);
     await socket.emitWithAck('subscribe', { taskId: created.body.task.id });
 
     const eventPromise = new Promise<any>((resolve, reject) => {
@@ -149,7 +149,7 @@ describe('Phase 3 local safety loop', () => {
       return { externalSessionId: 'mock-session', stop: jest.fn(), write: writeStub };
     });
 
-    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'blocked', agent: 'codex' }).expect(201);
+    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'blocked', agent: 'codex' }).expect(202);
     const approvals = await authed(request(app.getHttpServer()).get(`/tasks/${created.body.task.id}/approvals`)).expect(200);
 
     expect(approvals.body.approvals).toEqual([
@@ -162,7 +162,7 @@ describe('Phase 3 local safety loop', () => {
 
     const { port } = app.getHttpServer().address() as { port: number };
     socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET }, transports: ['websocket'] });
-    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'summarize', agent: 'codex' }).expect(201);
+    const created = await authed(request(app.getHttpServer()).post('/tasks')).send({ prompt: 'summarize', agent: 'codex' }).expect(202);
     await socket.emitWithAck('subscribe', { taskId: created.body.task.id });
 
     const diff = await authed(request(app.getHttpServer()).post(`/tasks/${created.body.task.id}/diff-summary`)).expect(202);

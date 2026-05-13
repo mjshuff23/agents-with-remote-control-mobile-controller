@@ -62,8 +62,8 @@ export class TasksService {
   ) {}
 
   /**
-   * Create a task, set up a git worktree, start an agent session, and emit
-   * a `task.started` event.
+   * Create a task and return immediately. Worktree setup and agent startup
+   * happen in the background.
    */
   async createTask(input: CreateTaskDto): Promise<CreateTaskResult> {
     const draft = await this.prisma.task.create({
@@ -76,41 +76,43 @@ export class TasksService {
         externalIssueRef: input.externalIssueRef ? JSON.stringify(input.externalIssueRef) : null,
       }
     });
-    let worktree: WorktreeResult;
+
+    const session = await this.agentSessions.createAndStart(draft);
+
+    // Fire off worktree setup in background
+    void this.setupTaskInBackground(draft.id, input);
+
+    return { task: parseTask(draft), session };
+  }
+
+  /** Set up worktree in the background. */
+  private async setupTaskInBackground(taskId: string, input: CreateTaskDto): Promise<void> {
     try {
-      worktree = await this.worktrees.createForTask({
-        taskId: draft.id,
+      const worktree = await this.worktrees.createForTask({
+        taskId,
         title: input.title,
-        prompt: input.prompt
+        prompt: input.prompt,
+        externalIssueRef: input.externalIssueRef ?? null,
+        baseRef: input.baseRef ?? null,
+      });
+
+      await this.prisma.task.update({
+        where: { id: taskId },
+        data: {
+          repoPath: worktree.repoPath,
+          worktreePath: worktree.worktreePath,
+          branchName: worktree.branchName,
+          baseRef: worktree.baseRef,
+          baseCommit: worktree.baseCommit,
+          approvalMode: 'cooperative-gated'
+        }
       });
     } catch (error) {
       await this.prisma.task.update({
-        where: { id: draft.id },
+        where: { id: taskId },
         data: { status: 'failed' }
       });
-      throw error;
     }
-    const created = await this.prisma.task.update({
-      where: { id: draft.id },
-      data: {
-        repoPath: worktree.repoPath,
-        worktreePath: worktree.worktreePath,
-        branchName: worktree.branchName,
-        baseRef: worktree.baseRef,
-        baseCommit: worktree.baseCommit,
-        approvalMode: 'cooperative-gated'
-      }
-    });
-    const session = await this.agentSessions.createAndStart(created);
-    const task = await this.prisma.task.findUnique({ where: { id: created.id } });
-    if (!task) {
-      throw new ProblemException(HttpStatus.INTERNAL_SERVER_ERROR, 'Task Refresh Failed', `Task "${created.id}" could not be refreshed after startup.`);
-    }
-
-    await this.events?.emitCompatibilityEventToTask(task.id, 'task.started', 'lifecycle', 'info', { taskId: task.id, task, session }, {
-      sessionId: session.id
-    });
-    return { task: parseTask(task), session };
   }
 
   /** List the 50 most recent tasks. */

@@ -55,4 +55,11 @@ export class CreateTaskDto {
   @Type(() => ExternalIssueRefDto)
   /** Optional external issue reference (GitHub or Linear) to link at creation. */
   externalIssueRef?: ExternalIssueRefDto;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  @Transform(trimString)
+  /** Explicit base branch to create the worktree from. Defaults to current HEAD. */
+  baseRef?: string;
 }

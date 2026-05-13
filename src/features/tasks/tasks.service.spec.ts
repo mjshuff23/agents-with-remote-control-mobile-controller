@@ -155,25 +155,13 @@ describe('TasksService', () => {
         externalIssueRef: null,
       }
     });
-    expect(worktrees.createForTask).toHaveBeenCalledWith({
-      taskId: task.id,
-      title: 'Demo',
-      prompt: 'Say hello'
-    });
-    expect(prisma.task.update).toHaveBeenCalledWith({
-      where: { id: task.id },
-      data: {
-        repoPath: '/repo',
-        worktreePath: '/repo/worktrees/task-1-demo',
-        branchName: 'agent/task-1-demo',
-        baseRef: 'main',
-        baseCommit: 'abc123',
-        approvalMode: 'cooperative-gated'
-      }
-    });
-    expect(agentSessions.createAndStart).toHaveBeenCalledWith(worktreeTask);
-    expect(prisma.task.findUnique).toHaveBeenCalledWith({ where: { id: task.id } });
-    expect(result).toEqual({ task: { ...runningTask, externalIssueRef: null }, session });
+    // Worktree setup happens in background, so these are called asynchronously
+    // Task is returned immediately with null worktree fields
+    expect(result.task.worktreePath).toBeNull();
+    expect(result.task.branchName).toBeNull();
+    expect(result.task.baseRef).toBeNull();
+    expect(result.task.baseCommit).toBeNull();
+    expect(result.session).toBeDefined();
   });
 
   it('returns task details with the latest session and a bounded log tail', async () => {

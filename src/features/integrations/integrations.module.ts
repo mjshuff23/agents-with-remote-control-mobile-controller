@@ -6,9 +6,11 @@ import { McpGatewayModule } from './mcp-gateway/mcp-gateway.module';
 import { NotionIntegrationModule } from './notion/notion-integration.module';
 import { IssueSearchController } from './issue-search.controller';
 import { ProvidersModule } from '../providers/providers.module';
+import { AppConfigModule } from '../../config/app-config.module';
 
 @Module({
   imports: [
+    AppConfigModule,
     McpGatewayModule,
     GithubIntegrationModule,
     LinearIntegrationModule,

@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Query, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
 import { ControllerSecretGuard } from '../../common/guards/controller-secret.guard';
 import { IGitHubProvider } from '../providers/github-provider.interface';
 import type { IGitHubProvider as IGitHubProviderInterface, GitHubSearchIssue } from '../providers/github-provider.interface';
@@ -19,47 +19,55 @@ export class IssueSearchController {
   async search(@Query() query: IssueSearchQueryDto): Promise<IssueSearchResponse> {
     const limit = query.limit ?? 25;
 
-    if (query.provider === 'github') {
-      const results = await this.github.searchIssues({
-        repo: query.scope ?? '',
+    try {
+      if (query.provider === 'github') {
+        const results = await this.github.searchIssues({
+          repo: query.scope ?? '',
+          query: query.query,
+          state: 'open',
+          limit,
+        });
+        return {
+          provider: 'github',
+          issues: results.map((i: GitHubSearchIssue): NormalizedIssue => ({
+            provider: 'github',
+            externalId: String(i.number),
+            key: `#${i.number}`,
+            title: i.title,
+            url: i.url || undefined,
+            state: i.state,
+            labels: i.labels,
+            body: i.body || undefined,
+          })),
+        };
+      }
+
+      // Linear
+      const results = await this.linear.searchIssues({
         query: query.query,
-        state: 'open',
+        teamId: query.scope,
+        stateId: query.stateId,
         limit,
       });
       return {
-        provider: 'github',
-        issues: results.map((i: GitHubSearchIssue): NormalizedIssue => ({
-          provider: 'github',
-          externalId: String(i.number),
-          key: `#${i.number}`,
+        provider: 'linear',
+        issues: results.map((i: LinearIssue): NormalizedIssue => ({
+          provider: 'linear',
+          externalId: i.id,
+          key: i.identifier,
           title: i.title,
           url: i.url || undefined,
-          state: i.state,
+          state: i.stateId ?? '',
           labels: i.labels,
-          body: i.body || undefined,
+          body: i.description,
         })),
       };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new HttpException(
+        { detail: `Provider search failed: ${message}` },
+        HttpStatus.BAD_GATEWAY,
+      );
     }
-
-    // Linear
-    const results = await this.linear.searchIssues({
-      query: query.query,
-      teamId: query.scope,
-      stateId: query.stateId,
-      limit,
-    });
-    return {
-      provider: 'linear',
-      issues: results.map((i: LinearIssue): NormalizedIssue => ({
-        provider: 'linear',
-        externalId: i.id,
-        key: i.identifier,
-        title: i.title,
-        url: i.url || undefined,
-        state: i.stateId ?? '',
-        labels: i.labels,
-        body: i.description,
-      })),
-    };
   }
 }

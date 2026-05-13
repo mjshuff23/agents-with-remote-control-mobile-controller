@@ -14,6 +14,7 @@ import { AuditLogModule } from './features/audit/audit-log.module';
 import { TestRunnerModule } from './features/test-runs/test-runner.module';
 import { ProvidersModule } from './features/providers/providers.module';
 import { SyncModule } from './features/sync/sync.module';
+import { IntegrationsModule } from './features/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -30,7 +31,8 @@ import { SyncModule } from './features/sync/sync.module';
     AuditLogModule,
     TestRunnerModule,
     ProvidersModule,
-    SyncModule
+    SyncModule,
+    IntegrationsModule
   ]
 })
 export class AppModule {}
