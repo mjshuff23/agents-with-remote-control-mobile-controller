@@ -7,6 +7,7 @@ import { SyncEventService } from '../sync/sync-event.service';
 
 const execFileAsync = promisify(execFile);
 const GH_TIMEOUT_MS = 30_000;
+const LINEAR_TIMEOUT_MS = 10_000;
 
 export type MergeState = 'open' | 'closed' | 'merged';
 
@@ -49,13 +50,19 @@ export class MergeDetectionService {
    */
   async checkMergeStatus(worktreePath: string, prNumber: number): Promise<MergeCheckResult> {
     try {
+      const env = {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+        ...(this.config.gitHubToken ? { GITHUB_TOKEN: this.config.gitHubToken } : {}),
+      };
+
       const { stdout } = await execFileAsync('gh', [
         'pr', 'view', String(prNumber),
         '--json', 'state,mergeCommit,mergedAt',
       ], {
         cwd: worktreePath,
         timeout: GH_TIMEOUT_MS,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        env,
       });
 
       const data = JSON.parse(stdout) as {
@@ -64,11 +71,20 @@ export class MergeDetectionService {
         mergedAt: string | null;
       };
 
-      const merged = data.state === 'MERGED';
+      const rawState = (data.state ?? '').toUpperCase();
+      let state: MergeState;
+      if (rawState === 'MERGED') {
+        state = 'merged';
+      } else if (rawState === 'CLOSED') {
+        state = 'closed';
+      } else {
+        state = 'open';
+      }
+
       return {
         prNumber,
-        state: merged ? 'merged' : data.state.toLowerCase() as 'open' | 'closed',
-        merged,
+        state,
+        merged: state === 'merged',
         mergeCommitSha: data.mergeCommit?.oid ?? undefined,
       };
     } catch (err) {
@@ -82,11 +98,11 @@ export class MergeDetectionService {
     }
   }
 
-  /**
-   * Fetch a Linear issue to determine its team, then find the
-   * team's "completed" workflow state ID and update the issue to it.
-   */
-  private async updateLinearToDone(linearIssueId: string): Promise<void> {
+  /** Execute a single Linear GraphQL call with timeouts and variables support. */
+  private async linearQuery<T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): Promise<T> {
     const token = this.config.linearToken;
     if (!token) {
       throw new ProblemException(
@@ -96,62 +112,73 @@ export class MergeDetectionService {
       );
     }
 
-    // Step 1: Get the issue to find its team.
-    const issueQuery = `query { issue(id: "${linearIssueId}") { id team { id } } }`;
-    const issueRes = await fetch(LINEAR_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ query: issueQuery }),
-    });
-    const issueJson = await issueRes.json() as {
-      data?: { issue?: { id: string; team: { id: string } } };
-      errors?: Array<{ message: string }>;
-    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), LINEAR_TIMEOUT_MS);
 
-    if (!issueRes.ok || issueJson.errors || !issueJson.data?.issue) {
-      const errMsg = issueJson.errors?.[0]?.message ?? `HTTP ${issueRes.status}`;
-      throw new Error(`Failed to fetch Linear issue: ${errMsg}`);
+    try {
+      const res = await fetch(LINEAR_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(variables ? { query, variables } : { query }),
+        signal: controller.signal,
+      });
+      const json = await res.json() as T & { errors?: Array<{ message: string }> };
+      if (json.errors) {
+        throw new Error(json.errors[0]?.message ?? 'Unknown Linear API error');
+      }
+      return json;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Linear API timed out after ${LINEAR_TIMEOUT_MS}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /**
+   * Fetch a Linear issue to determine its team, then find the
+   * team's "completed" workflow state ID and update the issue to it.
+   */
+  private async updateLinearToDone(linearIssueId: string): Promise<void> {
+    // Step 1: Get the issue to find its team.
+    const issueRes = await this.linearQuery<{
+      data?: { issue?: { id: string; team: { id: string } } };
+    }>(
+      'query ($id: String!) { issue(id: $id) { id team { id } } }',
+      { id: linearIssueId },
+    );
+
+    if (!issueRes.data?.issue) {
+      throw new Error(`Failed to fetch Linear issue ${linearIssueId}`);
     }
 
-    const teamId = issueJson.data.issue.team.id;
+    const teamId = issueRes.data.issue.team.id;
 
     // Step 2: Get workflow states for the team and find the "completed" one.
-    const statesQuery = `query { workflowStates(filter: { team: { id: { eq: "${teamId}" } } }) { nodes { id name type } } }`;
-    const statesRes = await fetch(LINEAR_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ query: statesQuery }),
-    });
-    const statesJson = await statesRes.json() as {
+    const statesRes = await this.linearQuery<{
       data?: { workflowStates?: { nodes: Array<{ id: string; name: string; type: string }> } };
-      errors?: Array<{ message: string }>;
-    };
+    }>(
+      'query ($teamId: String!) { workflowStates(filter: { team: { id: { eq: $teamId } } }) { nodes { id name type } } }',
+      { teamId },
+    );
 
-    if (!statesRes.ok || statesJson.errors || !statesJson.data?.workflowStates) {
-      const errMsg = statesJson.errors?.[0]?.message ?? `HTTP ${statesRes.status}`;
-      throw new Error(`Failed to fetch Linear workflow states: ${errMsg}`);
-    }
-
-    const doneState = statesJson.data.workflowStates.nodes.find((s) => s.type === 'completed');
+    const doneState = statesRes.data?.workflowStates?.nodes.find((s) => s.type === 'completed');
     if (!doneState) {
       throw new Error('No completed workflow state found for the Linear team.');
     }
 
     // Step 3: Update the issue to the done state.
-    const updateMutation = `mutation { issueUpdate(id: "${linearIssueId}", input: { stateId: "${doneState.id}" }) { success } }`;
-    const updateRes = await fetch(LINEAR_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ query: updateMutation }),
-    });
-    const updateJson = await updateRes.json() as {
+    const updateRes = await this.linearQuery<{
       data?: { issueUpdate?: { success: boolean } };
-      errors?: Array<{ message: string }>;
-    };
+    }>(
+      'mutation ($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success } }',
+      { id: linearIssueId, stateId: doneState.id },
+    );
 
-    if (!updateRes.ok || updateJson.errors || !updateJson.data?.issueUpdate?.success) {
-      const errMsg = updateJson.errors?.[0]?.message ?? `HTTP ${updateRes.status}`;
-      throw new Error(`Failed to update Linear issue to Done: ${errMsg}`);
+    if (!updateRes.data?.issueUpdate?.success) {
+      throw new Error('Linear issueUpdate returned success: false');
     }
   }
 
@@ -159,11 +186,8 @@ export class MergeDetectionService {
    * Check PR merge status and, if merged, update the linked Linear issue
    * to its "Done" workflow state. Idempotent via SyncEvent.
    *
-   * Caller should derive `linearIssueId` and `linearIssueKey` from the task's
-   * `externalIssueRef`.
-   *
-   * @throws ProblemException if the Linear token is not configured.
-   * @throws ProblemException if the PR check or Linear update fails.
+   * @throws ProblemException(422) if the Linear token is not configured.
+   * @throws ProblemException(500) if the PR check or Linear update fails.
    */
   async checkAndSync(input: {
     taskId: string;
@@ -175,6 +199,15 @@ export class MergeDetectionService {
     linearIssueKey: string;
   }): Promise<{ merged: boolean; state: MergeState }> {
     const { taskId, sessionId, worktreePath, prNumber, prUrl, linearIssueId, linearIssueKey } = input;
+
+    // Fail fast on missing Linear config before creating any SyncEvent.
+    if (!this.config.linearToken) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Linear Not Configured',
+        'ARC_LINEAR_TOKEN is not set. Configure it to enable Linear completion sync.',
+      );
+    }
 
     // Check merge status.
     const result = await this.checkMergeStatus(worktreePath, prNumber);

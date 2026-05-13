@@ -71,6 +71,24 @@ describe('MergeDetectionService', () => {
       expect(result.state).toBe('open');
     });
 
+    it('returns merged=false when PR is closed (not merged)', async () => {
+      execFileMock.mockImplementationOnce((_file: unknown, _args: unknown, _options: unknown, cb: (...args: unknown[]) => void) => {
+        cb(null, { stdout: JSON.stringify({ state: 'CLOSED', mergeCommit: null, mergedAt: null }), stderr: '' });
+      });
+      const result = await service.checkMergeStatus('/wt', 42);
+      expect(result.merged).toBe(false);
+      expect(result.state).toBe('closed');
+    });
+
+    it('treats unknown states as open', async () => {
+      execFileMock.mockImplementationOnce((_file: unknown, _args: unknown, _options: unknown, cb: (...args: unknown[]) => void) => {
+        cb(null, { stdout: JSON.stringify({ state: 'DRAFT', mergeCommit: null, mergedAt: null }), stderr: '' });
+      });
+      const result = await service.checkMergeStatus('/wt', 42);
+      expect(result.merged).toBe(false);
+      expect(result.state).toBe('open');
+    });
+
     it('throws 500 when gh call fails', async () => {
       execFileMock.mockImplementationOnce((_file: unknown, _args: unknown, _options: unknown, cb: (...args: unknown[]) => void) => {
         cb(new Error('gh not found'));
@@ -92,6 +110,30 @@ describe('MergeDetectionService', () => {
       expect(result.merged).toBe(false);
       expect(result.state).toBe('open');
       expect(syncEvents.createOrReuse).not.toHaveBeenCalled();
+    });
+
+    it('returns merged=false for closed-unmerged PR and skips Linear sync', async () => {
+      execFileMock.mockImplementationOnce((_file: unknown, _args: unknown, _options: unknown, cb: (...args: unknown[]) => void) => {
+        cb(null, { stdout: JSON.stringify({ state: 'CLOSED', mergeCommit: null, mergedAt: null }), stderr: '' });
+      });
+
+      const result = await service.checkAndSync(baseInput);
+
+      expect(result.merged).toBe(false);
+      expect(result.state).toBe('closed');
+      expect(syncEvents.createOrReuse).not.toHaveBeenCalled();
+    });
+
+    it('throws 422 and skips SyncEvent when Linear token is missing', async () => {
+      (config as any).linearToken = undefined;
+
+      await expect(service.checkAndSync(baseInput)).rejects.toMatchObject({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      });
+
+      expect(syncEvents.createOrReuse).not.toHaveBeenCalled();
+
+      (config as any).linearToken = 'lin_api_test_token';
     });
 
     it('updates Linear issue to Done when PR is merged', async () => {
@@ -135,8 +177,7 @@ describe('MergeDetectionService', () => {
 
     it('throws 500 when Linear API call fails during sync', async () => {
       (globalThis as any).fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
+        ok: true,
         json: () => Promise.resolve({ errors: [{ message: 'Unauthorized' }] }),
       });
 

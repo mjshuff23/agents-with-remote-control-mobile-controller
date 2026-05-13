@@ -383,14 +383,22 @@ export class TasksService {
       );
     }
 
+    if (!ref.externalId || !ref.key) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Invalid Linked Issue',
+        `Task "${id}" has an incomplete external issue reference (missing id or key).`,
+      );
+    }
+
     return this.mergeDetection.checkAndSync({
       taskId: id,
       sessionId: dto.sessionId,
       worktreePath: task.worktreePath,
       prNumber: dto.prNumber,
       prUrl: dto.prUrl,
-      linearIssueId: ref.externalId ?? '',
-      linearIssueKey: ref.key ?? '',
+      linearIssueId: ref.externalId,
+      linearIssueKey: ref.key,
     });
   }
 

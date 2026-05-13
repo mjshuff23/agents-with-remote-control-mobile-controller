@@ -1,9 +1,10 @@
-import { IsInt, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CheckMergeDto {
   @Type(() => Number)
   @IsInt()
+  @Min(1)
   prNumber!: number;
 
   @IsUrl()
