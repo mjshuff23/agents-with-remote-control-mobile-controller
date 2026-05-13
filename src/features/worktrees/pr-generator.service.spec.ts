@@ -1,6 +1,5 @@
 import { HttpStatus, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { GitDiffService } from './git-diff.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { SyncEventService } from '../sync/sync-event.service';
 import { PrGeneratorService } from './pr-generator.service';
@@ -25,8 +24,6 @@ const prisma = {
   approvalRequest: { count: jest.fn() },
 } as unknown as PrismaService;
 
-const diffs = {} as unknown as GitDiffService;
-
 const approvals = {
   createFromAgentRequest: jest.fn(),
 } as unknown as ApprovalsService;
@@ -39,7 +36,7 @@ const syncEvents = {
   getLastForAction: jest.fn(),
 } as unknown as SyncEventService;
 
-const service = new PrGeneratorService(prisma, diffs, approvals, syncEvents);
+const service = new PrGeneratorService(prisma, approvals, syncEvents);
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -245,6 +242,22 @@ describe('PrGeneratorService', () => {
       });
 
       expect(syncEvents.markFailed).toHaveBeenCalledWith('sync-1', 'unknown_error', expect.any(String));
+    });
+
+    it('records failure to SyncEvent and throws 500 when gh stdout is malformed', async () => {
+      execFileMock.mockImplementationOnce((_file: unknown, _args: unknown, _options: unknown, cb: (...args: unknown[]) => void) => {
+        cb(null, { stdout: 'unexpected output without a PR URL\n', stderr: '' });
+      });
+
+      await expect(service.requestAndExecute(baseInput)).rejects.toMatchObject({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+      });
+
+      expect(syncEvents.markFailed).toHaveBeenCalledWith(
+        'sync-1',
+        'unknown_error',
+        expect.stringMatching(/parse/i),
+      );
     });
   });
 });

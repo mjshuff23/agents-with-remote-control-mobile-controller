@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import { ProblemException } from '../../common/errors/problem.exception';
 import { PrismaService } from '../../prisma/prisma.service';
-import { GitDiffService, DiffSummaryPayload } from './git-diff.service';
+import type { DiffSummaryPayload } from './git-diff.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { SyncEventService } from '../sync/sync-event.service';
 
@@ -46,7 +46,6 @@ export class PrGeneratorService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly diffs: GitDiffService,
     private readonly approvals: ApprovalsService,
     private readonly syncEvents: SyncEventService,
   ) {}
@@ -72,8 +71,8 @@ export class PrGeneratorService {
       modifiedCount: rows[0].modifiedCount,
       deletedCount: rows[0].deletedCount,
       renamedCount: rows[0].renamedCount,
-      riskFlags: JSON.parse(rows[0].riskFlagsJson ?? '[]') as string[],
-      topFiles: JSON.parse(rows[0].topFilesJson ?? '[]') as DiffSummaryPayload['topFiles'],
+      riskFlags: safeJsonParse<string[]>(rows[0].riskFlagsJson, []),
+      topFiles: safeJsonParse<DiffSummaryPayload['topFiles']>(rows[0].topFilesJson, []),
       statusText: rows[0].statusText,
       createdAt: rows[0].createdAt,
     };
@@ -91,11 +90,11 @@ export class PrGeneratorService {
   }
 
   /**
-   * Count approved (non-refused) approval requests for the task.
+   * Count non-refused approval requests (including auto_allow) for the task.
    */
   private async countApprovals(taskId: string): Promise<number> {
     return this.prisma.approvalRequest.count({
-      where: { taskId, decision: 'approved' },
+      where: { taskId, decision: { in: ['approved', 'auto_allow'] } },
     });
   }
 
@@ -247,7 +246,7 @@ export class PrGeneratorService {
       riskLevel: 'NEEDS_APPROVAL',
       title: `PR: ${title}`,
       rationale: 'Create a draft pull request from the task branch.',
-      command: ['gh', 'pr', 'create', '--draft', '--title', title, '--base', base, '--head', head],
+      command: ['gh', 'pr', 'create', '--draft', '--title', title, '--body', body, '--base', base, '--head', head],
       expectedEffect: `Creates a draft PR from ${head} to ${base} in the task repository.`,
     });
 
@@ -290,13 +289,36 @@ export class PrGeneratorService {
       );
     }
 
-    // Parse PR number from URL.
-    const prNumber = parsePrNumber(prUrl);
+    // Parse PR number from URL and persist to SyncEvent.
+    let prNumber: number;
+    try {
+      prNumber = parsePrNumber(prUrl);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Failed to parse PR URL: ${msg}`);
+      if (record.status === 'running' || record.status === 'pending' || record.status === 'retryable') {
+        await this.syncEvents.markFailed(record.id, 'unknown_error', msg);
+      }
+      throw new ProblemException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'PR Creation Failed',
+        'Failed to parse pull request URL from CLI output.',
+      );
+    }
 
-    // Persist result to SyncEvent.
     await this.syncEvents.markSucceeded(record.id, String(prNumber), prUrl);
 
     return { prNumber, prUrl, created: true };
+  }
+}
+
+/** Safe JSON parse with fallback default. */
+function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
   }
 }
 
