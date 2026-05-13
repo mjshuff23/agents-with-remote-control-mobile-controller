@@ -1,0 +1,50 @@
+src/features/worktrees/pr-generator.service.ts
+  s_c4ff6aae1d6acf::t_bfba3fc916932a 1-310
+src/features/tasks/tasks.service.spec.ts
+  s_c4ff6aae1d6acf::t_289a6c303333b6 139-140
+  s_c4ff6aae1d6acf::t_1017239eadcb88 9
+src/features/tasks/tasks.module.ts
+  s_c4ff6aae1d6acf::t_35ede19615f43b 24
+  s_c4ff6aae1d6acf::t_28c7d7a9465f22 15
+src/features/worktrees/pr-generator.service.spec.ts
+  s_c4ff6aae1d6acf::t_b64101b59f265e 14,16
+  s_c4ff6aae1d6acf::t_fe6f60b81439a8 235
+  s_c4ff6aae1d6acf::t_0e491cfe7d589d 240-241
+  s_c4ff6aae1d6acf::t_f24620120c4555 239
+  s_c4ff6aae1d6acf::t_67db68df878c04 10-11,13
+  s_c4ff6aae1d6acf::t_d2cbca735601cf 1-7,20-125,127-225,229-234,236-238,242-250
+  s_c4ff6aae1d6acf::t_7ca160ddbadc03 8-9,12,15,17-19
+  s_c4ff6aae1d6acf::t_aa0227d2faadc7 126
+  s_c4ff6aae1d6acf::t_caf7f607b0cfb0 226-228
+src/features/tasks/tasks.controller.ts
+  s_c4ff6aae1d6acf::t_511d24c28d783a 116-122
+  s_c4ff6aae1d6acf::t_27ca131ef79904 9
+src/features/tasks/dto/create-pr.dto.ts
+  s_c4ff6aae1d6acf::t_e3559a461c1189 1-22
+src/features/tasks/tasks.service.ts
+  s_c4ff6aae1d6acf::t_fe5d201acc1f04 12
+  s_c4ff6aae1d6acf::t_950cd8fb4d4d66 69
+  s_c4ff6aae1d6acf::t_d237b3a3212721 20
+  s_c4ff6aae1d6acf::t_aba37adc341428 293-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "bfbc1eb04a9e9261adea629952e59ea5902ca074",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
