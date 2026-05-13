@@ -1,0 +1,24 @@
+src/features/tasks/dto/create-pr.dto.ts
+  s_c4ff6aae1d6acf::t_feb8c91607e31b 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "3bd459cffb825c2f4ee19e3c7e4e74572882d344",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
