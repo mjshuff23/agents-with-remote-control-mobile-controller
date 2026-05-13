@@ -10,6 +10,7 @@ import { GitWorktreeService, WorktreeResult } from '../worktrees/git-worktree.se
 import { GitCommitService, CommitResult } from '../worktrees/git-commit.service';
 import { GitPushService, PushResult } from '../worktrees/git-push.service';
 import { PrGeneratorService, PrResult } from '../worktrees/pr-generator.service';
+import { CrossReferenceService } from '../worktrees/cross-reference.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TestRunnerService } from '../test-runs/test-runner.service';
@@ -18,6 +19,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { CommitTaskDto } from './dto/commit-task.dto';
 import { PushTaskDto } from './dto/push-task.dto';
 import { CreatePrDto } from './dto/create-pr.dto';
+import { CrossReferenceDto } from './dto/cross-reference.dto';
 import type { ExternalIssueRef } from '../providers/provider.types';
 
 /** Task row with `externalIssueRef` parsed to a typed object instead of a raw JSON string. */
@@ -67,6 +69,7 @@ export class TasksService {
     private readonly gitCommit: GitCommitService,
     private readonly gitPush: GitPushService,
     private readonly prGenerator: PrGeneratorService,
+    private readonly crossReference: CrossReferenceService,
     @Optional() private readonly events?: EventsGateway
   ) {}
 
@@ -298,6 +301,49 @@ export class TasksService {
       title: dto.title,
       base: dto.base,
       head: dto.head,
+    });
+  }
+
+  /** Sync cross-references (attach PR URL to Linear issue). Derives Linear identifiers from the task's stored externalIssueRef. */
+  async syncCrossReference(id: string, dto: CrossReferenceDto): Promise<void> {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${id}" does not exist.`);
+    }
+    if (!task.externalIssueRef) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'No Linked Issue',
+        `Task "${id}" has no linked external issue. Link a Linear issue before syncing cross-references.`,
+      );
+    }
+
+    let ref: { provider?: string; externalId?: string; key?: string };
+    try {
+      ref = JSON.parse(task.externalIssueRef) as { provider?: string; externalId?: string; key?: string };
+    } catch {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Invalid Issue Ref',
+        `Task "${id}" has a malformed external issue reference.`,
+      );
+    }
+
+    if (ref.provider !== 'linear' || !ref.externalId || !ref.key) {
+      throw new ProblemException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Not a Linear Issue',
+        `Task "${id}" is linked to a ${ref.provider ?? 'unknown'} issue, not a Linear issue.`,
+      );
+    }
+
+    return this.crossReference.syncPrToLinear({
+      taskId: id,
+      sessionId: dto.sessionId,
+      prUrl: dto.prUrl,
+      prNumber: dto.prNumber,
+      linearIssueId: ref.externalId,
+      linearIssueKey: ref.key,
     });
   }
 
