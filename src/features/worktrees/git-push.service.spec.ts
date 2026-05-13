@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common';
+import { HttpStatus, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { SyncEventService } from '../sync/sync-event.service';
@@ -26,6 +26,8 @@ const service = new GitPushService(prisma, git, approvals, syncEvents);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+  jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
 });
 
 describe('GitPushService', () => {
