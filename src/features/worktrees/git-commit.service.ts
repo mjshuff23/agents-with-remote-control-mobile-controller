@@ -171,8 +171,16 @@ export class GitCommitService {
       action: 'commit',
       targetId: taskId,
     });
-    await this.syncEvents.markRunning(record.id);
-    await this.syncEvents.markSucceeded(record.id, sha, undefined);
+
+    if (record.status === 'pending' || record.status === 'retryable') {
+      await this.syncEvents.markRunning(record.id);
+      await this.syncEvents.markSucceeded(record.id, sha, undefined);
+    } else if (record.status === 'running') {
+      // Previous transition crashed mid-flight — go straight to succeeded.
+      await this.syncEvents.markSucceeded(record.id, sha, undefined);
+    }
+    // Already terminal (succeeded/failed/skipped) — skip; the commit
+    // outcome was already recorded in a prior run.
 
     void commitOutput; // consumed for side-effect detection only
 

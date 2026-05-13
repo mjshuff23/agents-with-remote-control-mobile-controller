@@ -95,7 +95,7 @@ describe('GitCommitService', () => {
         approval: { id: 'apr-1', decision: 'approved' },
         decision: 'approved',
       });
-      (syncEvents.createOrReuse as jest.Mock).mockResolvedValue({ id: 'sync-1' });
+      (syncEvents.createOrReuse as jest.Mock).mockResolvedValue({ id: 'sync-1', status: 'pending' });
       (syncEvents.markRunning as jest.Mock).mockResolvedValue(undefined);
       (syncEvents.markSucceeded as jest.Mock).mockResolvedValue(undefined);
     });
