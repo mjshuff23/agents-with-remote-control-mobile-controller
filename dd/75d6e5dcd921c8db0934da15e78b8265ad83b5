@@ -1,0 +1,25 @@
+src/features/policy/action-classifier.service.ts
+  s_c4ff6aae1d6acf::t_0861dec03bcf7f 295
+  s_c4ff6aae1d6acf::t_048ab081908b41 206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "dd75d6e5dcd921c8db0934da15e78b8265ad83b5",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
