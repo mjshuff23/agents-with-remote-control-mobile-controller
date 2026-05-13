@@ -17,6 +17,7 @@ const approvals = {
 
 const syncEvents = {
   createOrReuse: jest.fn(),
+  markRunning: jest.fn(),
   markSucceeded: jest.fn(),
 } as unknown as SyncEventService;
 
@@ -95,6 +96,7 @@ describe('GitCommitService', () => {
         decision: 'approved',
       });
       (syncEvents.createOrReuse as jest.Mock).mockResolvedValue({ id: 'sync-1' });
+      (syncEvents.markRunning as jest.Mock).mockResolvedValue(undefined);
       (syncEvents.markSucceeded as jest.Mock).mockResolvedValue(undefined);
     });
 
@@ -153,6 +155,7 @@ describe('GitCommitService', () => {
       expect(syncEvents.createOrReuse).toHaveBeenCalledWith(
         expect.objectContaining({ provider: 'git', action: 'commit', targetId: 'task-1' }),
       );
+      expect(syncEvents.markRunning).toHaveBeenCalledWith('sync-1');
       expect(syncEvents.markSucceeded).toHaveBeenCalledWith('sync-1', 'abc1234def5678', undefined);
     });
 

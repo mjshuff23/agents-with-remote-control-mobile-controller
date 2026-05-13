@@ -22,6 +22,7 @@ describe('ApprovalAuditSyncService', () => {
           provide: SyncEventService,
           useValue: { 
             createOrReuse: jest.fn(),
+            markRunning: jest.fn(),
             markSucceeded: jest.fn(),
             markFailed: jest.fn(),
           },

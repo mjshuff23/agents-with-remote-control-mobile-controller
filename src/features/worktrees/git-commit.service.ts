@@ -150,8 +150,7 @@ export class GitCommitService {
       const isSigningError =
         msg.includes('gpg') ||
         msg.includes('signing') ||
-        msg.includes('secret key') ||
-        msg.includes('No such file or directory') && msg.includes('gpg');
+        msg.includes('secret key');
       throw new ProblemException(
         HttpStatus.INTERNAL_SERVER_ERROR,
         isSigningError ? 'Commit Signing Failed' : 'Commit Failed',
@@ -165,15 +164,15 @@ export class GitCommitService {
     const sha = (await this.gitCommands.git(worktreePath, ['rev-parse', 'HEAD'])).stdout.trim();
 
     // Persist SHA to a SyncEvent so it survives replay.
-    await this.syncEvents.createOrReuse({
+    const record = await this.syncEvents.createOrReuse({
       taskId,
       sessionId,
       provider: 'git',
       action: 'commit',
       targetId: taskId,
-    }).then((record) =>
-      this.syncEvents.markSucceeded(record.id, sha, undefined),
-    );
+    });
+    await this.syncEvents.markRunning(record.id);
+    await this.syncEvents.markSucceeded(record.id, sha, undefined);
 
     void commitOutput; // consumed for side-effect detection only
 

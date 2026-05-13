@@ -7,13 +7,16 @@ export class CommitTaskDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   sessionId?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   linearKey?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   githubIssueKey?: string;
 }

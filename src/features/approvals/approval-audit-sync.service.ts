@@ -104,7 +104,8 @@ export class ApprovalAuditSyncService {
       targetId,
     });
 
-    // Mark as succeeded with external ID and URL
+    // Mark as running then succeeded with external ID and URL
+    await this.syncEvent.markRunning(syncEventRecord.id);
     await this.syncEvent.markSucceeded(syncEventRecord.id, externalId, url);
 
     // Create audit log entry
@@ -133,7 +134,8 @@ export class ApprovalAuditSyncService {
       targetId,
     });
 
-    // Mark as failed with error details
+    // Mark as running then failed with error details
+    await this.syncEvent.markRunning(syncEventRecord.id);
     await this.syncEvent.markFailed(syncEventRecord.id, errorCategory, errorMessage);
 
     // Create audit log entry

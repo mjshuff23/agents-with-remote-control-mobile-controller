@@ -276,7 +276,6 @@ export class TasksService {
 
   /** Request an approval-gated commit for a task. */
   async commitTask(id: string, dto: CommitTaskDto): Promise<CommitResult> {
-    await this.assertTaskExists(id);
     return this.gitCommit.requestAndExecute({
       taskId: id,
       sessionId: dto.sessionId,
