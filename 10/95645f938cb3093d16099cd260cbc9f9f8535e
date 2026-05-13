@@ -1,0 +1,42 @@
+src/features/tasks/tasks.service.ts
+  s_c4ff6aae1d6acf::t_78bee4ce45c3ae 72
+  s_c4ff6aae1d6acf::t_7aa24dd3452483 307-318
+  s_c4ff6aae1d6acf::t_7dae1111f31926 13
+  s_c4ff6aae1d6acf::t_4143baf0b784f7 22
+src/features/worktrees/cross-reference.service.ts
+  s_c4ff6aae1d6acf::t_972a57035dd85e 1-127
+src/features/tasks/dto/cross-reference.dto.ts
+  s_c4ff6aae1d6acf::t_078230de344475 1-23
+src/features/worktrees/cross-reference.service.spec.ts
+  s_c4ff6aae1d6acf::t_1a11e2a8beefd7 1-140
+src/features/tasks/tasks.module.ts
+  s_c4ff6aae1d6acf::t_89fb8c7a0890ca 25
+  s_c4ff6aae1d6acf::t_3dacbc9344b106 16
+src/features/tasks/tasks.controller.ts
+  s_c4ff6aae1d6acf::t_910f6234275b5d 10
+  s_c4ff6aae1d6acf::t_c361a2db450189 124-130
+src/features/tasks/tasks.service.spec.ts
+  s_c4ff6aae1d6acf::t_e4f04f66ba146f 141-142
+  s_c4ff6aae1d6acf::t_a1e22b8fc2cb58 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "1095645f938cb3093d16099cd260cbc9f9f8535e",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c4ff6aae1d6acf": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e131954dffeCigSBplqobRuKy",
+        "model": "big-pickle"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
