@@ -150,6 +150,12 @@ export default function TaskDetailPage() {
       if (data.session) setSession(data.session);
       return;
     }
+    if (event.name === 'task.idle') {
+      const data = event.data as { exitCode: number; status: string };
+      setTask((prev) => (prev ? { ...prev, status: data.status } : prev));
+      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
+      setRuntime({ processState: 'reconstructed', statusLabel: 'idle' });
+    }
     if (event.name === 'task.completed') {
       const data = event.data as { exitCode: number; status: string };
       setTask((prev) => (prev ? { ...prev, status: data.status } : prev));
@@ -254,6 +260,11 @@ export default function TaskDetailPage() {
         processState: 'terminal',
         statusLabel: data.status === 'failed' ? 'failed' : data.status === 'stopped' ? 'stopped' : 'completed'
       });
+    },
+    onIdle: (data) => {
+      setTask((prev) => (prev ? { ...prev, status: data.status } : null));
+      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
+      setRuntime({ processState: 'reconstructed', statusLabel: 'idle' });
     },
     onApprovalRequested: (event) => {
       lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
@@ -422,6 +433,7 @@ export default function TaskDetailPage() {
   const isLive = runtime?.processState === 'live_process' && (
     runtime.statusLabel === 'active' || runtime.statusLabel === 'waiting_approval'
   );
+  const canSendInput = isLive || runtime?.statusLabel === 'idle';
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending');
 
   // Safety-net poll: if the task is waiting for approval but the UI has no
@@ -568,9 +580,9 @@ export default function TaskDetailPage() {
             {actionError}
           </p>
         )}
-        {isLive && (
+        {canSendInput && (
           <>
-            {/* Terminal-style input — always visible while the task is running */}
+            {/* Terminal-style input — visible while live or ready to resume a persisted Codex thread */}
             <div className="flex gap-2">
               <input
                 type="text"
@@ -660,7 +672,7 @@ export default function TaskDetailPage() {
             </div>
           </div>
         )}
-        {!isLive && runtime?.statusLabel !== 'dormant' && (
+        {!canSendInput && runtime?.statusLabel !== 'dormant' && (
           <p className="text-center text-xs text-gray-400 py-1">
             Task {task.status} · exit {session?.exitCode ?? '—'}
           </p>

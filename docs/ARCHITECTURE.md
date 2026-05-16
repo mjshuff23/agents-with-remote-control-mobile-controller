@@ -33,8 +33,9 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 ### AgentSessionsModule
 
 - Owns the live link between a `Task` and a running agent process.
-- Tracks `AgentSession` state (`starting -> running -> waiting_approval -> completed | failed | stopped`).
+- Tracks `AgentSession` state (`starting -> running -> waiting_approval -> idle | dormant | failed | stopped`; old `completed` rows remain terminal for compatibility).
 - Streams logs into `AgentLog` through `appendLog`.
+- Captures Codex `thread_id` values from JSONL output so follow-up controller input can resume the same Codex conversation with `codex exec resume`.
 - Delegates cooperative `ARC_ACTION_REQUEST` protocol parsing to `ProtocolHandlerService`.
 
 ### AgentAdapterModule
@@ -148,13 +149,25 @@ interface AgentAdapter {
     onOutput(event: { type: 'stdout' | 'stderr' | 'system'; content: string }): Promise<void>;
     onExit(event: { exitCode: number; signal?: string }): Promise<void>;
   }): Promise<RunningAgentProcess>;
+
+  resumeTask?(input: {
+    taskId: string;
+    sessionId: string;
+    repoPath: string;
+    worktreePath?: string;
+    branchName?: string;
+    prompt: string;
+    onOutput(event: { type: 'stdout' | 'stderr' | 'system'; content: string }): Promise<void>;
+    onExit(event: { exitCode: number; signal?: string }): Promise<void>;
+    externalSessionId: string;
+  }): Promise<RunningAgentProcess>;
 }
 ```
 
 **Why this shape:**
 
 - The orchestrator never talks directly to a specific agent — it goes through the adapter.
-- `CodexAdapter` currently launches `codex exec --ignore-user-config --json --cd <repoPath> -` through `node-pty` by default, using `ARC_CODEX_IGNORE_USER_CONFIG=true` to avoid user-configured MCP/OAuth/plugin side effects in local Phase 3 runs.
+- `CodexAdapter` currently launches `codex exec --ignore-user-config --json --cd <repoPath> -` through `node-pty` by default, uses `codex exec resume --ignore-user-config --json <thread_id> -` for idle follow-up turns, and uses `ARC_CODEX_IGNORE_USER_CONFIG=true` to avoid user-configured MCP/OAuth/plugin side effects in local Phase 3 runs.
 - Adding Claude/Gemini in Phase 6 is "implement the interface, register the adapter," not a refactor.
 
 ---
@@ -193,7 +206,7 @@ ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 
 Long polling is intentionally **not** the primary mechanism — it is client-initiated and not full duplex, which makes server-push patterns awkward. WebSockets win for this use case. The database, not the socket, is the durable source of truth: `TaskEvent` replays structured lifecycle/approval/diff/test events, and `AgentLog` replays raw terminal output.
 
-DB-backed reconstruction is not a live PTY resume. If an orchestrator process still owns the session's running process, the controller can continue, approve, deny, or stop it. If the process is gone, the controller shows a reconstructed or terminal view from persisted rows and does not imply the hidden agent reasoning stack can be serialized and resumed.
+DB-backed reconstruction is not a live PTY resume. If an orchestrator process still owns the session's running process, the controller can continue, approve, deny, or stop it. When a Codex turn exits successfully, the task moves to `idle` instead of terminal `completed`; follow-up controller input starts a fresh per-turn PTY with `codex exec resume <thread_id>` so the Codex conversation persists without pretending the old process is still alive. If there is no resumable Codex thread, the controller shows a reconstructed or terminal view from persisted rows and does not imply the hidden agent reasoning stack can be serialized and resumed.
 
 ---
 

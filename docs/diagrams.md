@@ -287,7 +287,7 @@ sequenceDiagram
   O-->>C: WS diff.summary
   O->>O: run configured test command
   O-->>C: WS test.started / test.log / test.completed
-  O-->>C: WS task.completed
+  O-->>C: WS task.idle / task.completed
   C-->>U: Local review ready
 ```
 

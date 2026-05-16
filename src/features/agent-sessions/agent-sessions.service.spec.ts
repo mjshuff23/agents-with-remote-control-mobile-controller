@@ -48,7 +48,8 @@ describe('AgentSessionsService', () => {
     stop: jest.fn()
   };
   const adapter = {
-    startTask: jest.fn()
+    startTask: jest.fn(),
+    resumeTask: jest.fn()
   };
   const agents = {
     getAdapter: jest.fn(() => adapter)
@@ -123,6 +124,7 @@ describe('AgentSessionsService', () => {
     }));
     prisma.task.findUnique.mockResolvedValue(task);
     adapter.startTask.mockResolvedValue(runningProcess);
+    adapter.resumeTask.mockResolvedValue({ ...runningProcess, externalSessionId: 'thread-123' });
     policies.load.mockResolvedValue({
       version: 1,
       approval: { timeoutMs: 50 },
@@ -339,6 +341,103 @@ describe('AgentSessionsService', () => {
       expect.any(Function),
       expect.any(Function)
     );
+  });
+
+  it('stores the Codex thread id from thread.started output', async () => {
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+
+    await startInput.onOutput({
+      type: 'stdout',
+      content: '{"type":"thread.started","thread_id":"thread-123"}\n'
+    });
+
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: { externalSessionId: 'thread-123' }
+    });
+  });
+
+  it('marks a successful Codex turn idle instead of terminal completed', async () => {
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+    prisma.agentSession.findFirst.mockResolvedValue({ ...session, status: 'running' });
+
+    await startInput.onExit({ exitCode: 0 });
+
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: {
+        status: 'idle',
+        completedAt: null,
+        exitCode: 0
+      }
+    });
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: 'idle' }
+    });
+    expect(checkpoints.captureAtBoundary).toHaveBeenCalledWith(session.id, task.id, 'pre_transition');
+  });
+
+  it('keeps legacy completed sessions terminal in runtime state', () => {
+    expect(service.runtimeState({ ...session, status: 'completed' })).toEqual({
+      processState: 'terminal',
+      statusLabel: 'completed'
+    });
+  });
+
+  it('resumes an idle Codex thread when follow-up input is sent', async () => {
+    prisma.agentSession.findFirst.mockResolvedValue({
+      ...session,
+      status: 'idle',
+      externalSessionId: 'thread-123'
+    });
+    prisma.task.findUnique.mockResolvedValue(task);
+
+    await service.sendInput(task.id, 'continue please');
+
+    expect(adapter.resumeTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: task.id,
+      sessionId: session.id,
+      repoPath: task.repoPath,
+      worktreePath: task.worktreePath,
+      branchName: task.branchName,
+      externalSessionId: 'thread-123',
+      prompt: 'continue please'
+    }));
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: expect.objectContaining({
+        status: 'running',
+        externalSessionId: 'thread-123'
+      })
+    });
+  });
+
+  it('returns an idle Codex thread to idle when resume launch fails', async () => {
+    adapter.resumeTask.mockRejectedValueOnce(new Error('resume boom'));
+    prisma.agentSession.findFirst.mockResolvedValue({
+      ...session,
+      status: 'idle',
+      externalSessionId: 'thread-123'
+    });
+    prisma.task.findUnique.mockResolvedValue(task);
+
+    await expect(service.sendInput(task.id, 'continue please')).rejects.toThrow('Resume Failed');
+
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: 'idle' }
+    });
+    expect(prisma.agentSession.update).toHaveBeenCalledWith({
+      where: { id: session.id },
+      data: expect.objectContaining({
+        status: 'idle',
+        completedAt: null,
+        errorMessage: 'resume boom'
+      })
+    });
   });
 
   it('delegates resume check to ProtocolHandlerService after resolve', async () => {

@@ -4,6 +4,7 @@ import * as pty from 'node-pty';
 import { AppConfigService } from '../config/app-config.service';
 import {
   AgentAdapter,
+  ResumeAgentTaskInput,
   RunningAgentProcess,
   StartAgentTaskInput
 } from './agent-adapter.interface';
@@ -44,6 +45,22 @@ export class CodexAdapter implements AgentAdapter {
   async startTask(input: StartAgentTaskInput): Promise<RunningAgentProcess> {
     const executionPath = input.worktreePath ?? input.repoPath;
     const launch = this.buildLaunchCommand(executionPath);
+    return this.startPty(input, launch, `pty`);
+  }
+
+  /** Resume a persisted Codex exec thread for a follow-up turn. */
+  async resumeTask(input: ResumeAgentTaskInput): Promise<RunningAgentProcess> {
+    const executionPath = input.worktreePath ?? input.repoPath;
+    const launch = this.buildResumeCommand(executionPath, input.externalSessionId);
+    return this.startPty(input, launch, input.externalSessionId);
+  }
+
+  /** Spawn Codex in a PTY, filter prompt echo, and inject the prompt. */
+  private async startPty(
+    input: StartAgentTaskInput,
+    launch: { command: string; args: string[]; cwd: string },
+    externalSessionId: string
+  ): Promise<RunningAgentProcess> {
     let ptyProcess: pty.IPty;
 
     try {
@@ -54,7 +71,7 @@ export class CodexAdapter implements AgentAdapter {
         env: buildChildEnv(this.config.codexEnvKeys)
       };
       if (this.config.runnerMode === 'local') {
-        spawnOptions.cwd = executionPath;
+        spawnOptions.cwd = launch.cwd;
       }
 
       ptyProcess = pty.spawn(launch.command, launch.args, {
@@ -64,8 +81,12 @@ export class CodexAdapter implements AgentAdapter {
       throw new Error(`Unable to spawn Codex CLI: ${this.errorMessage(error)}`);
     }
 
+    const filterInitialEcho = createInitialCodexJsonFilter();
     ptyProcess.onData((content) => {
-      void input.onOutput({ type: 'stdout', content });
+      const filtered = filterInitialEcho(content);
+      if (filtered) {
+        void input.onOutput({ type: 'stdout', content: filtered });
+      }
     });
     ptyProcess.onExit((event) => {
       void input.onExit({
@@ -77,7 +98,7 @@ export class CodexAdapter implements AgentAdapter {
     this.writePrompt(ptyProcess, input.prompt);
 
     return {
-      externalSessionId: `pty:${ptyProcess.pid}`,
+      externalSessionId: externalSessionId === 'pty' ? `pty:${ptyProcess.pid}` : externalSessionId,
       stop: () => {
         try {
           ptyProcess.kill('SIGTERM');
@@ -104,13 +125,14 @@ export class CodexAdapter implements AgentAdapter {
    * Build the PTY command and args, handling WSL vs local mode.
    * Replaces `{repoPath}` placeholders in configured Codex args.
    */
-  private buildLaunchCommand(repoPath: string): { command: string; args: string[] } {
+  private buildLaunchCommand(repoPath: string): { command: string; args: string[]; cwd: string } {
     const codexArgs = this.config.codexArgs.map((arg) => arg.replaceAll('{repoPath}', repoPath));
 
     if (this.config.runnerMode === 'local') {
       return {
         command: this.config.codexCommand,
-        args: codexArgs
+        args: codexArgs,
+        cwd: repoPath
       };
     }
 
@@ -125,8 +147,55 @@ export class CodexAdapter implements AgentAdapter {
 
     return {
       command: this.config.wslCommand,
-      args
+      args,
+      cwd: repoPath
     };
+  }
+
+  /** Build a Codex exec resume command from the configured exec flags. */
+  private buildResumeCommand(repoPath: string, externalSessionId: string): { command: string; args: string[]; cwd: string } {
+    const args = ['exec', 'resume', ...this.codexResumeOptions(repoPath), externalSessionId, '-'];
+
+    if (this.config.runnerMode === 'local') {
+      return {
+        command: this.config.codexCommand,
+        args,
+        cwd: repoPath
+      };
+    }
+
+    const wslArgs: string[] = [];
+    if (this.config.wslDistro) {
+      wslArgs.push('-d', this.config.wslDistro);
+    }
+    if (this.config.wslUser) {
+      wslArgs.push('-u', this.config.wslUser);
+    }
+    wslArgs.push('--cd', repoPath, '--', this.config.codexCommand, ...args);
+
+    return {
+      command: this.config.wslCommand,
+      args: wslArgs,
+      cwd: repoPath
+    };
+  }
+
+  /** Preserve exec flags that also apply to `codex exec resume`, dropping cwd and prompt placeholders. */
+  private codexResumeOptions(repoPath: string): string[] {
+    const options: string[] = [];
+    const args = this.config.codexArgs;
+    for (let i = 1; i < args.length; i += 1) {
+      const arg = args[i].replaceAll('{repoPath}', repoPath);
+      if (arg === '-' || arg === repoPath) {
+        continue;
+      }
+      if (arg === '--cd' || arg === '-C') {
+        i += 1;
+        continue;
+      }
+      options.push(arg);
+    }
+    return options;
   }
 
   /** Write the prompt to the PTY, normalizing newlines and appending EOF. */
@@ -160,4 +229,25 @@ function buildChildEnv(extraKeys: string[]): Record<string, string> {
   }
 
   return env;
+}
+
+/** Drop PTY prompt echo until Codex JSONL begins. */
+function createInitialCodexJsonFilter(): (content: string) => string {
+  let sawCodexJson = false;
+  let preludeTail = '';
+  return (content: string): string => {
+    if (sawCodexJson) {
+      return content;
+    }
+
+    const combined = preludeTail + content;
+    const jsonStart = combined.indexOf('{"type"');
+    if (jsonStart === -1) {
+      preludeTail = combined.slice(-20);
+      return '';
+    }
+
+    sawCodexJson = true;
+    return combined.slice(jsonStart);
+  };
 }

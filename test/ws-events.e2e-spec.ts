@@ -30,7 +30,7 @@ describe('WebSocket events', () => {
       baseCommit: 'abc123'
     });
 
-    // Delay the process exit so the client can subscribe before task.completed fires
+    // Delay the process exit so the client can subscribe before task.idle fires
     adapter.startTask.mockImplementation(async (input) => {
       await input.onOutput({ type: 'stdout', content: 'hello from agent' });
       setTimeout(() => { void input.onExit({ exitCode: 0 }); }, 200);
@@ -61,7 +61,7 @@ describe('WebSocket events', () => {
     await app.close();
   });
 
-  it('receives task.completed after subscribing to the task room', async () => {
+  it('receives task.idle after subscribing to the task room', async () => {
     const { port } = app.getHttpServer().address() as { port: number };
 
     const createRes = await request(app.getHttpServer())
@@ -74,15 +74,15 @@ describe('WebSocket events', () => {
     socket = io(`http://localhost:${port}`, { auth: { token: TEST_SECRET } });
 
     // Wait for ack so we know the server has joined the room before the
-    // 200ms timer fires task.completed — eliminates the subscribe/complete race.
+    // 200ms timer fires task.idle — eliminates the subscribe/idle race.
     await socket.emitWithAck('subscribe', { taskId });
 
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('timeout: task.completed not received')), 5000);
-      socket.on('task.completed', (event: { exitCode: number; status: string }) => {
+      const timeout = setTimeout(() => reject(new Error('timeout: task.idle not received')), 5000);
+      socket.on('task.idle', (event: { exitCode: number; status: string }) => {
         clearTimeout(timeout);
         expect(event.exitCode).toBe(0);
-        expect(event.status).toBe('completed');
+        expect(event.status).toBe('idle');
         resolve();
       });
     });
@@ -138,11 +138,11 @@ describe('WebSocket events', () => {
     ]));
 
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('timeout: task.completed not received after reconnect')), 5000);
-      socket.on('task.completed', (event: { exitCode: number; status: string }) => {
+      const timeout = setTimeout(() => reject(new Error('timeout: task.idle not received after reconnect')), 5000);
+      socket.on('task.idle', (event: { exitCode: number; status: string }) => {
         clearTimeout(timeout);
         expect(event.exitCode).toBe(0);
-        expect(event.status).toBe('completed');
+        expect(event.status).toBe('idle');
         resolve();
       });
     });

@@ -168,6 +168,56 @@ describe('CodexAdapter', () => {
     expect(process.write).toHaveBeenNthCalledWith(2, '\x04');
   });
 
+  it('suppresses the initial PTY prompt echo before forwarding Codex JSON events', async () => {
+    const process = createPtyProcess();
+    spawn.mockReturnValue(process);
+    const onOutput = jest.fn();
+    const adapter = new CodexAdapter(createConfig() as any);
+
+    await adapter.startTask({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      repoPath: '/home/user/repo',
+      prompt: 'User task:\nWhat is the date?\nARC_ACTION_REQUEST {"id":"<uuid>"}',
+      onOutput,
+      onExit: jest.fn()
+    });
+
+    const onData = process.onData.mock.calls[0][0];
+    onData('User task:\r\nWhat is the date?\r\nARC_ACTION_REQUEST {"id":"<uuid>"}\r\n');
+    expect(onOutput).not.toHaveBeenCalled();
+
+    onData('{"type":"thread.started","thread_id":"thread-1"}\n');
+    expect(onOutput).toHaveBeenCalledWith({
+      type: 'stdout',
+      content: '{"type":"thread.started","thread_id":"thread-1"}\n'
+    });
+  });
+
+  it('resumes a previous Codex exec thread with JSON output enabled', async () => {
+    const process = createPtyProcess();
+    spawn.mockReturnValue(process);
+    const adapter = new CodexAdapter(createConfig() as any);
+
+    await adapter.resumeTask({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      repoPath: '/home/user/repo',
+      externalSessionId: 'thread-1',
+      prompt: 'continue',
+      onOutput: jest.fn(),
+      onExit: jest.fn()
+    });
+
+    expect(spawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', 'resume', '--json', 'thread-1', '-'],
+      expect.objectContaining({ cwd: '/home/user/repo' })
+    );
+    expect(process.write).toHaveBeenNthCalledWith(1, 'continue\r');
+    expect(process.write).toHaveBeenNthCalledWith(2, '\x04');
+  });
+
   it('passes only allowlisted environment variables to the child process', async () => {
     const oldEnv = process.env;
     process.env = {

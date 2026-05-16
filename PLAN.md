@@ -198,7 +198,8 @@ Phase 3.5 replay semantics remain canonical:
 - `AgentLog` remains the raw terminal log ledger with monotonic `sequence` per session.
 - `GET /tasks/:id/replay?afterEventSeq=&afterLogSequence=&limit=` returns missed events/logs after the controller cursors.
 - Socket.IO `subscribe` accepts cursors and includes missed history in the ack after joining `task:<id>`.
-- Reconstructed DB view is not live PTY resume; expose whether worker state is `live_process`, `reconstructed`, or `terminal`.
+- Reconstructed DB view is not live PTY resume; successful Codex turns park in `idle` and follow-up input resumes the persisted Codex thread with a fresh per-turn process.
+- Expose whether worker state is `live_process`, `reconstructed`, or `terminal`.
 
 Phase 4 UI events must not duplicate cards after reconnect/replay.
 

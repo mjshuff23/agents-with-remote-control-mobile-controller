@@ -5,6 +5,7 @@ import type { Task } from '../lib/api';
 const STATUS_COLOR: Record<string, string> = {
   running: 'bg-blue-500',
   starting: 'bg-blue-300',
+  idle: 'bg-sky-500',
   completed: 'bg-green-500',
   failed: 'bg-red-500',
   stopped: 'bg-gray-400',

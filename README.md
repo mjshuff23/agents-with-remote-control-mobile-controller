@@ -18,7 +18,7 @@ Phase 4 connects that local loop to GitHub and Linear while preserving the human
 
 - Root-level NestJS REST API.
 - Prisma + SQLite persistence for `Task`, `AgentSession`, and `AgentLog`.
-- `CodexAdapter` that launches `codex exec --json --cd <repoPath> -` through `node-pty`.
+- `CodexAdapter` that launches `codex exec --json --cd <repoPath> -` through `node-pty` and resumes idle turns with `codex exec resume --json <thread_id> -`.
 - REST endpoints: `POST /tasks`, `GET /tasks`, `GET /tasks/:id`, `POST /tasks/:id/stop`.
 - Real Codex PTY smoke path and token-gated integration e2e tier.
 
@@ -45,7 +45,7 @@ Phase 4 connects that local loop to GitHub and Linear while preserving the human
 - Durable task-scoped event ledger with replay cursors.
 - Mobile reconnect/resubscribe behavior.
 - Checkpoint and dormant-session lifecycle.
-- Explicit distinction between live PTY resume and reconstructed DB view.
+- Explicit distinction between live PTY processes, idle Codex thread resume, and reconstructed DB view.
 - Feature/provider seams prepared for GitHub, Linear, Notion, Figma, and MCP.
 - Dependency/package hygiene and docs linting improvements.
 

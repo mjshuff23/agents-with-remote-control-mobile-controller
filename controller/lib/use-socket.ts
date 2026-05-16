@@ -70,6 +70,7 @@ export interface TaskSocketHandlers {
   onLog?: (data: { sessionId?: string; type: string; content: string; sequence: number }) => void;
   onStarted?: (data: unknown) => void;
   onCompleted?: (data: { exitCode: number; status: string }) => void;
+  onIdle?: (data: { exitCode: number; status: string }) => void;
   onApprovalRequested?: (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => void;
   onApprovalResolved?: (event: TaskEventEnvelope<'approval.resolved', ApprovalRequest>) => void;
   onPolicyViolation?: (event: TaskEventEnvelope<'policy.violation', ApprovalRequest>) => void;
@@ -120,6 +121,9 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     const onCompleted = (data: { taskId: string; exitCode: number; status: string }) => {
       if (data.taskId === taskId) ref.current.onCompleted?.(data);
     };
+    const onIdle = (data: { taskId: string; exitCode: number; status: string }) => {
+      if (data.taskId === taskId) ref.current.onIdle?.(data);
+    };
     const onApprovalRequested = (event: TaskEventEnvelope<'approval.requested', ApprovalRequest>) => {
       if (event.taskId === taskId) ref.current.onApprovalRequested?.(event);
     };
@@ -154,6 +158,7 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
     socket.on('agent.log', onLog);
     socket.on('task.started', onStarted);
     socket.on('task.completed', onCompleted);
+    socket.on('task.idle', onIdle);
     socket.on('approval.requested', onApprovalRequested);
     socket.on('approval.resolved', onApprovalResolved);
     socket.on('policy.violation', onPolicyViolation);
@@ -201,6 +206,7 @@ export function useTaskSocket(taskId: string, handlers: TaskSocketHandlers): voi
       socket.off('agent.log', onLog);
       socket.off('task.started', onStarted);
       socket.off('task.completed', onCompleted);
+      socket.off('task.idle', onIdle);
       socket.off('approval.requested', onApprovalRequested);
       socket.off('approval.resolved', onApprovalResolved);
       socket.off('policy.violation', onPolicyViolation);
