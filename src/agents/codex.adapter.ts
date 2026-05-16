@@ -83,16 +83,22 @@ export class CodexAdapter implements AgentAdapter {
 
     const filterInitialEcho = createInitialCodexJsonFilter();
     ptyProcess.onData((content) => {
-      const filtered = filterInitialEcho(content);
+      const filtered = filterInitialEcho.filter(content);
       if (filtered) {
-        void input.onOutput({ type: 'stdout', content: filtered });
+        void Promise.resolve(input.onOutput({ type: 'stdout', content: filtered })).catch(() => undefined);
       }
     });
     ptyProcess.onExit((event) => {
-      void input.onExit({
-        exitCode: event.exitCode,
-        signal: event.signal === undefined ? undefined : String(event.signal)
-      });
+      void (async () => {
+        const prelude = filterInitialEcho.flushPrelude();
+        if (prelude) {
+          await Promise.resolve(input.onOutput({ type: 'system', content: prelude })).catch(() => undefined);
+        }
+        await Promise.resolve(input.onExit({
+          exitCode: event.exitCode,
+          signal: event.signal === undefined ? undefined : String(event.signal)
+        }));
+      })().catch(() => undefined);
     });
 
     this.writePrompt(ptyProcess, input.prompt);
@@ -184,8 +190,11 @@ export class CodexAdapter implements AgentAdapter {
   private codexResumeOptions(repoPath: string): string[] {
     const options: string[] = [];
     const args = this.config.codexArgs;
-    for (let i = 1; i < args.length; i += 1) {
+    for (let i = 0; i < args.length; i += 1) {
       const arg = args[i].replaceAll('{repoPath}', repoPath);
+      if (i === 0 && arg === 'exec') {
+        continue;
+      }
       if (arg === '-' || arg === repoPath) {
         continue;
       }
@@ -231,23 +240,101 @@ function buildChildEnv(extraKeys: string[]): Record<string, string> {
   return env;
 }
 
-/** Drop PTY prompt echo until Codex JSONL begins. */
-function createInitialCodexJsonFilter(): (content: string) => string {
+/** Drop PTY prompt echo until Codex JSONL begins, but keep startup diagnostics if JSON never arrives. */
+function createInitialCodexJsonFilter(): { filter(content: string): string; flushPrelude(): string } {
   let sawCodexJson = false;
-  let preludeTail = '';
-  return (content: string): string => {
-    if (sawCodexJson) {
-      return content;
-    }
+  let preludeBuffer = '';
+  let searchTail = '';
+  return {
+    filter(content: string): string {
+      if (sawCodexJson) {
+        return content;
+      }
 
-    const combined = preludeTail + content;
-    const jsonStart = combined.indexOf('{"type"');
-    if (jsonStart === -1) {
-      preludeTail = combined.slice(-20);
-      return '';
-    }
+      preludeBuffer += content;
+      const searchable = searchTail + content;
+      const jsonStart = findCodexJsonStart(searchable);
+      if (jsonStart === -1) {
+        searchTail = searchable.slice(-4096);
+        return '';
+      }
 
-    sawCodexJson = true;
-    return combined.slice(jsonStart);
+      sawCodexJson = true;
+      preludeBuffer = '';
+      searchTail = '';
+      const startInContent = jsonStart - (searchable.length - content.length);
+      if (startInContent >= 0) {
+        return content.slice(startInContent);
+      }
+      return searchable.slice(jsonStart);
+    },
+    flushPrelude(): string {
+      if (sawCodexJson) {
+        return '';
+      }
+      const prelude = preludeBuffer;
+      preludeBuffer = '';
+      searchTail = '';
+      return prelude;
+    }
   };
+}
+
+function findCodexJsonStart(content: string): number {
+  let searchFrom = 0;
+  while (searchFrom < content.length) {
+    const index = content.indexOf('{"type"', searchFrom);
+    if (index === -1) {
+      return -1;
+    }
+    const lineEnd = content.indexOf('\n', index);
+    if (lineEnd === -1) {
+      return -1;
+    }
+    const line = content.slice(index, lineEnd).trim();
+    const nextLine = nextCompleteNonEmptyLine(content, lineEnd + 1);
+    if (isCodexThreadStartedLine(line) && nextLine && isCodexFollowupLine(nextLine)) {
+      return index;
+    }
+    searchFrom = index + 1;
+  }
+  return -1;
+}
+
+function nextCompleteNonEmptyLine(content: string, start: number): string | null {
+  let lineStart = start;
+  while (lineStart < content.length) {
+    const lineEnd = content.indexOf('\n', lineStart);
+    if (lineEnd === -1) {
+      return null;
+    }
+    const line = content.slice(lineStart, lineEnd).trim();
+    if (line) {
+      return line;
+    }
+    lineStart = lineEnd + 1;
+  }
+  return null;
+}
+
+function isCodexThreadStartedLine(line: string): boolean {
+  try {
+    const event = JSON.parse(line) as { type?: string; thread_id?: unknown };
+    return event.type === 'thread.started' && typeof event.thread_id === 'string' && isCodexThreadId(event.thread_id);
+  } catch {
+    return false;
+  }
+}
+
+function isCodexFollowupLine(line: string): boolean {
+  try {
+    const event = JSON.parse(line) as { type?: string };
+    return event.type === 'turn.started' || event.type === 'error';
+  } catch {
+    return false;
+  }
+}
+
+function isCodexThreadId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

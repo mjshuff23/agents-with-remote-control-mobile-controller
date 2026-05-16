@@ -55,7 +55,6 @@ export function useTaskDetail(id: string) {
   const isLive = runtime?.processState === 'live_process' && (
     runtime.statusLabel === 'active' || runtime.statusLabel === 'waiting_approval'
   );
-  const canSendInput = isLive || runtime?.statusLabel === 'idle';
   const pendingApprovals = approvals.filter((a) => a.status === 'pending');
   const latestDiff = changeSummaries[0];
 
@@ -140,12 +139,6 @@ export function useTaskDetail(id: string) {
       if (d.session) setSession(d.session);
       return;
     }
-    if (event.name === 'task.idle') {
-      const d = event.data as { exitCode: number; status: string };
-      setTask((prev) => (prev ? { ...prev, status: d.status } : prev));
-      setSession((prev) => (prev ? { ...prev, exitCode: d.exitCode } : prev));
-      setRuntime({ processState: 'reconstructed', statusLabel: 'idle' });
-    }
     if (event.name === 'task.completed') {
       const d = event.data as { exitCode: number; status: string };
       setTask((prev) => (prev ? { ...prev, status: d.status } : prev));
@@ -226,11 +219,6 @@ export function useTaskDetail(id: string) {
       setTask((prev) => (prev ? { ...prev, status: data.status } : null));
       setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
       setRuntime({ processState: 'terminal', statusLabel: data.status === 'failed' ? 'failed' : data.status === 'stopped' ? 'stopped' : 'completed' });
-    },
-    onIdle: (data) => {
-      setTask((prev) => (prev ? { ...prev, status: data.status } : null));
-      setSession((prev) => (prev ? { ...prev, exitCode: data.exitCode } : prev));
-      setRuntime({ processState: 'reconstructed', statusLabel: 'idle' });
     },
     onApprovalRequested: (event) => {
       lastEventSeqRef.current = Math.max(lastEventSeqRef.current, event.seq);
@@ -396,7 +384,7 @@ export function useTaskDetail(id: string) {
     task, session, logs, runtime, approvals, changeSummaries, testRuns,
     testCommands, selectedTestCommandId, setSelectedTestCommandId,
     inputText, setInputText, actionError, denyMessages, setDenyMessages,
-    pendingApprovalActionIds, isLive, canSendInput, pendingApprovals, latestDiff,
+    pendingApprovalActionIds, isLive, pendingApprovals, latestDiff,
     handleStop, handleSendInput, handleApprove, handleDeny,
     handleDiffSummary, handleRunTests, handleRestore,
     appendSyntheticLog, upsertApproval

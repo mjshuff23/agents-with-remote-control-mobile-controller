@@ -124,7 +124,7 @@ describe('AgentSessionsService', () => {
     }));
     prisma.task.findUnique.mockResolvedValue(task);
     adapter.startTask.mockResolvedValue(runningProcess);
-    adapter.resumeTask.mockResolvedValue({ ...runningProcess, externalSessionId: 'thread-123' });
+    adapter.resumeTask.mockResolvedValue({ ...runningProcess, externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100' });
     policies.load.mockResolvedValue({
       version: 1,
       approval: { timeoutMs: 50 },
@@ -343,18 +343,63 @@ describe('AgentSessionsService', () => {
     );
   });
 
+  it('logs output handler errors without rejecting the PTY callback', async () => {
+    protocolHandler.handleProtocolOutput.mockRejectedValueOnce(new Error('protocol boom'));
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+
+    await expect(startInput.onOutput({
+      type: 'stdout',
+      content: 'not protocol json\n'
+    })).resolves.toBeUndefined();
+
+    expect(prisma.agentLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sessionId: session.id,
+        type: 'system',
+        content: 'Output handler error: protocol boom'
+      })
+    });
+  });
+
   it('stores the Codex thread id from thread.started output', async () => {
     await service.createAndStart(task);
     const startInput = adapter.startTask.mock.calls[0][0];
 
     await startInput.onOutput({
       type: 'stdout',
-      content: '{"type":"thread.started","thread_id":"thread-123"}\n'
+      content: '{"type":"thread.started","thread_id":"019e3238-a03b-7390-a99d-64bcf544d100"}\n'
     });
 
-    expect(prisma.agentSession.update).toHaveBeenCalledWith({
-      where: { id: session.id },
-      data: { externalSessionId: 'thread-123' }
+    expect(prisma.agentSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: session.id,
+        OR: [
+          { externalSessionId: null },
+          { externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100' }
+        ]
+      },
+      data: { externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100' }
+    });
+  });
+
+  it('ignores invalid Codex thread ids from stdout', async () => {
+    await service.createAndStart(task);
+    const startInput = adapter.startTask.mock.calls[0][0];
+    jest.clearAllMocks();
+
+    await startInput.onOutput({
+      type: 'stdout',
+      content: '{"type":"thread.started","thread_id":"not-a-codex-session"}\n'
+    });
+
+    expect(prisma.agentSession.updateMany).not.toHaveBeenCalled();
+    expect(prisma.agentLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sessionId: session.id,
+        type: 'system',
+        content: 'Ignored invalid Codex thread id from stdout'
+      })
     });
   });
 
@@ -391,7 +436,7 @@ describe('AgentSessionsService', () => {
     prisma.agentSession.findFirst.mockResolvedValue({
       ...session,
       status: 'idle',
-      externalSessionId: 'thread-123'
+      externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100'
     });
     prisma.task.findUnique.mockResolvedValue(task);
 
@@ -403,14 +448,14 @@ describe('AgentSessionsService', () => {
       repoPath: task.repoPath,
       worktreePath: task.worktreePath,
       branchName: task.branchName,
-      externalSessionId: 'thread-123',
+      externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100',
       prompt: 'continue please'
     }));
     expect(prisma.agentSession.update).toHaveBeenCalledWith({
       where: { id: session.id },
       data: expect.objectContaining({
         status: 'running',
-        externalSessionId: 'thread-123'
+        externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100'
       })
     });
   });
@@ -420,7 +465,7 @@ describe('AgentSessionsService', () => {
     prisma.agentSession.findFirst.mockResolvedValue({
       ...session,
       status: 'idle',
-      externalSessionId: 'thread-123'
+      externalSessionId: '019e3238-a03b-7390-a99d-64bcf544d100'
     });
     prisma.task.findUnique.mockResolvedValue(task);
 

@@ -205,22 +205,22 @@ Phase 4 UI events must not duplicate cards after reconnect/replay.
 
 ## Phase 4.5 Manual Smoke Test
 
-With the orchestrator and controller running behind Tailscale:
+The canonical checklist and smoke record template live in
+[`docs/remote-access.md`](docs/remote-access.md#manual-smoke-test). Keep this
+plan focused on acceptance intent so the detailed smoke flow does not drift.
 
-1. Update Windows and phone Tailscale clients to the latest stable versions available on the smoke date.
-2. Record both installed versions in PR notes or implementation notes.
-3. Confirm both devices are connected to the same tailnet.
-4. Verify the selected host address:
-   - MagicDNS machine name if MagicDNS is enabled and tested; or
-   - stable Tailscale `100.x.y.z` IP if MagicDNS is not used.
-5. Open `http://<tailscale-host>:3001` from the phone on cellular or non-home WiFi.
-6. Confirm WebSocket connection succeeds with matching controller secret config.
-7. Confirm WebSocket connection fails with a missing or mismatched controller secret.
-8. Confirm REST task actions fail without `CONTROLLER_SECRET`.
-9. Confirm REST task actions succeed through the controller proxy with `CONTROLLER_SECRET`.
-10. Confirm task list, task detail, replay, and approval cards render correctly from the phone.
-11. Complete one real approval decision from the phone outside the home LAN.
-12. Document the Windows/WSL2 networking path used. If direct WSL-bound ports over the Windows Tailscale IP fail, document the selected fix and keep any port proxy bound to the Tailscale IP where practical.
+The smoke must still prove:
+
+- Windows and phone Tailscale versions are recorded.
+- Both devices are in the same tailnet.
+- The phone reaches `http://<tailscale-host>:3001` from cellular or non-home
+  WiFi.
+- REST and WebSocket auth reject missing or mismatched controller secrets and
+  succeed with the configured local secret.
+- Task list, task detail, replay, approval cards, and one real approval
+  decision work from the phone.
+- The actual Windows/WSL2 path is recorded as direct, mirrored networking, or
+  scoped `netsh interface portproxy`.
 
 ## Completed Phase 4 Manual Smoke Test
 

@@ -16,7 +16,7 @@ This document is the in-depth companion to [`README.md`](../README.md). It captu
 | **Agent Adapter Layer** | Swappable interface for CLI agents | TypeScript interface, one adapter per agent |
 | **CLI Agents** | Execution engines | Codex CLI → Claude Code → Gemini |
 | **Repo Worktrees** | Per-task isolated working trees | `git worktree add` |
-| **External Sync** | Project-management and design integration, deferred to Phase 4+ | GitHub, Linear, Notion, Figma, MCP servers |
+| **External Sync** | GitHub + Linear issue-to-PR sync is implemented; Phase 5 expands to Notion, Figma, and controlled MCP | GitHub, Linear, Notion, Figma, MCP servers |
 
 ---
 
@@ -70,12 +70,12 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 - Persists task-scoped event envelopes in `TaskEvent` so reconnecting controllers can replay missed events after a cursor.
 - Phase 6 can add Web Push for PWA + optional notification adapters.
 
-### SyncModule (Phase 4+)
+### SyncModule
 
 - Outbound integrations.
-- Phase 4: GitHub + Linear.
-- Phase 5: Notion + Figma + MCP.
-- Not implemented in Phase 3.
+- Phase 4 GitHub + Linear issue-to-PR sync is implemented through provider
+  services, approval-gated worktree actions, and `SyncEvent` idempotency.
+- Phase 5 expands this layer to Notion, Figma, and controlled MCP.
 
 ### CheckpointsModule
 
@@ -99,13 +99,15 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 - Owns protocol buffer management (partial JSON reassembly across chunks), approval expiry scheduling, and ARC_APPROVAL response formatting.
 - Reduces `AgentSessionsService` by ~200 lines. See `src/features/agent-sessions/protocol-handler.service.ts`.
 
-### IntegrationsModule (Phase 4 scaffold)
+### IntegrationsModule (Legacy Scaffold)
 
-- Provider-agnostic `IIntegrationGateway` interface with `connect`, `disconnect`, and `read` methods.
-- Each provider (GitHub, Linear, Notion, Figma) has a stub adapter that returns `{ ok: false, error: "not implemented until Phase 4" }`.
-- The multi-provider token `INTEGRATION_GATEWAYS` allows any module to consume all registered integrations.
-- Phase 4 code belongs in `src/features/integrations/<provider>/`.
-- No provider write behavior is implemented in Phase 3.5.
+- Provider-agnostic `IIntegrationGateway` interface with `connect`,
+  `disconnect`, and `read` methods.
+- This older scaffold is not the Phase 4 GitHub/Linear write path. The
+  implemented Phase 4 provider interfaces live under `src/features/providers/`,
+  and orchestration/writes flow through the task, worktree, approval, and sync
+  services.
+- Notion, Figma, and MCP remain deferred to Phase 5.
 
 ---
 
@@ -126,9 +128,11 @@ src/
     audit/                                              ← audit log
     checkpoints/                                        ← session checkpoint + dormancy
     test-runs/                                          ← configured test execution
-    integrations/                                       ← Phase 4 provider seams
+    integrations/                                       ← legacy provider gateway scaffold
       mcp-gateway/                                      ← interface + types
       github/ linear/ notion/ figma/                    ← stub adapters
+    providers/                                          ← Phase 4 GitHub/Linear provider APIs
+    sync/                                               ← SyncEvent idempotency and provider action state
 ```
 
 ---
@@ -187,8 +191,7 @@ SQLite first. Migration to Postgres only if/when concurrency or multi-host requi
 | **GitChangeSummary** | Worktree-scoped snapshot of files changed, +/- counts, status counts, risk flags, and top files |
 | **TestRunSummary** | Configured test command run summary with command id, exit code, status, highlights |
 | **SessionCheckpoint** | Compact frontier snapshot: durable event cursor, worktree/branch/HEAD metadata, pending approval ids, last user/assistant messages, latest diff/test summary ids, schema version, and capture reason |
-
-Potential Phase 4+ sync records are intentionally absent from the Phase 3 schema.
+| **SyncEvent** | Phase 4 provider action idempotency and recovery state for GitHub/Linear sync |
 
 ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 
@@ -246,7 +249,7 @@ Phase 3 emits cleanup-request events but does not auto-remove worktrees. Destruc
 8. **Dormancy** — after 30+ minutes of inactivity, session transitions to `dormant` with a checkpoint; remains visible and resumable.
 9. **Restore** — user clicks Resume from the controller; agent relaunches in the preserved worktree/branch context from the checkpoint.
 10. **Summarize** — `GitChangeSummary` captures diff counts and risk flags; `TestRunSummary` captures configured local test runs.
-11. **Sync** (Phase 4+) — commit, push, open draft PR, update Linear, post Notion summary.
+11. **Sync** — Phase 4 can commit, push, open a draft PR, and update Linear through approval-gated provider actions. Phase 5 adds Notion/Figma/MCP writes.
 12. **Cleanup** (future) — remove worktree only after explicit human-gated cleanup.
 
 Detailed flow: [`diagrams.md`](diagrams.md#2-task-lifecycle-flow).
@@ -296,4 +299,4 @@ See [`diagrams.md`](diagrams.md#7-alternatives-considered) for a comparative dia
 
 The phased plan in the README is more than scheduling — it's a contract about what each phase ships and what it intentionally defers. See [`/.linear` issues](https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c) for the canonical scope per phase.
 
-The most important deferral: **no external integrations until the local loop is solid**. Phase 4 (GitHub + Linear sync) does not begin until Phases 1-3 have been used end-to-end.
+The most important historical deferral was **no external integrations until the local loop was solid**. That gate has been met for Phases 1-4; the current deferral is Phase 5 external expansion until the Phase 4.5 Tailscale baseline is validated.

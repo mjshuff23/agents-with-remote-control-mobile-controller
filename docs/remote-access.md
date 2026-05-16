@@ -128,6 +128,30 @@ http://100.x.y.z:3001
 http://100.x.y.z:3000/health
 ```
 
+Use these placeholder-safe probes to locate and verify the path:
+
+```powershell
+# Windows PowerShell: find the Windows Tailscale IPv4 address.
+tailscale ip -4
+
+# Windows PowerShell: confirm Windows can see the local services.
+curl.exe http://127.0.0.1:3000/health
+curl.exe http://127.0.0.1:3001
+
+# Windows PowerShell: confirm the chosen Tailscale host address reaches them.
+curl.exe http://100.x.y.z:3000/health
+curl.exe http://100.x.y.z:3001
+```
+
+```bash
+# WSL: find the WSL IPv4 address if a port proxy is needed.
+hostname -I | awk '{print $1}'
+
+# WSL: confirm the services are listening inside WSL.
+curl -fsS http://127.0.0.1:3000/health
+curl -I http://127.0.0.1:3001
+```
+
 If direct access fails, choose one fix and document it in the smoke record:
 
 - enable WSL mirrored networking and allow the minimum Windows Firewall ports;
@@ -139,7 +163,13 @@ Tailscale IP instead of all interfaces:
 ```powershell
 netsh interface portproxy add v4tov4 listenaddress=100.x.y.z listenport=3001 connectaddress=<wsl-ip> connectport=3001
 netsh interface portproxy add v4tov4 listenaddress=100.x.y.z listenport=3000 connectaddress=<wsl-ip> connectport=3000
+netsh interface portproxy show v4tov4
 ```
+
+After applying mirrored networking or portproxy, repeat the Windows PowerShell
+`curl.exe http://100.x.y.z:3000/health` and `curl.exe http://100.x.y.z:3001`
+checks. Then turn off phone WiFi, keep Tailscale connected on cellular, and
+open `http://<tailscale-host>:3001` in the phone browser.
 
 Do not commit the real Tailscale IP or WSL IP. Keep any firewall allowance to
 the minimum ports needed for the controller path.

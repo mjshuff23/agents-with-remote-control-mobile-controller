@@ -105,12 +105,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           worktreePath: launch.worktreePath ?? task.worktreePath ?? undefined,
           branchName: launch.branchName ?? task.branchName ?? undefined,
           prompt,
-          onOutput: async (event) => {
-            await this.appendLog(session.id, event.type, event.content);
-            if (event.type === 'stdout') {
-              await this.handleProtocolOutput(task.id, session.id, event.content);
-            }
-          },
+          onOutput: (event) => this.handleAgentOutputSafely(task.id, session.id, event.type, event.content),
           onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
         });
 
@@ -186,7 +181,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         worktreePath: task.worktreePath ?? undefined,
         branchName: task.branchName ?? undefined,
         prompt: this.buildCooperativePrompt(task),
-        onOutput: (event) => this.handleAgentOutput(task.id, session.id, event.type, event.content),
+        onOutput: (event) => this.handleAgentOutputSafely(task.id, session.id, event.type, event.content),
         onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
       });
 
@@ -390,6 +385,15 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await currentWrite;
   }
 
+  /** Run output handling defensively because PTY callbacks cannot await async failures. */
+  private async handleAgentOutputSafely(taskId: string, sessionId: string, type: AgentLogType, content: string): Promise<void> {
+    try {
+      await this.handleAgentOutput(taskId, sessionId, type, content);
+    } catch (error) {
+      await this.appendLog(sessionId, 'system', `Output handler error: ${this.errorMessage(error)}`).catch(() => undefined);
+    }
+  }
+
   /** Persist output, inspect structured Codex events, and route cooperative protocol lines. */
   private async handleAgentOutput(taskId: string, sessionId: string, type: AgentLogType, content: string): Promise<void> {
     await this.appendLog(sessionId, type, content);
@@ -406,16 +410,32 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     for (const line of content.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('{')) continue;
+      let event: { type?: string; thread_id?: unknown };
       try {
-        const event = JSON.parse(trimmed) as { type?: string; thread_id?: unknown };
-        if (event.type === 'thread.started' && typeof event.thread_id === 'string' && event.thread_id.length > 0) {
-          await this.prisma.agentSession.update({
-            where: { id: sessionId },
-            data: { externalSessionId: event.thread_id }
-          });
-        }
+        event = JSON.parse(trimmed) as { type?: string; thread_id?: unknown };
       } catch {
         continue;
+      }
+      if (event.type !== 'thread.started' || typeof event.thread_id !== 'string') {
+        continue;
+      }
+      if (!isCodexThreadId(event.thread_id)) {
+        await this.appendLog(sessionId, 'system', 'Ignored invalid Codex thread id from stdout');
+        continue;
+      }
+
+      const result = await this.prisma.agentSession.updateMany({
+        where: {
+          id: sessionId,
+          OR: [
+            { externalSessionId: null },
+            { externalSessionId: event.thread_id }
+          ]
+        },
+        data: { externalSessionId: event.thread_id }
+      });
+      if (result.count === 0) {
+        await this.appendLog(sessionId, 'system', 'Ignored Codex thread id change after session id was captured');
       }
     }
   }
@@ -535,7 +555,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         branchName: task.branchName ?? undefined,
         externalSessionId: session.externalSessionId!,
         prompt: text,
-        onOutput: (event) => this.handleAgentOutput(task.id, session.id, event.type, event.content),
+        onOutput: (event) => this.handleAgentOutputSafely(task.id, session.id, event.type, event.content),
         onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
       });
     } catch (error) {
@@ -826,4 +846,8 @@ function toRuntimeStatusLabel(status: string): RuntimeStatusLabel {
   if (status === 'failed') return 'failed';
   if (status === 'stopped') return 'stopped';
   return 'active';
+}
+
+function isCodexThreadId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
