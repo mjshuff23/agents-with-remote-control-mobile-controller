@@ -1,0 +1,50 @@
+docs/remote-access.md
+  s_a62b3d19525e7d::t_f85ab1da7d911a 131-154,166,169-172
+src/agents/codex.adapter.spec.ts
+  s_a62b3d19525e7d::t_0692631c9a4fff 187
+  s_a62b3d19525e7d::t_16955e8d03486d 224-272,274-278
+  s_a62b3d19525e7d::t_162bb60dbc2b28 191-193,196
+  s_a62b3d19525e7d::t_b1097929f3a860 273
+  s_a62b3d19525e7d::t_f6882dee46ea15 190
+src/features/agent-sessions/agent-sessions.service.spec.ts
+  s_a62b3d19525e7d::t_287b37036416a9 127,371,382,439,451,458,468
+  s_a62b3d19525e7d::t_514606d2fe056f 346-364
+  s_a62b3d19525e7d::t_0f6aa064b17bb3 374-381,383-402
+PLAN.md
+  s_a62b3d19525e7d::t_f85ab1da7d911a 208-223
+docs/ARCHITECTURE.md
+  s_a62b3d19525e7d::t_b4b1e31527b77a 134-135
+  s_a62b3d19525e7d::t_f85ab1da7d911a 19,73,76-78,102,104-110,131,194,252,302
+src/features/agent-sessions/agent-sessions.service.ts
+  s_a62b3d19525e7d::t_425338946ae16c 108,184,389-396,413,415,419-439,558
+  s_a62b3d19525e7d::t_89f3ce268fa154 388,850-852
+src/agents/codex.adapter.ts
+  s_a62b3d19525e7d::t_e0b16b802f50d6 246-247,254-256,258,263-269,275-277,295-296,302,304-309,311-317,324-332
+  s_a62b3d19525e7d::t_2ed01e14cfe15e 281-288,290-294,297-301,318,320-323,333-339
+  s_a62b3d19525e7d::t_b1097929f3a860 95
+  s_a62b3d19525e7d::t_b0c4b75f376141 88,97,100
+  s_a62b3d19525e7d::t_19898acefccca6 86,92-94,96,98-99,101,193,195-197,243-244,248-252,257,259-262,270-274,278-279
+controller/features/tasks/use-task-detail.ts
+  s_a62b3d19525e7d::t_26cb4d04990b4d 387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "a90850067f8eb09ea99294d1441654d7b3e8bc98",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_a62b3d19525e7d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e31ef-7e99-7840-a1b1-ac8e48285f33",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
