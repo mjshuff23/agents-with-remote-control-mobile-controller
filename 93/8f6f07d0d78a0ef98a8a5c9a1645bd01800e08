@@ -1,0 +1,67 @@
+docs/ARCHITECTURE.md
+  s_a62b3d19525e7d::t_60b51885a9de54 153-161
+  s_a62b3d19525e7d::t_490e5b7788fce0 152,162-163,170
+  s_a62b3d19525e7d::t_b4b3024cea478d 36,38,209
+controller/components/task-log-format.ts
+  s_a62b3d19525e7d::t_b4f6746b1abcb3 1-17
+src/task-log-format.spec.ts
+  s_a62b3d19525e7d::t_4fb49c668e6001 1-15
+src/agents/agent-adapter.interface.ts
+  s_a62b3d19525e7d::t_b4f6746b1abcb3 42-46,58
+src/agents/codex.adapter.ts
+  s_a62b3d19525e7d::t_b4f6746b1abcb3 7,48-63,74,84,86-89,101,128,134-135,150-179,183-200,233-252
+src/features/agent-sessions/agent-sessions.service.spec.ts
+  s_a62b3d19525e7d::t_6b0f614987b392 51-52,346-379,381-382,390-412,439-440
+  s_a62b3d19525e7d::t_337c7138ca0a9d 413-438
+  s_a62b3d19525e7d::t_02cd1161644bb3 127
+  s_a62b3d19525e7d::t_39ae2ff4e3f1d3 383-389
+  s_a62b3d19525e7d::t_cf3e411bca7968 380
+controller/components/task-log-pane.tsx
+  s_a62b3d19525e7d::t_b4f6746b1abcb3 5,56-63
+test/ws-events.e2e-spec.ts
+  s_a62b3d19525e7d::t_89e16c83d9aacc 77,81-82,85,141-142,145
+  s_a62b3d19525e7d::t_02cd1161644bb3 33,64
+controller/components/task-list.tsx
+  s_a62b3d19525e7d::t_02cd1161644bb3 8
+src/features/agent-sessions/agent-sessions.service.ts
+  s_a62b3d19525e7d::t_c52140cdb93b64 483-485
+  s_a62b3d19525e7d::t_cbbc78f52199cf 516,528-554
+  s_a62b3d19525e7d::t_78b13f9f757873 189,256-263,393-422,475,492,500,509-515,517-527,555-570
+README.md
+  s_a62b3d19525e7d::t_b4b3024cea478d 48
+  s_a62b3d19525e7d::t_1a10e1f49f39be 21
+src/agents/codex.adapter.spec.ts
+  s_a62b3d19525e7d::t_148d8166a9318d 171-220
+controller/lib/use-socket.ts
+  s_a62b3d19525e7d::t_8654560a6540ad 73,124-126,161,209
+controller/app/tasks/[id]/page.tsx
+  s_a62b3d19525e7d::t_8654560a6540ad 153-158,264-268,436,583,585,675
+controller/features/tasks/use-task-detail.ts
+  s_a62b3d19525e7d::t_8654560a6540ad 143-148,230-233
+  s_a62b3d19525e7d::t_02cd1161644bb3 58,399
+PLAN.md
+  s_a62b3d19525e7d::t_b4b3024cea478d 201-202
+docs/diagrams.md
+  s_a62b3d19525e7d::t_b4b3024cea478d 290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "938f6f07d0d78a0ef98a8a5c9a1645bd01800e08",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_a62b3d19525e7d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e31ef-7e99-7840-a1b1-ac8e48285f33",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
