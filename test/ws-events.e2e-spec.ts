@@ -162,4 +162,19 @@ describe('WebSocket events', () => {
 
     expect(socket.connected).toBe(false);
   });
+
+  it('disconnects a client without a token', async () => {
+    const { port } = app.getHttpServer().address() as { port: number };
+
+    await new Promise<void>((resolve) => {
+      socket = io(`http://localhost:${port}`, {
+        reconnection: false,
+        transports: ['websocket'],
+      });
+      socket.on('disconnect', () => resolve());
+      socket.on('connect_error', () => resolve());
+    });
+
+    expect(socket.connected).toBe(false);
+  });
 });

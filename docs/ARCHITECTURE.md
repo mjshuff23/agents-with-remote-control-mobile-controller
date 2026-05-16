@@ -2,7 +2,7 @@
 
 This document is the in-depth companion to [`README.md`](../README.md). It captures the system's working architecture, modules, data model, and the decisions behind them.
 
-> **Current implementation note:** Phases 1 and 2 are complete, and Phase 3 is implemented as a local-loop hardening layer: task-scoped Git worktrees, cooperative approval requests, audit records, diff summaries, configured test runs, and controller cards. Phase 3.5 adds checkpoint/restore for dormant sessions and a codebase refactoring into feature silos with integration seams. Phase 3 is `cooperative-gated` by default; it does not claim universal pre-execution interception of every CLI action.
+> **Current implementation note:** Phases 1 through 4 are complete, and Phase 4.5 is the active remote-access baseline: Tailscale is the default private overlay for daily phone approvals outside the home LAN. Phase 3 remains `cooperative-gated` by default; it does not claim universal pre-execution interception of every CLI action.
 
 ---
 
@@ -10,7 +10,8 @@ This document is the in-depth companion to [`README.md`](../README.md). It captu
 
 | Layer | Role | Tech |
 | ----- | ---- | ---- |
-| **Phone / Web Controller** | Remote command surface — start tasks, watch logs, approve actions, inspect diffs | Next.js (App Router) or React+Vite, mobile-first, PWA later |
+| **Phone / Web Controller** | Remote command surface — start tasks, watch logs, approve actions, inspect diffs | Next.js App Router, mobile-first |
+| **Private Overlay** | Default Phase 4.5 path from phone to host outside the home LAN | Tailscale; no public port forwarding or Funnel |
 | **Local Orchestrator** | Nervous system — owns task state, spawns agents, brokers approval, persists everything | NestJS + SQLite + WebSocket gateway |
 | **Agent Adapter Layer** | Swappable interface for CLI agents | TypeScript interface, one adapter per agent |
 | **CLI Agents** | Execution engines | Codex CLI → Claude Code → Gemini |

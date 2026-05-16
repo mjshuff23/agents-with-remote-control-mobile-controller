@@ -1,130 +1,209 @@
 # Remote Access
 
-Options for reaching the controller UI from outside your home network — gym, coffee shop, travel.
+Default daily setup for reaching the controller UI from a phone outside the
+home LAN.
+
+Phase 4.5 / Linear `TSH-111` standardizes on Tailscale before Phase 5 adds
+Notion, Figma, and controlled MCP synchronization. This is an operational
+security and reliability baseline, not a cloud deployment.
 
 ---
 
-## Option 1 — Tailscale (recommended)
+## Baseline Choice
 
-Tailscale creates an encrypted mesh VPN between your devices. Install it on your Windows PC and your phone; both devices appear on the same virtual network regardless of where they are physically.
+Use Tailscale as the private overlay network between:
 
-**Setup (once):**
+- the Windows host that runs WSL2, the orchestrator, and the controller;
+- the phone that opens the controller UI.
 
-1. Install Tailscale on Windows: <https://tailscale.com/download/windows>
-2. Install Tailscale on your phone (iOS/Android)
-3. Sign in with the same account on both devices
-4. Find your PC's Tailscale IP in the Tailscale admin console or taskbar icon — looks like `100.x.x.x`
+Tailscale keeps the controller reachable from cellular or non-home WiFi without
+router port forwarding, public DNS, ngrok, Cloudflare Tunnel, Tailscale Funnel,
+or any public port exposure.
 
-**Run the services:**
+Public binding is acceptable only because access is constrained to the trusted
+private overlay. Do not expose these ports directly to the public internet.
 
-Update `.env`:
+---
+
+## Version Baseline
+
+Implementation-day check for `TSH-111`:
+
+| Item | Value |
+| --- | --- |
+| Verification date | 2026-05-16 |
+| Latest stable target | Tailscale `v1.98.2` |
+| Source | Tailscale changelog, May 15, 2026 |
+
+Before marking the operational smoke complete, record the installed versions
+from the Windows host and phone in the smoke record below. Do not commit a real
+tailnet name, Tailscale IP, MagicDNS hostname, auth key, or controller secret.
+
+| Device | Installed version | Notes |
+| --- | --- | --- |
+| Windows host | TODO: record during manual smoke | Use the Windows tray app, admin console Machines page, or `tailscale version` when available. |
+| Phone | TODO: record during manual smoke | Use the iOS or Android app version after updating from the app store. |
+
+---
+
+## Install Or Update
+
+1. Install or update Tailscale on Windows from
+   <https://tailscale.com/download/windows>.
+2. Install or update Tailscale on the phone from the iOS App Store or Google
+   Play.
+3. Sign in on both devices with the same Tailscale account.
+4. Confirm both devices appear in the same tailnet.
+5. Enable MagicDNS if you want to use the machine name. Otherwise use the
+   stable `100.x.y.z` Tailscale IP.
+
+Use only placeholder-safe examples in committed docs:
+
+```text
+http://100.x.y.z:3001
+http://arc-windows-host.tailnet-example.ts.net:3001
+```
+
+---
+
+## Orchestrator Config
+
+Update the root `.env` on the host:
 
 ```bash
 ARC_HOST=0.0.0.0
 ARC_ALLOW_PUBLIC_BIND=true
 ```
 
-Update `controller/.env.local`:
+`ARC_HOST=0.0.0.0` is a deliberate remote-access setting. Keep the default
+`127.0.0.1` bind for normal local-only development.
+
+`ARC_ALLOW_PUBLIC_BIND=true` must only be used behind Tailscale or another
+trusted private overlay. It is not permission to expose the orchestrator on a
+public interface.
+
+---
+
+## Controller Config
+
+Update `controller/.env.local` on the host:
 
 ```bash
-# NEXT_PUBLIC_WS_URL — used by the phone's browser to open the WebSocket.
-# Must be the external IP/hostname, since the browser connects from outside WSL2.
-NEXT_PUBLIC_WS_URL=http://100.x.x.x:3000
+# Browser-visible WebSocket URL for the phone.
+NEXT_PUBLIC_WS_URL=http://100.x.y.z:3000
 
-# BACKEND_URL — used by the Next.js server to proxy REST calls to NestJS.
-# Next.js and NestJS both run inside WSL2, so always use 127.0.0.1 here.
-# Do NOT set this to the Windows LAN or Tailscale IP — that routes traffic
-# out of WSL2 and back in, which breaks under most WSL2 network configs.
+# Server-side Next.js proxy target. Keep this on WSL loopback.
 BACKEND_URL=http://127.0.0.1:3000
 
-NEXT_PUBLIC_CONTROLLER_SECRET=<your secret>
-CONTROLLER_SECRET=<your secret>
+# Local controller bearer token. Use the same value in both variables.
+NEXT_PUBLIC_CONTROLLER_SECRET=<local-controller-secret>
+CONTROLLER_SECRET=<local-controller-secret>
 ```
 
-Restart both services. Open `http://100.x.x.x:3001` on your phone.
-
-**Why Tailscale:** No port forwarding, no firewall rules, no public exposure. The connection is direct device-to-device (or relayed through Tailscale's DERP servers if direct is unavailable). Free for personal use (up to 100 devices).
-
----
-
-## Option 2 — NetBird
-
-Open-source alternative to Tailscale. Self-hostable management plane if you want zero dependency on third-party infrastructure.
-
-**Setup:**
-
-1. Create a free account at <https://netbird.io> or self-host the management server
-2. Install the NetBird client on Windows and your phone
-3. Peer your devices; get the peer IP from the NetBird dashboard
-4. Same `.env` and `controller/.env.local` changes as Tailscale above, using your NetBird peer IP
-
-**Why NetBird over Tailscale:** Full open-source stack (Apache 2.0), self-hostable, no vendor lock-in. Slightly more setup.
-
----
-
-## Option 3 — Cloudflare Tunnel (zero open ports)
-
-Cloudflare Tunnel creates an outbound-only tunnel from your PC to Cloudflare's edge. No inbound ports, no firewall changes, no VPN.
+Use the MagicDNS name instead of `100.x.y.z` only after verifying MagicDNS:
 
 ```bash
-# Install cloudflared
-winget install Cloudflare.cloudflared     # or download from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
-
-# Authenticate (one-time)
-cloudflared tunnel login
-
-# Create a named tunnel
-cloudflared tunnel create arc-controller
-
-# Run it (tunnels both services)
-cloudflared tunnel --url http://localhost:3001
+NEXT_PUBLIC_WS_URL=http://arc-windows-host.tailnet-example.ts.net:3000
 ```
 
-Cloudflare gives you a public HTTPS URL like `https://random-words.trycloudflare.com`. Open that on your phone. You can also configure a custom domain via `cloudflared tunnel route dns`.
-
-**Limitation:** The WS URL in `controller/.env.local` needs to point at the backend. You'd need a second tunnel or a subdomain for port 3000, or proxy the WS through the Next.js API route (a future improvement).
-
-**Why Cloudflare Tunnel:** Truly zero open ports, HTTPS out of the box, works behind CGNAT. Free for personal use.
+The `NEXT_PUBLIC_CONTROLLER_SECRET` value is visible to the browser by design.
+Treat it as a local controller bearer token, not as a provider credential. Do
+not reuse GitHub, Linear, Notion, Figma, MCP, SSH, or Tailscale credentials.
 
 ---
 
-## Option 4 — ngrok (quickest for one-off testing)
+## Windows And WSL2 Networking
 
-```bash
-npm install -g ngrok
-ngrok http 3001
+Preferred path:
+
+```text
+phone browser -> Windows Tailscale IP or MagicDNS -> Windows host -> WSL2 ports
 ```
 
-Gives you a temporary public HTTPS URL in seconds. The free tier changes the URL on every restart; a paid plan gives a stable subdomain.
+Start with direct access to the WSL-bound dev ports through the Windows
+Tailscale address:
 
-Same WS limitation as Cloudflare Tunnel — you'd need a second tunnel for the socket connection, or use the `--region` flag and configure accordingly.
+```text
+http://100.x.y.z:3001
+http://100.x.y.z:3000/health
+```
 
-**Why ngrok:** Zero setup, useful for quick demos or one-off testing. Not suitable for daily use unless on a paid plan.
+If direct access fails, choose one fix and document it in the smoke record:
+
+- enable WSL mirrored networking and allow the minimum Windows Firewall ports;
+- add Windows `netsh interface portproxy` rules for ports `3000` and `3001`.
+
+When a port proxy is needed, prefer binding the listen address to the Windows
+Tailscale IP instead of all interfaces:
+
+```powershell
+netsh interface portproxy add v4tov4 listenaddress=100.x.y.z listenport=3001 connectaddress=<wsl-ip> connectport=3001
+netsh interface portproxy add v4tov4 listenaddress=100.x.y.z listenport=3000 connectaddress=<wsl-ip> connectport=3000
+```
+
+Do not commit the real Tailscale IP or WSL IP. Keep any firewall allowance to
+the minimum ports needed for the controller path.
 
 ---
 
-## Option 5 — Local LAN (same network only)
+## Manual Smoke Test
 
-If you're on the same WiFi as your PC (home, trusted office), see the LAN setup in the main README. No external service needed, but limited to that network.
+Run the smoke from cellular or non-home WiFi.
+
+1. Start the orchestrator with `ARC_HOST=0.0.0.0` and
+   `ARC_ALLOW_PUBLIC_BIND=true`.
+2. Start the controller on port `3001`.
+3. Open `http://<tailscale-host>:3001` from the phone.
+4. Confirm the controller UI loads.
+5. Confirm `http://<tailscale-host>:3000/health` is reachable only from the
+   private overlay path.
+6. Confirm REST actions fail without `CONTROLLER_SECRET`.
+7. Confirm REST actions succeed through the controller proxy with
+   `CONTROLLER_SECRET`.
+8. Confirm WebSocket connections fail without `NEXT_PUBLIC_CONTROLLER_SECRET`
+   or with a mismatched secret.
+9. Confirm WebSocket connections succeed with matching
+   `NEXT_PUBLIC_CONTROLLER_SECRET` and `CONTROLLER_SECRET`.
+10. Open the task list from the phone.
+11. Open a task detail view from the phone.
+12. Refresh the phone browser and confirm event replay does not duplicate logs
+    or cards.
+13. Trigger a real approval request and confirm the approval card renders on the
+    phone.
+14. Approve or deny the request from the phone outside the home LAN.
+15. Confirm the task continues and the audit trail records the decision.
+
+### Smoke Record Template
+
+Use this template in PR notes or local implementation notes. Keep values
+placeholder-safe if committed.
+
+| Check | Result |
+| --- | --- |
+| Windows Tailscale version | TODO |
+| Phone Tailscale version | TODO |
+| Same tailnet verified | TODO |
+| Host address used | `100.x.y.z` or `arc-windows-host.tailnet-example.ts.net` |
+| MagicDNS used | TODO: yes/no |
+| Windows/WSL2 path | TODO: direct / mirrored networking / portproxy |
+| Cellular or non-home WiFi used | TODO |
+| Controller UI loaded | TODO |
+| REST auth failed without secret | TODO |
+| REST auth succeeded with secret | TODO |
+| WebSocket auth failed without or with wrong secret | TODO |
+| WebSocket auth succeeded with matching secret | TODO |
+| Task list verified | TODO |
+| Task detail verified | TODO |
+| Replay verified | TODO |
+| Approval card verified | TODO |
+| Real mobile approval flow passed | TODO |
 
 ---
 
-## Recommended setup for daily use
+## Non-Baseline Options
 
-**Tailscale** is the best balance of simplicity, security, and reliability for the gym/travel use case:
+NetBird can serve the same private-overlay role if Tailscale is unavailable, but
+`TSH-111` uses Tailscale as the daily default.
 
-- Install once, runs in the background
-- No firewall changes or port forwarding
-- Works from any network (cellular, public WiFi, gym WiFi)
-- End-to-end encrypted
-- `CONTROLLER_SECRET` still required for every request, so accidental exposure on the Tailscale network is still gated
-
----
-
-## Security notes
-
-Regardless of which option you choose:
-
-- `CONTROLLER_SECRET` authenticates every REST request and every WebSocket connection. Do not share it.
-- For Cloudflare Tunnel and ngrok, consider adding Cloudflare Access or ngrok's OAuth layer on top so the URL requires a login before the controller is even reachable.
-- Never set `ARC_ALLOW_PUBLIC_BIND=true` on a machine with a public IP without one of the above layers in front.
+Cloudflare Tunnel, ngrok, router port forwarding, public DNS, public IP
+exposure, and Tailscale Funnel are out of scope for this baseline.

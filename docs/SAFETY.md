@@ -160,9 +160,13 @@ The audit log is **append-only**. Even superusers cannot edit existing rows; cor
 |---|---|
 | **Phase 2** | LAN-only bind + shared secret. Sufficient for "my phone on my home network." |
 | **Phase 3** | Keep the shared secret, add approval/diff/test auditability, and do not expose production or public-network behavior. Per-device pairing remains future work. |
-| **Phase 4+** | If the orchestrator becomes accessible outside the LAN, layer in per-device keys and then proper OAuth / WebAuthn. Tunneling (Tailscale, Cloudflare Tunnel) is preferred over public exposure. |
+| **Phase 4** | Keep the controller secret while adding GitHub/Linear provider writes behind approval gates and idempotent sync records. |
+| **Phase 4.5** | Tailscale private overlay becomes the default remote-access path. `ARC_HOST=0.0.0.0` plus `ARC_ALLOW_PUBLIC_BIND=true` is acceptable only behind Tailscale or an equivalent trusted private overlay. |
+| **Phase 5+** | Before broader external writes, layer in per-device keys and then proper OAuth / WebAuthn as needed. Public exposure remains out of scope. |
 
-The orchestrator must **never** bind to `0.0.0.0` without explicit configuration. Default bind is `127.0.0.1` plus the LAN interface that has been allowlisted in config.
+The orchestrator must **never** bind to `0.0.0.0` without explicit configuration. Default bind is `127.0.0.1`; the Phase 4.5 remote path deliberately opts into public bind only because Tailscale constrains reachability to the private overlay.
+
+The controller secret remains required for every REST controller action and every WebSocket connection. `NEXT_PUBLIC_CONTROLLER_SECRET` is browser-visible by design, so treat it as a local controller bearer token and never reuse provider credentials for it.
 
 ---
 

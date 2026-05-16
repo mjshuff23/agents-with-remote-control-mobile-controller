@@ -91,6 +91,22 @@ describe('Tasks API', () => {
     }));
   });
 
+  it('requires the controller secret for REST task actions', async () => {
+    await request(app.getHttpServer())
+      .get('/tasks')
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .get('/tasks')
+      .set('X-Controller-Secret', 'wrong-secret')
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .get('/tasks')
+      .set('X-Controller-Secret', TEST_SECRET)
+      .expect(200);
+  });
+
   it('returns task details with latest session and log tail', async () => {
     const created = await request(app.getHttpServer())
       .post('/tasks')

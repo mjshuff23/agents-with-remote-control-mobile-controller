@@ -1,8 +1,10 @@
-# Phase 4 Implementation Plan
+# Phase 4.5 Remote Access Baseline Plan
 
 ## Summary
 
-Phases 1, 2, 3, and 3.5 are complete. Phase 4 is the active GitHub + Linear synchronization phase for Linear `TSH-80` and GitHub issue #5.
+Phases 1, 2, 3, 3.5, and 4 are complete. Phase 4.5 is the active operational prerequisite for Linear `TSH-111`: establish Tailscale as the default private remote-access path for daily mobile controller use before Phase 5 external synchronization expands to Notion, Figma, and MCP.
+
+Phase 5 (`TSH-81`) remains deferred until this baseline is validated. Phase 4's GitHub + Linear runtime contract is retained below as the completed sync foundation that the remote-access smoke must exercise from the phone.
 
 Phase 4 connects the durable local controller loop to repo/project-management workflows:
 
@@ -19,7 +21,35 @@ The Phase 4 safety model inherits Phase 3 containment and approval gates:
 
 Canonical handoff: [`docs/phase-4-implementation.md`](docs/phase-4-implementation.md).
 
-## Current Runtime Contract
+Default remote-access setup: [`docs/remote-access.md`](docs/remote-access.md).
+
+## Phase 4.5 Runtime Contract
+
+The daily remote path is:
+
+```text
+phone browser -> Tailscale private overlay -> Windows host -> WSL2 orchestrator/controller
+```
+
+Required local config:
+
+```bash
+# root .env
+ARC_HOST=0.0.0.0
+ARC_ALLOW_PUBLIC_BIND=true
+
+# controller/.env.local
+NEXT_PUBLIC_WS_URL=http://<tailscale-host>:3000
+BACKEND_URL=http://127.0.0.1:3000
+NEXT_PUBLIC_CONTROLLER_SECRET=<local-controller-secret>
+CONTROLLER_SECRET=<local-controller-secret>
+```
+
+`<tailscale-host>` must be a placeholder-safe Tailscale `100.x.y.z` address or a MagicDNS name. Do not commit real Tailscale IPs, MagicDNS hostnames, tailnet names, auth keys, or controller secrets.
+
+Public binding is acceptable only behind a trusted private overlay such as Tailscale. It is not a public deployment setting.
+
+## Phase 4 Runtime Contract
 
 `POST /tasks` remains compatible:
 
@@ -50,7 +80,7 @@ Suggested linked task shape:
 }
 ```
 
-## Phase 4 Child Tickets
+## Completed Phase 4 Child Tickets
 
 | Linear | Purpose |
 |---|---|
@@ -85,18 +115,36 @@ Recommended build order:
 12. `TSH-109` mobile polish.
 13. `TSH-110` test matrix and provider e2e.
 
+## Active Phase 4.5 Ticket
+
+| Linear | Purpose |
+|---|---|
+| `TSH-111` | Tailscale remote access baseline and mobile smoke test |
+
+Acceptance emphasis:
+
+- Windows host and phone are on the same tailnet.
+- Latest stable Tailscale versions available on implementation day are recorded.
+- Controller loads from the phone over cellular or non-home WiFi.
+- REST and WebSocket auth both require the controller secret.
+- Task list, task detail, replay, approval cards, and a real approval decision work from the phone.
+- Windows/WSL2 networking path is documented, including mirrored networking or scoped `netsh interface portproxy` if direct access fails.
+- No cloud tunnel, public port forwarding, public IP exposure, public DNS, or Tailscale Funnel is required.
+
 ## Configuration
 
-Existing environment stays valid:
+Existing environment stays valid for local-only development:
 
 ```bash
+ARC_HOST="127.0.0.1"
+ARC_ALLOW_PUBLIC_BIND="false"
 ARC_WORKTREE_ROOT=""
 ARC_POLICY_PATH="arc.config.json"
 ARC_APPROVAL_TIMEOUT_MS="300000"
 ARC_TEST_COMMAND_TIMEOUT_MS="600000"
 ```
 
-Phase 4 should add provider config incrementally. Keep provider config documented in `.env.example`; do not store provider credentials in DB records, task event payloads, logs, or controller-visible error details.
+Phase 4.5 deliberately overrides `ARC_HOST` only for Tailscale/private-overlay use. Keep provider config documented in `.env.example`; do not store provider credentials in DB records, task event payloads, logs, or controller-visible error details.
 
 Status mapping should be configurable. Linear workflow state names vary by team and workspace, so provider code should discover available workflow states and then map configured names when present.
 
@@ -154,7 +202,26 @@ Phase 3.5 replay semantics remain canonical:
 
 Phase 4 UI events must not duplicate cards after reconnect/replay.
 
-## Manual Smoke Test
+## Phase 4.5 Manual Smoke Test
+
+With the orchestrator and controller running behind Tailscale:
+
+1. Update Windows and phone Tailscale clients to the latest stable versions available on the smoke date.
+2. Record both installed versions in PR notes or implementation notes.
+3. Confirm both devices are connected to the same tailnet.
+4. Verify the selected host address:
+   - MagicDNS machine name if MagicDNS is enabled and tested; or
+   - stable Tailscale `100.x.y.z` IP if MagicDNS is not used.
+5. Open `http://<tailscale-host>:3001` from the phone on cellular or non-home WiFi.
+6. Confirm WebSocket connection succeeds with matching controller secret config.
+7. Confirm WebSocket connection fails with a missing or mismatched controller secret.
+8. Confirm REST task actions fail without `CONTROLLER_SECRET`.
+9. Confirm REST task actions succeed through the controller proxy with `CONTROLLER_SECRET`.
+10. Confirm task list, task detail, replay, and approval cards render correctly from the phone.
+11. Complete one real approval decision from the phone outside the home LAN.
+12. Document the Windows/WSL2 networking path used. If direct WSL-bound ports over the Windows Tailscale IP fail, document the selected fix and keep any port proxy bound to the Tailscale IP where practical.
+
+## Completed Phase 4 Manual Smoke Test
 
 With orchestrator and controller running:
 
@@ -192,5 +259,10 @@ pnpm typecheck
 pnpm build
 cd controller && node_modules/.bin/tsc --noEmit
 ```
+
+Phase 4.5 adds explicit local coverage for:
+
+- REST task actions returning `401` without or with a wrong controller secret, then succeeding with the correct secret.
+- WebSocket connections disconnecting without or with a wrong controller secret, then succeeding with the correct secret.
 
 Provider e2e tests should auto-skip unless explicit provider config is present. Default CI/local checks must not require real GitHub/Linear access.

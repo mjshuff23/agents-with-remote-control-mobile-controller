@@ -2,7 +2,7 @@
 
 > Local-first agent orchestration: control CLI coding agents (Codex, Claude Code, Gemini) from your phone, with approval gates, Git worktree isolation, durable reconnect/replay, and human-approved GitHub/Linear sync.
 
-**Status:** Phases 1, 2, 3, and 3.5 are complete. Phase 4 is the active implementation frontier: GitHub + Linear synchronization for the issue → branch → approved commit → approved push → draft PR → Linear status/link workflow.
+**Status:** Phases 1, 2, 3, 3.5, and 4 are complete. Phase 4.5 is the active prerequisite before Phase 5: Tailscale remote access for daily phone approvals outside the home LAN.
 
 ---
 
@@ -10,7 +10,7 @@
 
 Run AI coding agents on your PC. Control them from your phone. The agent works in an isolated Git worktree. Risky actions are surfaced as approval cards. Phase 3 made local coding work safe enough to review; Phase 3.5 made long-lived mobile sessions durable enough to reconnect, replay missed events, checkpoint, and restore dormant sessions.
 
-Phase 4 now connects that local loop to GitHub and Linear while preserving the human approval gate. The system should help create branches, commits, pushes, draft PRs, and Linear sync events, but it must not auto-merge, auto-deploy, force-push, or perform provider writes without explicit approval.
+Phase 4 connects that local loop to GitHub and Linear while preserving the human approval gate. Phase 4.5 establishes Tailscale as the default private remote-access path before Phase 5 adds Notion, Figma, and controlled MCP synchronization.
 
 ## Current implementation scope
 
@@ -49,7 +49,7 @@ Phase 4 now connects that local loop to GitHub and Linear while preserving the h
 - Feature/provider seams prepared for GitHub, Linear, Notion, Figma, and MCP.
 - Dependency/package hygiene and docs linting improvements.
 
-**Phase 4 — Active frontier**
+**Phase 4 — GitHub + Linear sync**
 
 - GitHub issue and Linear issue linking at task creation.
 - Provider adapter seams for GitHub and Linear.
@@ -60,11 +60,19 @@ Phase 4 now connects that local loop to GitHub and Linear while preserving the h
 - PR merge detection and Linear completion sync.
 - Mobile sync UI, provider error surfaces, and token-gated provider e2e tests.
 
-See [`docs/phase-4-implementation.md`](docs/phase-4-implementation.md) for the current Phase 4 handoff.
+**Phase 4.5 — Active prerequisite**
+
+- Tailscale remote access baseline for daily phone use outside the home LAN.
+- `ARC_HOST=0.0.0.0` and `ARC_ALLOW_PUBLIC_BIND=true` only behind a trusted private overlay.
+- Controller remote config for browser WebSocket access and server-side REST proxying.
+- Windows/WSL2 networking notes for direct access, mirrored networking, or scoped port proxy.
+- Mobile smoke coverage for task list, task detail, replay, and approval cards.
+
+See [`docs/remote-access.md`](docs/remote-access.md) for the default daily remote-access setup.
 
 Deferred until later phases:
 
-- Notion/Figma/MCP writes and controlled tool registry (Phase 5).
+- Notion/Figma/MCP writes and controlled tool registry (Phase 5, blocked on the Phase 4.5 remote-access baseline).
 - Multi-agent review and advanced automation (Phase 6).
 - Auto-merge, auto-deploy, or unattended production actions (not currently planned).
 
@@ -89,6 +97,7 @@ It is **not** a mobile IDE. It is **not** a VS Code chat extension. It is a thin
 5. Reply with free text, structured actions, or approve/deny tool use.
 6. Inspect diff summaries, run configured local tests, and restore/replay long-lived sessions.
 7. In Phase 4, link a task to GitHub/Linear, approve commit/push/PR actions, and sync project state without leaving the phone.
+8. In Phase 4.5, use Tailscale so those approvals keep working from cellular or non-home WiFi.
 
 ---
 
@@ -139,7 +148,8 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 | **3** | Worktree isolation + approval gates + diffs + tests | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | [#4](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/4) |
 | **3.5** | Continuous-agent stabilization, reconnect, checkpointing, package hygiene | [TSH-83](https://linear.app/michaelshuff/issue/TSH-83) | PRs #18, #21, #22, #23 |
 | **4** | GitHub + Linear sync (issue → branch → commit → PR) | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | [#5](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/5) |
-| **5** | Notion + Figma + controlled MCP expansion | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | [#6](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/6) |
+| **4.5** | Tailscale private remote-access baseline | [TSH-111](https://linear.app/michaelshuff/issue/TSH-111) | TBD |
+| **5** | Notion + Figma + controlled MCP expansion, depends on Phase 4.5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | [#6](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/6) |
 | **6** | Multi-agent review + advanced automation | [TSH-82](https://linear.app/michaelshuff/issue/TSH-82) | [#7](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/7) |
 
 ---
@@ -162,6 +172,14 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 | [TSH-108](https://linear.app/michaelshuff/issue/TSH-108) | Approval/audit/sync integration |
 | [TSH-109](https://linear.app/michaelshuff/issue/TSH-109) | Mobile sync UI + provider errors |
 | [TSH-110](https://linear.app/michaelshuff/issue/TSH-110) | Provider test matrix + token-gated e2e |
+
+## Phase 4.5 remote-access baseline
+
+| Linear | Focus |
+|---|---|
+| [TSH-111](https://linear.app/michaelshuff/issue/TSH-111) | Tailscale remote access baseline and mobile smoke test |
+
+Phase 4.5 blocks Phase 5. It does not add cloud deployment, public port forwarding, Tailscale Funnel, push notifications, multi-agent review, or MCP registry behavior.
 
 ---
 
@@ -191,6 +209,7 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 - Windows host
 - WSL2 for agent execution
 - Git worktrees for task isolation
+- Tailscale private overlay for default daily phone access outside the home LAN
 
 ---
 
@@ -251,7 +270,7 @@ The controller proxies REST calls through its Next.js server so `CONTROLLER_SECR
 
 **Same network:** set `ARC_HOST=0.0.0.0` and `ARC_ALLOW_PUBLIC_BIND=true` in `.env`, update `controller/.env.local` with your LAN IP, and open `http://<LAN-IP>:3001` on your phone.
 
-**Outside your network:** see [`docs/remote-access.md`](docs/remote-access.md). Tailscale is recommended for daily use.
+**Outside your network:** use the Tailscale setup in [`docs/remote-access.md`](docs/remote-access.md). This is the default daily setup for Phase 4.5 and the prerequisite before Phase 5 external integrations.
 
 ---
 
@@ -261,6 +280,7 @@ The controller proxies REST calls through its Next.js server so `CONTROLLER_SECR
 - **Linear project:** <https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c>
 - **Notion strategy doc:** <https://www.notion.so/35bc2ea5f18f8186b134efa7759a19e6>
 - **Phase 4 handoff:** [`docs/phase-4-implementation.md`](docs/phase-4-implementation.md)
+- **Remote access:** [`docs/remote-access.md`](docs/remote-access.md)
 
 ---
 
