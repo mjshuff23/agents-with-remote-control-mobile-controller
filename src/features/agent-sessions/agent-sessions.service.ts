@@ -580,7 +580,8 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         status: 'running',
         externalSessionId: runningProcess.externalSessionId,
         startedAt: session.startedAt ?? new Date(),
-        completedAt: null
+        completedAt: null,
+        errorMessage: null
       }
     });
 

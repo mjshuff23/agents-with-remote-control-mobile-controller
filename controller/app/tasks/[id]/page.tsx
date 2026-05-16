@@ -433,7 +433,7 @@ export default function TaskDetailPage() {
   const isLive = runtime?.processState === 'live_process' && (
     runtime.statusLabel === 'active' || runtime.statusLabel === 'waiting_approval'
   );
-  const canSendInput = isLive || runtime?.statusLabel === 'idle';
+  const canSendInput = isLive || (runtime?.statusLabel === 'idle' && !!session?.externalSessionId);
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending');
 
   // Safety-net poll: if the task is waiting for approval but the UI has no
