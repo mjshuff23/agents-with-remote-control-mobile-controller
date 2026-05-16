@@ -12,6 +12,8 @@ flowchart LR
     UI["Controller UI<br/>Dashboard · Tasks · Approvals · Diffs · Tests · Logs"]
   end
 
+  TS["Tailscale private overlay<br/>Phase 4.5 daily remote path"]
+
   subgraph Host["Local Host (Windows + WSL2)"]
     subgraph Orch["Local Orchestrator (NestJS)"]
       API["REST API"]
@@ -44,8 +46,9 @@ flowchart LR
     MCP["MCP Servers<br/>Tools as data"]
   end
 
-  UI <-->|"WebSocket (bidir)"| WS
-  UI -->|"REST commands"| API
+  UI <-->|"REST + WebSocket"| TS
+  TS <-->|"private 100.x.y.z / MagicDNS"| WS
+  TS -->|"private 100.x.y.z / MagicDNS"| API
   API --> Tasks
   WS --> Sessions
   Tasks --> Sessions
@@ -284,7 +287,7 @@ sequenceDiagram
   O-->>C: WS diff.summary
   O->>O: run configured test command
   O-->>C: WS test.started / test.log / test.completed
-  O-->>C: WS task.completed
+  O-->>C: WS task.idle / task.completed
   C-->>U: Local review ready
 ```
 

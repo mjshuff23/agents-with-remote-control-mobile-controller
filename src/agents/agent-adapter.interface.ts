@@ -39,6 +39,11 @@ export interface StartAgentTaskInput {
   onExit: (event: AgentExitEvent) => Promise<void>;
 }
 
+/** Input required to resume a persisted agent conversation. */
+export interface ResumeAgentTaskInput extends StartAgentTaskInput {
+  externalSessionId: string;
+}
+
 /** A running agent process handle. */
 export interface RunningAgentProcess {
   externalSessionId: string;
@@ -50,4 +55,5 @@ export interface RunningAgentProcess {
 export interface AgentAdapter {
   name: SupportedAgentName;
   startTask(input: StartAgentTaskInput): Promise<RunningAgentProcess>;
+  resumeTask?(input: ResumeAgentTaskInput): Promise<RunningAgentProcess>;
 }

@@ -2,7 +2,7 @@
 
 This document is the in-depth companion to [`README.md`](../README.md). It captures the system's working architecture, modules, data model, and the decisions behind them.
 
-> **Current implementation note:** Phases 1 and 2 are complete, and Phase 3 is implemented as a local-loop hardening layer: task-scoped Git worktrees, cooperative approval requests, audit records, diff summaries, configured test runs, and controller cards. Phase 3.5 adds checkpoint/restore for dormant sessions and a codebase refactoring into feature silos with integration seams. Phase 3 is `cooperative-gated` by default; it does not claim universal pre-execution interception of every CLI action.
+> **Current implementation note:** Phases 1 through 4 are complete, and Phase 4.5 is the active remote-access baseline: Tailscale is the default private overlay for daily phone approvals outside the home LAN. Phase 3 remains `cooperative-gated` by default; it does not claim universal pre-execution interception of every CLI action.
 
 ---
 
@@ -10,12 +10,13 @@ This document is the in-depth companion to [`README.md`](../README.md). It captu
 
 | Layer | Role | Tech |
 | ----- | ---- | ---- |
-| **Phone / Web Controller** | Remote command surface — start tasks, watch logs, approve actions, inspect diffs | Next.js (App Router) or React+Vite, mobile-first, PWA later |
+| **Phone / Web Controller** | Remote command surface — start tasks, watch logs, approve actions, inspect diffs | Next.js App Router, mobile-first |
+| **Private Overlay** | Default Phase 4.5 path from phone to host outside the home LAN | Tailscale; no public port forwarding or Funnel |
 | **Local Orchestrator** | Nervous system — owns task state, spawns agents, brokers approval, persists everything | NestJS + SQLite + WebSocket gateway |
 | **Agent Adapter Layer** | Swappable interface for CLI agents | TypeScript interface, one adapter per agent |
 | **CLI Agents** | Execution engines | Codex CLI → Claude Code → Gemini |
 | **Repo Worktrees** | Per-task isolated working trees | `git worktree add` |
-| **External Sync** | Project-management and design integration, deferred to Phase 4+ | GitHub, Linear, Notion, Figma, MCP servers |
+| **External Sync** | GitHub + Linear issue-to-PR sync is implemented; Phase 5 expands to Notion, Figma, and controlled MCP | GitHub, Linear, Notion, Figma, MCP servers |
 
 ---
 
@@ -32,8 +33,9 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 ### AgentSessionsModule
 
 - Owns the live link between a `Task` and a running agent process.
-- Tracks `AgentSession` state (`starting -> running -> waiting_approval -> completed | failed | stopped`).
+- Tracks `AgentSession` state (`starting -> running -> waiting_approval -> idle | dormant | failed | stopped`; old `completed` rows remain terminal for compatibility).
 - Streams logs into `AgentLog` through `appendLog`.
+- Captures Codex `thread_id` values from JSONL output so follow-up controller input can resume the same Codex conversation with `codex exec resume`.
 - Delegates cooperative `ARC_ACTION_REQUEST` protocol parsing to `ProtocolHandlerService`.
 
 ### AgentAdapterModule
@@ -68,12 +70,12 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 - Persists task-scoped event envelopes in `TaskEvent` so reconnecting controllers can replay missed events after a cursor.
 - Phase 6 can add Web Push for PWA + optional notification adapters.
 
-### SyncModule (Phase 4+)
+### SyncModule
 
 - Outbound integrations.
-- Phase 4: GitHub + Linear.
-- Phase 5: Notion + Figma + MCP.
-- Not implemented in Phase 3.
+- Phase 4 GitHub + Linear issue-to-PR sync is implemented through provider
+  services, approval-gated worktree actions, and `SyncEvent` idempotency.
+- Phase 5 expands this layer to Notion, Figma, and controlled MCP.
 
 ### CheckpointsModule
 
@@ -97,13 +99,15 @@ These are the NestJS modules the orchestrator is built around. Names are intenti
 - Owns protocol buffer management (partial JSON reassembly across chunks), approval expiry scheduling, and ARC_APPROVAL response formatting.
 - Reduces `AgentSessionsService` by ~200 lines. See `src/features/agent-sessions/protocol-handler.service.ts`.
 
-### IntegrationsModule (Phase 4 scaffold)
+### IntegrationsModule (Legacy Scaffold)
 
-- Provider-agnostic `IIntegrationGateway` interface with `connect`, `disconnect`, and `read` methods.
-- Each provider (GitHub, Linear, Notion, Figma) has a stub adapter that returns `{ ok: false, error: "not implemented until Phase 4" }`.
-- The multi-provider token `INTEGRATION_GATEWAYS` allows any module to consume all registered integrations.
-- Phase 4 code belongs in `src/features/integrations/<provider>/`.
-- No provider write behavior is implemented in Phase 3.5.
+- Provider-agnostic `IIntegrationGateway` interface with `connect`,
+  `disconnect`, and `read` methods.
+- This older scaffold is not the Phase 4 GitHub/Linear write path. The
+  implemented Phase 4 provider interfaces live under `src/features/providers/`,
+  and orchestration/writes flow through the task, worktree, approval, and sync
+  services.
+- Notion, Figma, and MCP remain deferred to Phase 5.
 
 ---
 
@@ -124,9 +128,11 @@ src/
     audit/                                              ← audit log
     checkpoints/                                        ← session checkpoint + dormancy
     test-runs/                                          ← configured test execution
-    integrations/                                       ← Phase 4 provider seams
+    integrations/                                       ← legacy provider gateway scaffold
       mcp-gateway/                                      ← interface + types
       github/ linear/ notion/ figma/                    ← stub adapters
+    providers/                                          ← Phase 4 GitHub/Linear provider APIs
+    sync/                                               ← SyncEvent idempotency and provider action state
 ```
 
 ---
@@ -147,13 +153,25 @@ interface AgentAdapter {
     onOutput(event: { type: 'stdout' | 'stderr' | 'system'; content: string }): Promise<void>;
     onExit(event: { exitCode: number; signal?: string }): Promise<void>;
   }): Promise<RunningAgentProcess>;
+
+  resumeTask?(input: {
+    taskId: string;
+    sessionId: string;
+    repoPath: string;
+    worktreePath?: string;
+    branchName?: string;
+    prompt: string;
+    onOutput(event: { type: 'stdout' | 'stderr' | 'system'; content: string }): Promise<void>;
+    onExit(event: { exitCode: number; signal?: string }): Promise<void>;
+    externalSessionId: string;
+  }): Promise<RunningAgentProcess>;
 }
 ```
 
 **Why this shape:**
 
 - The orchestrator never talks directly to a specific agent — it goes through the adapter.
-- `CodexAdapter` currently launches `codex exec --ignore-user-config --json --cd <repoPath> -` through `node-pty` by default, using `ARC_CODEX_IGNORE_USER_CONFIG=true` to avoid user-configured MCP/OAuth/plugin side effects in local Phase 3 runs.
+- `CodexAdapter` currently launches `codex exec --ignore-user-config --json --cd <repoPath> -` through `node-pty` by default, uses `codex exec resume --ignore-user-config --json <thread_id> -` for idle follow-up turns, and uses `ARC_CODEX_IGNORE_USER_CONFIG=true` to avoid user-configured MCP/OAuth/plugin side effects in local Phase 3 runs.
 - Adding Claude/Gemini in Phase 6 is "implement the interface, register the adapter," not a refactor.
 
 ---
@@ -173,8 +191,7 @@ SQLite first. Migration to Postgres only if/when concurrency or multi-host requi
 | **GitChangeSummary** | Worktree-scoped snapshot of files changed, +/- counts, status counts, risk flags, and top files |
 | **TestRunSummary** | Configured test command run summary with command id, exit code, status, highlights |
 | **SessionCheckpoint** | Compact frontier snapshot: durable event cursor, worktree/branch/HEAD metadata, pending approval ids, last user/assistant messages, latest diff/test summary ids, schema version, and capture reason |
-
-Potential Phase 4+ sync records are intentionally absent from the Phase 3 schema.
+| **SyncEvent** | Phase 4 provider action idempotency and recovery state for GitHub/Linear sync |
 
 ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 
@@ -192,7 +209,7 @@ ERD: see [`diagrams.md`](diagrams.md#4-database-erd).
 
 Long polling is intentionally **not** the primary mechanism — it is client-initiated and not full duplex, which makes server-push patterns awkward. WebSockets win for this use case. The database, not the socket, is the durable source of truth: `TaskEvent` replays structured lifecycle/approval/diff/test events, and `AgentLog` replays raw terminal output.
 
-DB-backed reconstruction is not a live PTY resume. If an orchestrator process still owns the session's running process, the controller can continue, approve, deny, or stop it. If the process is gone, the controller shows a reconstructed or terminal view from persisted rows and does not imply the hidden agent reasoning stack can be serialized and resumed.
+DB-backed reconstruction is not a live PTY resume. If an orchestrator process still owns the session's running process, the controller can continue, approve, deny, or stop it. When a Codex turn exits successfully, the task moves to `idle` instead of terminal `completed`; follow-up controller input starts a fresh per-turn PTY with `codex exec resume <thread_id>` so the Codex conversation persists without pretending the old process is still alive. If there is no resumable Codex thread, the controller shows a reconstructed or terminal view from persisted rows and does not imply the hidden agent reasoning stack can be serialized and resumed.
 
 ---
 
@@ -232,7 +249,7 @@ Phase 3 emits cleanup-request events but does not auto-remove worktrees. Destruc
 8. **Dormancy** — after 30+ minutes of inactivity, session transitions to `dormant` with a checkpoint; remains visible and resumable.
 9. **Restore** — user clicks Resume from the controller; agent relaunches in the preserved worktree/branch context from the checkpoint.
 10. **Summarize** — `GitChangeSummary` captures diff counts and risk flags; `TestRunSummary` captures configured local test runs.
-11. **Sync** (Phase 4+) — commit, push, open draft PR, update Linear, post Notion summary.
+11. **Sync** — Phase 4 can commit, push, open a draft PR, and update Linear through approval-gated provider actions. Phase 5 adds Notion/Figma/MCP writes.
 12. **Cleanup** (future) — remove worktree only after explicit human-gated cleanup.
 
 Detailed flow: [`diagrams.md`](diagrams.md#2-task-lifecycle-flow).
@@ -282,4 +299,4 @@ See [`diagrams.md`](diagrams.md#7-alternatives-considered) for a comparative dia
 
 The phased plan in the README is more than scheduling — it's a contract about what each phase ships and what it intentionally defers. See [`/.linear` issues](https://linear.app/michaelshuff/project/agents-with-remote-control-mobile-controller-181d4f51202c) for the canonical scope per phase.
 
-The most important deferral: **no external integrations until the local loop is solid**. Phase 4 (GitHub + Linear sync) does not begin until Phases 1-3 have been used end-to-end.
+The most important historical deferral was **no external integrations until the local loop was solid**. That gate has been met for Phases 1-4; the current deferral is Phase 5 external expansion until the Phase 4.5 Tailscale baseline is validated.

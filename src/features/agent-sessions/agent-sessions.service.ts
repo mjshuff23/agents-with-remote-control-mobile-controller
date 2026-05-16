@@ -105,12 +105,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
           worktreePath: launch.worktreePath ?? task.worktreePath ?? undefined,
           branchName: launch.branchName ?? task.branchName ?? undefined,
           prompt,
-          onOutput: async (event) => {
-            await this.appendLog(session.id, event.type, event.content);
-            if (event.type === 'stdout') {
-              await this.handleProtocolOutput(task.id, session.id, event.content);
-            }
-          },
+          onOutput: (event) => this.handleAgentOutputSafely(task.id, session.id, event.type, event.content),
           onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
         });
 
@@ -186,12 +181,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         worktreePath: task.worktreePath ?? undefined,
         branchName: task.branchName ?? undefined,
         prompt: this.buildCooperativePrompt(task),
-        onOutput: async (event) => {
-          await this.appendLog(session.id, event.type, event.content);
-          if (event.type === 'stdout') {
-            await this.handleProtocolOutput(task.id, session.id, event.content);
-          }
-        },
+        onOutput: (event) => this.handleAgentOutputSafely(task.id, session.id, event.type, event.content),
         onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
       });
 
@@ -206,7 +196,6 @@ export class AgentSessionsService implements OnApplicationBootstrap {
         where: { id: session.id },
         data: {
           status: 'running',
-          externalSessionId: runningProcess.externalSessionId,
           startedAt: new Date()
         }
       });
@@ -259,6 +248,14 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     }
     const running = this.runningProcesses.get(session.id);
     if (!running) {
+      if (session.status === 'idle' && session.externalSessionId) {
+        const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+        if (!task) {
+          throw new ProblemException(HttpStatus.NOT_FOUND, 'Task Not Found', `Task "${taskId}" does not exist.`);
+        }
+        await this.resumeIdleSession(task, session, text);
+        return;
+      }
       throw new ProblemException(HttpStatus.CONFLICT, 'Session Not Active', `Session "${session.id}" has no live process.`);
     }
     if (!running.write) {
@@ -388,6 +385,61 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     await currentWrite;
   }
 
+  /** Run output handling defensively because PTY callbacks cannot await async failures. */
+  private async handleAgentOutputSafely(taskId: string, sessionId: string, type: AgentLogType, content: string): Promise<void> {
+    try {
+      await this.handleAgentOutput(taskId, sessionId, type, content);
+    } catch (error) {
+      await this.appendLog(sessionId, 'system', `Output handler error: ${this.errorMessage(error)}`).catch(() => undefined);
+    }
+  }
+
+  /** Persist output, inspect structured Codex events, and route cooperative protocol lines. */
+  private async handleAgentOutput(taskId: string, sessionId: string, type: AgentLogType, content: string): Promise<void> {
+    await this.appendLog(sessionId, type, content);
+    if (type !== 'stdout') {
+      return;
+    }
+
+    await this.captureCodexThreadId(sessionId, content);
+    await this.handleProtocolOutput(taskId, sessionId, content);
+  }
+
+  /** Store Codex's persisted thread id so later user input can resume the conversation. */
+  private async captureCodexThreadId(sessionId: string, content: string): Promise<void> {
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('{')) continue;
+      let event: { type?: string; thread_id?: unknown };
+      try {
+        event = JSON.parse(trimmed) as { type?: string; thread_id?: unknown };
+      } catch {
+        continue;
+      }
+      if (event.type !== 'thread.started' || typeof event.thread_id !== 'string') {
+        continue;
+      }
+      if (!isCodexThreadId(event.thread_id)) {
+        await this.appendLog(sessionId, 'system', 'Ignored invalid Codex thread id from stdout');
+        continue;
+      }
+
+      const result = await this.prisma.agentSession.updateMany({
+        where: {
+          id: sessionId,
+          OR: [
+            { externalSessionId: null },
+            { externalSessionId: event.thread_id }
+          ]
+        },
+        data: { externalSessionId: event.thread_id }
+      });
+      if (result.count === 0) {
+        await this.appendLog(sessionId, 'system', 'Ignored Codex thread id change after session id was captured');
+      }
+    }
+  }
+
   /** Clear per-session in-memory state (sequences, queues, buffers, protocol timeouts). */
   private clearLogState(sessionId: string): void {
     this.nextLogSequences.delete(sessionId);
@@ -440,7 +492,7 @@ export class AgentSessionsService implements OnApplicationBootstrap {
     this.clearSessionApprovalTimeouts(sessionId);
     const current = await this.prisma.agentSession.findFirst({ where: { id: sessionId } });
     const wasStopping = current?.status === 'stopping';
-    const finalSessionStatus = wasStopping ? 'stopped' : exitCode === 0 ? 'completed' : 'failed';
+    const finalSessionStatus = wasStopping ? 'stopped' : exitCode === 0 ? 'idle' : 'failed';
     const finalTaskStatus = finalSessionStatus;
     const message = signal
       ? `Agent process exited with code ${exitCode} and signal ${signal}`
@@ -448,15 +500,16 @@ export class AgentSessionsService implements OnApplicationBootstrap {
 
     await this.appendLog(sessionId, 'system', message);
 
-    void this.checkpoints.captureAtBoundary(sessionId, taskId, 'pre_terminal').catch((err) =>
-      this.appendLog(sessionId, 'system', `Checkpoint capture failed (pre_terminal): ${this.errorMessage(err)}`)
+    const checkpointReason = finalSessionStatus === 'idle' ? 'pre_transition' : 'pre_terminal';
+    void this.checkpoints.captureAtBoundary(sessionId, taskId, checkpointReason).catch((err) =>
+      this.appendLog(sessionId, 'system', `Checkpoint capture failed (${checkpointReason}): ${this.errorMessage(err)}`)
     );
 
     await this.prisma.agentSession.update({
       where: { id: sessionId },
       data: {
         status: finalSessionStatus,
-        completedAt: new Date(),
+        completedAt: finalSessionStatus === 'idle' ? null : new Date(),
         exitCode
       }
     });
@@ -464,13 +517,78 @@ export class AgentSessionsService implements OnApplicationBootstrap {
       where: { id: taskId },
       data: { status: finalTaskStatus }
     });
-    await this.events?.emitCompatibilityEventToTask(taskId, 'task.completed', 'lifecycle', finalTaskStatus === 'failed' ? 'error' : 'info', {
+    await this.events?.emitCompatibilityEventToTask(taskId, finalSessionStatus === 'idle' ? 'task.idle' : 'task.completed', 'lifecycle', finalTaskStatus === 'failed' ? 'error' : 'info', {
       taskId,
       exitCode,
       status: finalTaskStatus,
       signal
     }, { sessionId });
     this.clearLogState(sessionId);
+  }
+
+  /** Resume an idle persisted Codex thread for a new user turn. */
+  private async resumeIdleSession(task: Task, session: AgentSession, text: string): Promise<void> {
+    const adapter = this.agents.getAdapter(task.selectedAgent);
+    if (!adapter.resumeTask) {
+      throw new ProblemException(HttpStatus.CONFLICT, 'Resume Not Supported', `Agent "${task.selectedAgent}" does not support persisted follow-up input.`);
+    }
+
+    this.sessionToTask.set(session.id, task.id);
+    await this.appendLog(session.id, 'system', `Input sent (${text.length} chars)`);
+    await this.updateUserActivity(session.id);
+    await this.prisma.task.update({
+      where: { id: task.id },
+      data: { status: 'running' }
+    });
+    await this.prisma.agentSession.update({
+      where: { id: session.id },
+      data: { status: 'running', completedAt: null }
+    });
+
+    let runningProcess: RunningAgentProcess;
+    try {
+      runningProcess = await adapter.resumeTask({
+        taskId: task.id,
+        sessionId: session.id,
+        repoPath: task.repoPath,
+        worktreePath: task.worktreePath ?? undefined,
+        branchName: task.branchName ?? undefined,
+        externalSessionId: session.externalSessionId!,
+        prompt: text,
+        onOutput: (event) => this.handleAgentOutputSafely(task.id, session.id, event.type, event.content),
+        onExit: async (event) => this.completeFromExit(task.id, session.id, event.exitCode, event.signal)
+      });
+    } catch (error) {
+      const message = this.errorMessage(error);
+      await this.prisma.task.update({
+        where: { id: task.id },
+        data: { status: 'idle' }
+      });
+      await this.prisma.agentSession.update({
+        where: { id: session.id },
+        data: { status: 'idle', completedAt: null, errorMessage: message }
+      });
+      await this.appendLog(session.id, 'system', `Resume failed: ${message}`);
+      this.clearLogState(session.id);
+      throw new ProblemException(HttpStatus.CONFLICT, 'Resume Failed', message);
+    }
+
+    this.runningProcesses.set(session.id, runningProcess);
+    await this.prisma.agentSession.update({
+      where: { id: session.id },
+      data: {
+        status: 'running',
+        externalSessionId: runningProcess.externalSessionId,
+        startedAt: session.startedAt ?? new Date(),
+        completedAt: null,
+        errorMessage: null
+      }
+    });
+
+    void this.checkpoints.captureAtBoundary(session.id, task.id, 'user_turn', {
+      lastUserMessage: text,
+      workerWasLive: true
+    }).catch((err) => this.appendLog(session.id, 'system', `Checkpoint capture failed (user_turn): ${this.errorMessage(err)}`));
   }
 
   /** Mark a session as stopped when no live process is registered. */
@@ -729,4 +847,8 @@ function toRuntimeStatusLabel(status: string): RuntimeStatusLabel {
   if (status === 'failed') return 'failed';
   if (status === 'stopped') return 'stopped';
   return 'active';
+}
+
+function isCodexThreadId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

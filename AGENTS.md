@@ -13,11 +13,12 @@ A local-first orchestration system that lets a human run CLI coding agents from 
 Read these in order:
 
 1. [`README.md`](./README.md) — high-level intent and current phase map
-2. [`PLAN.md`](./PLAN.md) — current Phase 4 runtime contract and smoke tests
-3. [`docs/phase-4-implementation.md`](./docs/phase-4-implementation.md) — active Phase 4 handoff
-4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
-5. [`docs/SAFETY.md`](./docs/SAFETY.md) — what you can and cannot do
-6. [`docs/diagrams.md`](./docs/diagrams.md) — canonical diagrams
+2. [`PLAN.md`](./PLAN.md) — current Phase 4.5 remote-access baseline and smoke tests
+3. [`docs/remote-access.md`](./docs/remote-access.md) — active Phase 4.5 handoff
+4. [`docs/phase-4-implementation.md`](./docs/phase-4-implementation.md) — completed Phase 4 handoff
+5. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design and module boundaries
+6. [`docs/SAFETY.md`](./docs/SAFETY.md) — what you can and cannot do
+7. [`docs/diagrams.md`](./docs/diagrams.md) — canonical diagrams
 
 ---
 
@@ -31,42 +32,32 @@ Linear is the source of truth for phase scope.
 | 2 | [TSH-78](https://linear.app/michaelshuff/issue/TSH-78) | Complete — WebSocket gateway + controller UI |
 | 3 | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | Complete — worktree isolation + approval gates |
 | 3.5 | [TSH-83](https://linear.app/michaelshuff/issue/TSH-83) | Complete — durable replay, checkpoints, reconnect, provider seams |
-| 4 | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | Active frontier — GitHub + Linear issue-to-PR sync |
-| 5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | Deferred — Notion, Figma, controlled MCP sync |
+| 4 | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | Complete — GitHub + Linear issue-to-PR sync |
+| 4.5 | [TSH-111](https://linear.app/michaelshuff/issue/TSH-111) | Active frontier — Tailscale remote-access baseline |
+| 5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | Deferred — Notion, Figma, controlled MCP sync; depends on Phase 4.5 |
 | 6 | [TSH-82](https://linear.app/michaelshuff/issue/TSH-82) | Deferred — multi-agent review workflows |
 
 Do not implement work from a later phase while the active phase is open. If work belongs to a later phase, stop and ask.
 
 ---
 
-## Active Phase 4 scope
+## Active Phase 4.5 scope
 
-Phase 4 connects the local loop to GitHub and Linear:
+Phase 4.5 establishes the private remote-access path that daily mobile approvals depend on:
 
 ```text
-issue -> linked task -> isolated worktree -> branch -> approved commit -> approved push -> draft PR -> Linear sync
+phone browser -> Tailscale private overlay -> Windows host -> WSL2 orchestrator/controller
 ```
 
-Current Phase 4 child tickets:
+Current Phase 4.5 ticket:
 
 | Linear | Focus |
 |---|---|
-| TSH-97 | GitHub access model |
-| TSH-98 | Linear access model + status mapping |
-| TSH-99 | SyncEvent idempotency |
-| TSH-100 | Issue picker + task-linking UX |
-| TSH-101 | Branch naming + worktree lifecycle |
-| TSH-102 | Approved commit flow + signing checks |
-| TSH-103 | Approved push flow + remote protection |
-| TSH-104 | Draft PR creation + generated summary |
-| TSH-105 | Linear-GitHub cross-reference sync |
-| TSH-106 | PR merge detection + Linear completion sync |
-| TSH-107 | Provider adapter seams |
-| TSH-108 | Approval/audit/sync integration |
-| TSH-109 | Mobile sync UI + provider errors |
-| TSH-110 | Provider test matrix + token-gated e2e |
+| TSH-111 | Tailscale remote access baseline and mobile smoke test |
 
-Recommended implementation order: `TSH-107`, `TSH-99`, `TSH-97`, `TSH-98`, `TSH-100`, `TSH-101`, `TSH-108`, `TSH-102`, `TSH-103`, `TSH-104`, `TSH-105`, `TSH-106`, `TSH-109`, `TSH-110`.
+Phase 5 remains blocked until the Tailscale baseline and phone smoke are documented.
+
+Completed Phase 4 child tickets: `TSH-97`, `TSH-98`, `TSH-99`, `TSH-100`, `TSH-101`, `TSH-102`, `TSH-103`, `TSH-104`, `TSH-105`, `TSH-106`, `TSH-107`, `TSH-108`, `TSH-109`, `TSH-110`.
 
 ---
 
@@ -120,6 +111,16 @@ If unsure, ask. The cost of a paused tool call is cheap. The cost of a misclassi
 - No auto-merge.
 - No auto-deploy.
 - No force-push.
+
+## Phase 4.5 remote-access rules
+
+- Tailscale is the default daily remote-access path.
+- `ARC_HOST=0.0.0.0` requires `ARC_ALLOW_PUBLIC_BIND=true`.
+- Public binding is acceptable only behind Tailscale or an equivalent trusted private overlay.
+- Do not configure router port forwarding, public DNS, ngrok, Cloudflare Tunnel, Tailscale Funnel, or public internet exposure for TSH-111.
+- Do not commit real controller secrets, Tailscale IPs, MagicDNS hostnames, tailnet names, auth keys, or personal device metadata.
+- If direct Windows Tailscale IP access to WSL-bound ports fails, document the selected WSL mirrored networking/firewall or scoped `netsh interface portproxy` fix.
+- If using a Windows port proxy, prefer binding the proxy to the Tailscale host IP rather than all interfaces.
 
 ---
 

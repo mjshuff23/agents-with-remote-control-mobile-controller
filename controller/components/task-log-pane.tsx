@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { LogEntry } from '../lib/api';
+import { formatAgentMessage } from './task-log-format';
 
 // Strip ANSI/VT escape codes emitted by the PTY
 const ANSI_RE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g;
@@ -52,8 +53,14 @@ function LogLine({ log }: { log: LogEntry }) {
       }
       case 'item.completed': {
         const item = (event as Extract<CodexEvent, { type: 'item.completed' }>).item;
-        if (item.type === 'agent_message' && item.text) {
-          return <span className="text-white">{item.text}</span>;
+        const agentMessage = formatAgentMessage(item);
+        if (agentMessage) {
+          return (
+            <span>
+              <span className={agentMessage.labelClassName}>{agentMessage.label} </span>
+              <span className="text-white">{agentMessage.text}</span>
+            </span>
+          );
         }
         return <span className="text-gray-600">[{item.type}]</span>;
       }

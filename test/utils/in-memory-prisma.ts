@@ -16,6 +16,7 @@ export interface InMemoryPrisma {
   auditLog: Delegate;
   gitChangeSummary: Delegate;
   testRunSummary: Delegate;
+  syncEvent: Delegate;
   sessionCheckpoint: Delegate;
   taskEvent: Delegate;
   $connect: jest.Mock;
@@ -130,8 +131,9 @@ const matchesWhere = (row: Row, where?: Row): boolean => {
  *
  * @returns A mock Prisma client with delegates for all models
  *          (`task`, `agentSession`, `agentLog`, `approvalRequest`,
- *           `auditLog`, `gitChangeSummary`, `testRunSummary`, `taskEvent`)
- *          plus stubbed `$connect`, `$disconnect`, and `$transaction`.
+ *           `auditLog`, `gitChangeSummary`, `testRunSummary`, `syncEvent`,
+ *           `taskEvent`) plus stubbed `$connect`, `$disconnect`, and
+ *          `$transaction`.
  */
 export const createInMemoryPrisma = (): InMemoryPrisma => {
   const tasks: Row[] = [];
@@ -141,6 +143,7 @@ export const createInMemoryPrisma = (): InMemoryPrisma => {
   const auditLogs: Row[] = [];
   const changeSummaries: Row[] = [];
   const testRuns: Row[] = [];
+  const syncEvents: Row[] = [];
   const checkpoints: Row[] = [];
   const taskEvents: Row[] = [];
 
@@ -227,6 +230,7 @@ export const createInMemoryPrisma = (): InMemoryPrisma => {
     auditLog: createDelegate(auditLogs, 'audit'),
     gitChangeSummary: createDelegate(changeSummaries, 'summary'),
     testRunSummary: createDelegate(testRuns, 'testRun'),
+    syncEvent: createDelegate(syncEvents, 'sync'),
     sessionCheckpoint: createDelegate(checkpoints, 'chkpt'),
     taskEvent: createDelegate(taskEvents, 'event'),
     $connect: jest.fn(),
@@ -245,6 +249,7 @@ export const createInMemoryPrisma = (): InMemoryPrisma => {
       auditLog: createDelegate(auditLogs, 'audit'),
       gitChangeSummary: createDelegate(changeSummaries, 'summary'),
       testRunSummary: createDelegate(testRuns, 'testRun'),
+      syncEvent: createDelegate(syncEvents, 'sync'),
       sessionCheckpoint: createDelegate(checkpoints, 'chkpt'),
       taskEvent: createDelegate(taskEvents, 'event')
     }))

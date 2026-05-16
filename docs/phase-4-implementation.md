@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 4 is the active planning and implementation frontier.
+Phase 4 is complete. Phase 4.5 is the active prerequisite before Phase 5: Tailscale remote access baseline and mobile smoke testing for Linear `TSH-111`.
 
 Completed foundation:
 
@@ -10,12 +10,19 @@ Completed foundation:
 - Phase 2: mobile/web controller + live session UI.
 - Phase 3: worktree isolation, approval gates, diffs, and test execution.
 - Phase 3.5: durable replay, mobile reconnect, checkpoints, dormant sessions, provider-ready seams, and repo hygiene.
+- Phase 4: GitHub + Linear issue-to-PR synchronization loop.
 
 Phase 4 parent:
 
 - Linear: [TSH-80](https://linear.app/michaelshuff/issue/TSH-80)
 - GitHub: [Issue #5](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/5)
 - FigJam: [ARC Phase 4 Issue-to-PR Sync Flow](https://www.figma.com/board/1MVpD1gXJn2n5ieymjh8pO?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=v1%2FFRc5v8Q4bl79msDtKjy0fZTrxcbgb5qvXuCNpH47QLA1wB9TPLnl7Z&request_id=51a668d6-0e7d-4c3d-a2be-a80c604a09ae)
+
+Phase 4.5 remote-access handoff:
+
+- Linear: [TSH-111](https://linear.app/michaelshuff/issue/TSH-111)
+- Canonical docs: [`remote-access.md`](remote-access.md)
+- Blocks: [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) Phase 5 Notion, Figma, and controlled MCP synchronization.
 
 ## Goal
 
