@@ -189,5 +189,6 @@ export function validateEnv(config: RawEnv): Record<string, unknown> {
     ARC_GITHUB_OWNER: readOptionalString(config, 'ARC_GITHUB_OWNER'),
     ARC_GITHUB_REPO: readOptionalString(config, 'ARC_GITHUB_REPO'),
     ARC_LINEAR_TOKEN: readOptionalString(config, 'ARC_LINEAR_TOKEN'),
+    ARC_MCP_REGISTRY_PATH: readOptionalString(config, 'ARC_MCP_REGISTRY_PATH'),
   };
 }

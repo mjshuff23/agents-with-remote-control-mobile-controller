@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "servers": [
+    {
+      "id": "local-docs-reader",
+      "displayName": "Local Documentation Reader",
+      "enabled": true,
+      "transport": {
+        "kind": "stdio",
+        "command": "mcp-server-docs",
+        "args": ["--read-only"],
+        "envAllowlist": []
+      },
+      "permissionLevel": "read_only",
+      "tools": [
+        {
+          "name": "read_file",
+          "description": "Read a file from the declared docs directory.",
+          "risk": "read",
+          "requiresApproval": false
+        },
+        {
+          "name": "list_files",
+          "description": "List files in the declared docs directory.",
+          "risk": "read",
+          "requiresApproval": false
+        }
+      ],
+      "canReadSecrets": false,
+      "createdBy": "config"
+    },
+    {
+      "id": "notion-append",
+      "displayName": "Notion Append-Only Session Summary",
+      "enabled": false,
+      "transport": {
+        "kind": "streamable_http",
+        "url": "http://127.0.0.1:PORT_PLACEHOLDER/mcp",
+        "headersEnvAllowlist": ["NOTION_MCP_AUTH_HEADER"]
+      },
+      "permissionLevel": "append_only",
+      "tools": [
+        {
+          "name": "append_session_summary",
+          "description": "Append a bounded session summary block to the configured project doc.",
+          "risk": "append",
+          "requiresApproval": true
+        },
+        {
+          "name": "read_page_metadata",
+          "description": "Read non-secret page metadata (title, last edited) for configured pages only.",
+          "risk": "read",
+          "requiresApproval": false
+        }
+      ],
+      "canReadSecrets": false,
+      "createdBy": "config"
+    }
+  ]
+}
