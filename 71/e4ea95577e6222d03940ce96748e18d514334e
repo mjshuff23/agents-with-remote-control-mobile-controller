@@ -1,0 +1,26 @@
+src/features/agent-sessions/agent-sessions.service.ts
+  s_6531dc6792e2b8::t_479f30022d89b8 583-584
+controller/app/tasks/[id]/page.tsx
+  s_6531dc6792e2b8::t_10cc64ad89ea34 436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "71e4ea95577e6222d03940ce96748e18d514334e",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_6531dc6792e2b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40160de6-884e-463d-a7e5-0f67cc0688f7",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
