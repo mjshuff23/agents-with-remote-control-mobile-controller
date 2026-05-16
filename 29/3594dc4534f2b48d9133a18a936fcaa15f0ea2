@@ -1,0 +1,57 @@
+docs/ARCHITECTURE.md
+  s_a62b3d19525e7d::t_01e5f19d0de81d 5,13-14
+PLAN.md
+  s_a62b3d19525e7d::t_576058975ef971 1,5-7,24-52,83,118-133,136,139-140,147
+  s_a62b3d19525e7d::t_f0d014b7a5a8ce 205-224
+  s_a62b3d19525e7d::t_bf5a531760cc22 263-267
+controller/.gitignore
+  s_a62b3d19525e7d::t_b5e18dc4c541e5 35
+AGENTS.md
+  s_a62b3d19525e7d::t_5a7647d49a1896 16-21,35-37,44,46,49,52,56-60
+  s_a62b3d19525e7d::t_6ab24902383e5b 115-124
+docs/remote-access.md
+  s_a62b3d19525e7d::t_352a4fd02a356a 3-8,12,14,16-17,19-21,23-24,26,28,30,32-36,38-47,49,51-65,69,71,73-76,78-79,81-83,87,89,92-93,95-96,98-100,103,105-107,109-111,115,117,119-121,123-124,126-129,131,133-134,136-137,139-142,144-145,147,149-199,203,205-206,208-209
+.gitignore
+  s_a62b3d19525e7d::t_fe078fbf8e2074 34
+test/tasks.e2e-spec.ts
+  s_a62b3d19525e7d::t_fe078fbf8e2074 94-109
+test/ws-events.e2e-spec.ts
+  s_a62b3d19525e7d::t_fe078fbf8e2074 165-179
+docs/phase-4-implementation.md
+  s_a62b3d19525e7d::t_742f4db9518a69 5,13,21-25
+.env.example
+  s_a62b3d19525e7d::t_fe078fbf8e2074 3-5
+docs/SAFETY.md
+  s_a62b3d19525e7d::t_5b8be29cf53d3a 163-165,167-169
+docs/diagrams.md
+  s_a62b3d19525e7d::t_d07f048f7ef5a3 15-16,49-51
+test/utils/in-memory-prisma.ts
+  s_a62b3d19525e7d::t_1de601c01c858f 19,134-136,146,233,252
+README.md
+  s_a62b3d19525e7d::t_b828b2572448ac 273,283
+  s_a62b3d19525e7d::t_9de531bfcae2b4 5,13,52,63-71,75,100
+  s_a62b3d19525e7d::t_a3fdf6d02056c4 151-152,176-183,212
+controller/.env.local.example
+  s_a62b3d19525e7d::t_fe078fbf8e2074 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "293594dc4534f2b48d9133a18a936fcaa15f0ea2",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_a62b3d19525e7d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e31ef-7e99-7840-a1b1-ac8e48285f33",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
