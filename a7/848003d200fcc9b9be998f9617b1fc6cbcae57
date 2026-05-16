@@ -1,0 +1,51 @@
+src/mcp/registry/mcp-registry.schema.ts
+  s_6531dc6792e2b8::t_a02fcf8a1e5a20 1-66
+src/mcp/registry/mcp-registry.config.ts
+  s_6531dc6792e2b8::t_880cfe4dc68fd1 1-51
+docs/mcp-controlled-sync.md
+  s_6531dc6792e2b8::t_32bd57b71cdf11 33,49-53
+docs/phase-5-implementation.md
+  s_6531dc6792e2b8::t_a94cf06730c0fd 7-8
+src/mcp/mcp.module.ts
+  s_6531dc6792e2b8::t_f162ffa3bb1975 1-11
+src/app.module.ts
+  s_6531dc6792e2b8::t_d0e32bd3625941 18,36-37
+src/mcp/registry/mcp-registry.service.ts
+  s_6531dc6792e2b8::t_aa231e15ec90ed 1-110,114-115,117-123,125-128,130,132,135-139,141,143-148,150-153,155,157-169,171-173,175-179,181-192,194-204,206-207,209-212,216-218,220-223,225-230,232-235,237-256
+  s_6531dc6792e2b8::t_9a4880d8dd74ae 213-215
+  s_6531dc6792e2b8::t_69358e207d60a6 231,236
+  s_6531dc6792e2b8::t_33747cf5168e38 111-113
+  s_6531dc6792e2b8::t_9713bbd964c254 116,124,129,131,133-134,140,142,149,154,156,170,174,180,193,205,208,219,224
+src/mcp/registry/mcp-registry.integration.spec.ts
+  s_6531dc6792e2b8::t_ad2b99120bf0ac 1-104
+src/config/app-config.service.ts
+  s_6531dc6792e2b8::t_0e2bbabe992819 125-129
+src/mcp/registry/mcp-registry.service.spec.ts
+  s_6531dc6792e2b8::t_644207b7e424a6 1-209,211-216,218-231,254-305
+  s_6531dc6792e2b8::t_2d2f8d258127a1 210,217,232-253
+src/config/env.validation.ts
+  s_6531dc6792e2b8::t_24de0c74a4b38c 192
+arc.mcp.example.json
+  s_6531dc6792e2b8::t_e67f9b914855ac 1-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "a7848003d200fcc9b9be998f9617b1fc6cbcae57",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_6531dc6792e2b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40160de6-884e-463d-a7e5-0f67cc0688f7",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
