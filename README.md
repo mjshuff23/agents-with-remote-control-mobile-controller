@@ -1,8 +1,8 @@
 # Agents With Remote Control Mobile Controller
 
-> Local-first agent orchestration: control CLI coding agents (Codex, Claude Code, Gemini) from your phone, with approval gates, Git worktree isolation, durable reconnect/replay, and human-approved GitHub/Linear sync.
+> Local-first agent orchestration: control CLI coding agents (Codex, Claude Code, Gemini) from your phone, with approval gates, Git worktree isolation, durable reconnect/replay, human-approved GitHub/Linear sync, and now Phase 5 controlled MCP / Notion / Figma synchronization.
 
-**Status:** Phases 1, 2, 3, 3.5, and 4 are complete. Phase 4.5 is the active prerequisite before Phase 5: Tailscale remote access for daily phone approvals outside the home LAN.
+**Status:** Phases 1, 2, 3, 3.5, 4, and 4.5 are complete. **Phase 5 is active:** Notion, Figma/FigJam, and controlled MCP synchronization behind explicit permissions, mobile approval gates, and audit logging.
 
 ---
 
@@ -10,7 +10,7 @@
 
 Run AI coding agents on your PC. Control them from your phone. The agent works in an isolated Git worktree. Risky actions are surfaced as approval cards. Phase 3 made local coding work safe enough to review; Phase 3.5 made long-lived mobile sessions durable enough to reconnect, replay missed events, checkpoint, and restore dormant sessions.
 
-Phase 4 connects that local loop to GitHub and Linear while preserving the human approval gate. Phase 4.5 establishes Tailscale as the default private remote-access path before Phase 5 adds Notion, Figma, and controlled MCP synchronization.
+Phase 4 connects that local loop to GitHub and Linear while preserving the human approval gate. Phase 4.5 established Tailscale as the default private remote-access path for phone approvals outside the home LAN. Phase 5 now adds Notion strategy-doc sync, Figma/FigJam link metadata, and a controlled MCP tool layer with explicit permissions and audit trails.
 
 ## Current implementation scope
 
@@ -60,7 +60,7 @@ Phase 4 connects that local loop to GitHub and Linear while preserving the human
 - PR merge detection and Linear completion sync.
 - Mobile sync UI, provider error surfaces, and token-gated provider e2e tests.
 
-**Phase 4.5 — Active prerequisite**
+**Phase 4.5 — Tailscale remote-access baseline**
 
 - Tailscale remote access baseline for daily phone use outside the home LAN.
 - `ARC_HOST=0.0.0.0` and `ARC_ALLOW_PUBLIC_BIND=true` only behind a trusted private overlay.
@@ -70,11 +70,30 @@ Phase 4 connects that local loop to GitHub and Linear while preserving the human
 
 See [`docs/remote-access.md`](docs/remote-access.md) for the default daily remote-access setup.
 
+**Phase 5 — Active controlled sync expansion**
+
+- Notion strategy doc sync through append-only session summaries.
+- Figma/FigJam URL parsing, read-only metadata, and task/issue link attachments.
+- MCP server registry with declared tools, transports, and permission ceilings.
+- Transport abstractions for stdio, Streamable HTTP, and legacy SSE compatibility.
+- Permission ladder: `read_only`, `append_only`, `write`, and admin blocked/reserved.
+- Mobile approval required for append/write-capable MCP/provider calls.
+- MCP audit log with sanitized previews plus argument/result hashes.
+- Controller surfaces for registry state, pending MCP approvals, audit events, and provider sync status.
+- Repo-local official source snapshot and PR contract for implementation-agent token efficiency.
+
+Phase 5 implementation docs:
+
+- [`docs/phase-5-implementation.md`](docs/phase-5-implementation.md)
+- [`docs/mcp-controlled-sync.md`](docs/mcp-controlled-sync.md)
+- [`docs/phase-5-official-sources.md`](docs/phase-5-official-sources.md)
+- [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)
+
 Deferred until later phases:
 
-- Notion/Figma/MCP writes and controlled tool registry (Phase 5, blocked on the Phase 4.5 remote-access baseline).
 - Multi-agent review and advanced automation (Phase 6).
 - Auto-merge, auto-deploy, or unattended production actions (not currently planned).
+- Figma writes, Notion page replacement/deletion, destructive/admin MCP tools.
 
 ---
 
@@ -96,8 +115,9 @@ It is **not** a mobile IDE. It is **not** a VS Code chat extension. It is a thin
 4. When the agent needs input, approval, or review, it pings your phone.
 5. Reply with free text, structured actions, or approve/deny tool use.
 6. Inspect diff summaries, run configured local tests, and restore/replay long-lived sessions.
-7. In Phase 4, link a task to GitHub/Linear, approve commit/push/PR actions, and sync project state without leaving the phone.
-8. In Phase 4.5, use Tailscale so those approvals keep working from cellular or non-home WiFi.
+7. Link a task to GitHub/Linear, approve commit/push/PR actions, and sync project state without leaving the phone.
+8. Use Tailscale so approvals keep working from cellular or non-home WiFi.
+9. In Phase 5, approve controlled Notion/Figma/MCP sync actions with explicit context and auditability.
 
 ---
 
@@ -118,10 +138,10 @@ flowchart LR
     GH["GitHub"]
     LN["Linear"]
   end
-  subgraph Later["Phase 5+"]
-    NT["Notion"]
-    FG["Figma"]
-    MCP["MCP Servers"]
+  subgraph Controlled["Phase 5 Controlled Sync"]
+    NT["Notion append-only summaries"]
+    FG["Figma/FigJam read-only links"]
+    MCP["MCP registry + permissions + audit"]
   end
   UI <-->|"WebSocket"| Orch
   UI -->|"REST"| Orch
@@ -130,9 +150,9 @@ flowchart LR
   Orch --> DB
   Orch --> GH
   Orch --> LN
-  Orch -. later .-> NT
-  Orch -. later .-> FG
-  Orch -. later .-> MCP
+  Orch --> NT
+  Orch --> FG
+  Orch --> MCP
 ```
 
 Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives considered: [`docs/diagrams.md`](docs/diagrams.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). FigJam companion diagrams are mirrored in [`docs/figma-companion-diagrams.md`](docs/figma-companion-diagrams.md).
@@ -142,44 +162,33 @@ Full architecture, lifecycle, approval-gate state machine, ERD, and alternatives
 ## Phased plan
 
 | Phase | Focus | Linear | GitHub |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **1** | Local orchestrator + single-agent CLI runner | [TSH-77](https://linear.app/michaelshuff/issue/TSH-77) | [#2](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/2) |
 | **2** | Mobile/web controller + live session UI | [TSH-78](https://linear.app/michaelshuff/issue/TSH-78) | [#3](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/3) |
 | **3** | Worktree isolation + approval gates + diffs + tests | [TSH-79](https://linear.app/michaelshuff/issue/TSH-79) | [#4](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/4) |
 | **3.5** | Continuous-agent stabilization, reconnect, checkpointing, package hygiene | [TSH-83](https://linear.app/michaelshuff/issue/TSH-83) | PRs #18, #21, #22, #23 |
 | **4** | GitHub + Linear sync (issue → branch → commit → PR) | [TSH-80](https://linear.app/michaelshuff/issue/TSH-80) | [#5](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/5) |
-| **4.5** | Tailscale private remote-access baseline | [TSH-111](https://linear.app/michaelshuff/issue/TSH-111) | TBD |
-| **5** | Notion + Figma + controlled MCP expansion, depends on Phase 4.5 | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | [#6](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/6) |
+| **4.5** | Tailscale private remote-access baseline | [TSH-111](https://linear.app/michaelshuff/issue/TSH-111) | [#43](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/43) |
+| **5** | Notion + Figma + controlled MCP expansion | [TSH-81](https://linear.app/michaelshuff/issue/TSH-81) | [#6](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/6) |
 | **6** | Multi-agent review + advanced automation | [TSH-82](https://linear.app/michaelshuff/issue/TSH-82) | [#7](https://github.com/mjshuff23/agents-with-remote-control-mobile-controller/issues/7) |
 
 ---
 
-## Phase 4 ticket map
+## Phase 5 ticket map
 
 | Linear | Focus |
-|---|---|
-| [TSH-97](https://linear.app/michaelshuff/issue/TSH-97) | GitHub access model |
-| [TSH-98](https://linear.app/michaelshuff/issue/TSH-98) | Linear access model + status mapping |
-| [TSH-99](https://linear.app/michaelshuff/issue/TSH-99) | SyncEvent idempotency |
-| [TSH-100](https://linear.app/michaelshuff/issue/TSH-100) | Issue picker + task linking UX |
-| [TSH-101](https://linear.app/michaelshuff/issue/TSH-101) | Branch naming + worktree lifecycle |
-| [TSH-102](https://linear.app/michaelshuff/issue/TSH-102) | Approved commit flow + signing checks |
-| [TSH-103](https://linear.app/michaelshuff/issue/TSH-103) | Approved push flow + remote protection |
-| [TSH-104](https://linear.app/michaelshuff/issue/TSH-104) | Draft PR creation + generated summary |
-| [TSH-105](https://linear.app/michaelshuff/issue/TSH-105) | Linear-GitHub cross-reference sync |
-| [TSH-106](https://linear.app/michaelshuff/issue/TSH-106) | PR merge detection + Linear completion sync |
-| [TSH-107](https://linear.app/michaelshuff/issue/TSH-107) | Provider adapter seams |
-| [TSH-108](https://linear.app/michaelshuff/issue/TSH-108) | Approval/audit/sync integration |
-| [TSH-109](https://linear.app/michaelshuff/issue/TSH-109) | Mobile sync UI + provider errors |
-| [TSH-110](https://linear.app/michaelshuff/issue/TSH-110) | Provider test matrix + token-gated e2e |
+| --- | --- |
+| [TSH-112](https://linear.app/michaelshuff/issue/TSH-112) | MCP registry schema and config loader |
+| [TSH-113](https://linear.app/michaelshuff/issue/TSH-113) | MCP transport abstractions for stdio, Streamable HTTP, and legacy SSE |
+| [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | MCP permission ladder and non-escalation rules |
+| [TSH-115](https://linear.app/michaelshuff/issue/TSH-115) | Mobile approval cards for write-capable MCP calls |
+| [TSH-116](https://linear.app/michaelshuff/issue/TSH-116) | MCP audit log model with argument/result hashing |
+| [TSH-117](https://linear.app/michaelshuff/issue/TSH-117) | Notion adapter for project-doc reads and append-only session summaries |
+| [TSH-118](https://linear.app/michaelshuff/issue/TSH-118) | Figma/FigJam adapter for read-only metadata and task link attachments |
+| [TSH-119](https://linear.app/michaelshuff/issue/TSH-119) | Controller surfaces for MCP registry, tool-call audit, and provider sync status |
+| [TSH-120](https://linear.app/michaelshuff/issue/TSH-120) | Phase 5 provider/MCP test matrix, docs bundle, and PR contract |
 
-## Phase 4.5 remote-access baseline
-
-| Linear | Focus |
-|---|---|
-| [TSH-111](https://linear.app/michaelshuff/issue/TSH-111) | Tailscale remote access baseline and mobile smoke test |
-
-Phase 4.5 blocks Phase 5. It does not add cloud deployment, public port forwarding, Tailscale Funnel, push notifications, multi-agent review, or MCP registry behavior.
+Recommended order: registry → transports → permission ladder → mobile approvals → audit log → Notion → Figma → controller surfaces → docs/test contract hardening.
 
 ---
 
@@ -195,6 +204,7 @@ Phase 4.5 blocks Phase 5. It does not add cloud deployment, public port forwardi
 - `node-pty` for wrapping CLI agents
 - Git worktree operations and cooperative approval gates
 - Provider seams for GitHub/Linear in Phase 4
+- Controlled MCP, Notion, and Figma/FigJam seams in Phase 5
 
 **Frontend (controller)**
 
@@ -202,7 +212,7 @@ Phase 4.5 blocks Phase 5. It does not add cloud deployment, public port forwardi
 - Tailwind CSS
 - socket.io-client
 - virtualized log rendering
-- local LAN auth via `CONTROLLER_SECRET`
+- local/private-overlay auth via `CONTROLLER_SECRET`
 
 **Runtime**
 
@@ -220,8 +230,8 @@ Three-tier classification on every requested action:
 | Tier | Examples | Behavior |
 | --- | --- | --- |
 | **SAFE** | Read repo, inspect git, run tests, summarize, plan | Auto-allow, log only |
-| **NEEDS APPROVAL** | Edit files, install, migrate, branch, commit, push, open PR, external sync, MCP write tools | Ping phone, wait for human |
-| **BLOCKED BY DEFAULT** | Read `.env`/secrets, force push, prod deploy, modify auth, exfiltrate repo, modify global system config, run unknown shell scripts | Refuse outright, log event |
+| **NEEDS APPROVAL** | Edit files, install, migrate, branch, commit, push, open PR, external sync, MCP append/write tools | Ping phone, wait for human |
+| **BLOCKED BY DEFAULT** | Read `.env`/secrets, force push, prod deploy, modify auth, exfiltrate repo, destructive/admin MCP tools, modify global system config, run unknown shell scripts | Refuse outright, log event |
 
 Every approval and denial is recorded in an audit log. Full taxonomy and rationale: [`docs/SAFETY.md`](docs/SAFETY.md).
 
@@ -270,7 +280,26 @@ The controller proxies REST calls through its Next.js server so `CONTROLLER_SECR
 
 **Same network:** set `ARC_HOST=0.0.0.0` and `ARC_ALLOW_PUBLIC_BIND=true` in `.env`, update `controller/.env.local` with your LAN IP, and open `http://<LAN-IP>:3001` on your phone.
 
-**Outside your network:** use the Tailscale setup in [`docs/remote-access.md`](docs/remote-access.md). This is the default daily setup for Phase 4.5 and the prerequisite before Phase 5 external integrations.
+**Outside your network:** use the Tailscale setup in [`docs/remote-access.md`](docs/remote-access.md). This is the default daily setup for Phase 5 approvals and controlled external sync.
+
+---
+
+## Phase 5 PR gates
+
+Every Phase 5 implementation PR must include exact commands run and results:
+
+```bash
+pnpm install
+pnpm audit --audit-level=low
+pnpm typecheck
+pnpm test
+pnpm test:e2e
+pnpm lint:md
+pnpm --filter controller typecheck
+pnpm --filter controller build
+```
+
+See [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) for the full PR contract.
 
 ---
 
@@ -281,6 +310,8 @@ The controller proxies REST calls through its Next.js server so `CONTROLLER_SECR
 - **Notion strategy doc:** <https://www.notion.so/35bc2ea5f18f8186b134efa7759a19e6>
 - **Phase 4 handoff:** [`docs/phase-4-implementation.md`](docs/phase-4-implementation.md)
 - **Remote access:** [`docs/remote-access.md`](docs/remote-access.md)
+- **Phase 5 blueprint:** [`docs/phase-5-implementation.md`](docs/phase-5-implementation.md)
+- **Controlled MCP sync:** [`docs/mcp-controlled-sync.md`](docs/mcp-controlled-sync.md)
 
 ---
 
