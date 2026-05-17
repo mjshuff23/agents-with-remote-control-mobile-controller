@@ -48,7 +48,7 @@ Runtime discovery can confirm or narrow capabilities, but it cannot expand them.
 
 ### Config file
 
-The registry reads `arc.mcp.json` from the repo root by default. Override with `ARC_MCP_REGISTRY_PATH`. If the file is absent or the env var is unset, the server starts with an empty registry (MCP disabled, no startup failure). A malformed file or a Phase-5 policy violation (admin permission, blocked tool risk, `canReadSecrets: true`) throws at load time.
+The registry reads `arc.mcp.json` from the repo root by default. Override with `ARC_MCP_REGISTRY_PATH`. If the resolved file is absent, the server starts with an empty registry (MCP disabled, no startup failure). A malformed file or a Phase-5 policy violation (admin permission, blocked tool risk, `canReadSecrets: true`) throws at load time.
 
 See `arc.mcp.example.json` for a placeholder-safe example with stdio and Streamable HTTP servers.
 

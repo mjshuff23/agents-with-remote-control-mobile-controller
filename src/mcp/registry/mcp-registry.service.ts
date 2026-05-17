@@ -40,9 +40,11 @@ export class McpRegistryService {
     let fileStat: Awaited<ReturnType<typeof stat>>;
     try {
       fileStat = await stat(resolvedPath);
-    } catch {
-      // File does not exist — MCP is simply unconfigured; start without it.
-      return [];
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      throw error;
     }
 
     if (
@@ -101,8 +103,14 @@ export class McpRegistryService {
     }
 
     const normalized: McpServerRegistration[] = [];
+    const seenIds = new Set<string>();
     for (let i = 0; i < config.servers.length; i++) {
-      normalized.push(this.validateServer(config.servers[i], i));
+      const server = this.validateServer(config.servers[i], i);
+      if (seenIds.has(server.id)) {
+        throw new Error(`MCP registry has duplicate server id at index ${i}`);
+      }
+      seenIds.add(server.id);
+      normalized.push(server);
     }
     return normalized;
   }
@@ -182,9 +190,9 @@ export class McpRegistryService {
       return {
         kind: 'stdio',
         command: (raw.command as string).trim(),
-        args: Array.isArray(raw.args) ? (raw.args as string[]) : undefined,
+        args: this.readOptionalStringArray(raw.args, 'args', serverIndex),
         cwd: typeof raw.cwd === 'string' ? raw.cwd : undefined,
-        envAllowlist: Array.isArray(raw.envAllowlist) ? (raw.envAllowlist as string[]) : undefined
+        envAllowlist: this.readOptionalStringArray(raw.envAllowlist, 'envAllowlist', serverIndex)
       };
     }
 
@@ -195,14 +203,22 @@ export class McpRegistryService {
       return {
         kind,
         url: (raw.url as string).trim(),
-        headersEnvAllowlist: Array.isArray(raw.headersEnvAllowlist)
-          ? (raw.headersEnvAllowlist as string[])
-          : undefined
+        headersEnvAllowlist: this.readOptionalStringArray(raw.headersEnvAllowlist, 'headersEnvAllowlist', serverIndex)
       };
     }
 
     // TypeScript exhaustiveness guard — unreachable at runtime
     throw new Error(`MCP server at index ${serverIndex} has unhandled transport.kind`);
+  }
+
+  private readOptionalStringArray(value: unknown, fieldName: string, serverIndex: number): string[] | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    if (!Array.isArray(value) || value.some((el) => typeof el !== 'string')) {
+      throw new Error(`MCP server at index ${serverIndex} field "${fieldName}" must be an array of strings`);
+    }
+    return value as string[];
   }
 
   private validateTools(rawTools: unknown[], serverIndex: number): McpToolDeclaration[] {
@@ -242,12 +258,8 @@ export class McpRegistryService {
         description: typeof raw.description === 'string' ? raw.description : undefined,
         risk: risk as McpToolDeclaration['risk'],
         requiresApproval: raw.requiresApproval === true,
-        allowedArgumentPaths: Array.isArray(raw.allowedArgumentPaths)
-          ? (raw.allowedArgumentPaths as string[])
-          : undefined,
-        blockedArgumentPaths: Array.isArray(raw.blockedArgumentPaths)
-          ? (raw.blockedArgumentPaths as string[])
-          : undefined
+        allowedArgumentPaths: this.readOptionalStringArray(raw.allowedArgumentPaths, 'allowedArgumentPaths', serverIndex),
+        blockedArgumentPaths: this.readOptionalStringArray(raw.blockedArgumentPaths, 'blockedArgumentPaths', serverIndex)
       });
     }
 

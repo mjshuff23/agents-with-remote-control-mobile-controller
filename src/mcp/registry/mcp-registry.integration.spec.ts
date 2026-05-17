@@ -94,11 +94,8 @@ describe('McpRegistryService (integration)', () => {
 
     const service = new McpRegistryService(makeFakeConfig(dest));
     await expect(service.loadAll()).rejects.toThrow('admin');
-    // The error must never echo the raw id or secret-like content
-    try {
-      await service.loadAll();
-    } catch (err) {
-      expect((err as Error).message).not.toContain(secretLikeValue);
-    }
+    await expect(service.loadAll()).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining(secretLikeValue) })
+    );
   });
 });

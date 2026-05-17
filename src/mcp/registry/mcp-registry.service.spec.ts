@@ -63,7 +63,7 @@ describe('McpRegistryService', () => {
 
   it('returns empty array when mcpRegistryPath is undefined', async () => {
     const noPathService = new McpRegistryService(
-      { mcpRegistryPath: undefined, repoPath: '/' } as unknown as AppConfigService
+      { mcpRegistryPath: undefined, repoPath: undefined } as unknown as AppConfigService
     );
     await expect(noPathService.loadAll()).resolves.toEqual([]);
   });
@@ -191,6 +191,14 @@ describe('McpRegistryService', () => {
   // Tool declarations
   // -------------------------------------------------------------------------
 
+  it('rejects duplicate server ids', async () => {
+    await writeRegistry(tmp, [
+      validServer({ id: 'dup-server' }),
+      validServer({ id: 'dup-server' })
+    ]);
+    await expect(service.loadAll()).rejects.toThrow('duplicate');
+  });
+
   it('rejects duplicate tool names within a server', async () => {
     await writeRegistry(tmp, [
       validServer({
@@ -242,15 +250,15 @@ describe('McpRegistryService', () => {
   });
 
   it('does not echo tool name in blocked-risk error messages', async () => {
+    expect.assertions(2);
     const secretLikeName = 'sk-secret-tool-key-99999';
     await writeRegistry(tmp, [
       validServer({ tools: [{ name: secretLikeName, risk: 'destructive', requiresApproval: true }] })
     ]);
-    try {
-      await service.loadAll();
-    } catch (err) {
-      expect((err as Error).message).not.toContain(secretLikeName);
-    }
+    await expect(service.loadAll()).rejects.toThrow('blocked in Phase 5');
+    await expect(service.loadAll()).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining(secretLikeName) })
+    );
   });
 
   // -------------------------------------------------------------------------
