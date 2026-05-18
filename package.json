@@ -69,7 +69,10 @@
     "rootDir": ".",
     "testRegex": "src/.*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.ts$": "ts-jest"
+    },
+    "moduleNameMapper": {
+      "^pkce-challenge$": "<rootDir>/__mocks__/pkce-challenge.js"
     },
     "collectCoverageFrom": [
       "src/**/*.(t|j)s"

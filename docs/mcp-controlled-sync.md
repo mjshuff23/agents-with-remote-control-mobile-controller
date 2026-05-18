@@ -54,7 +54,7 @@ See `arc.mcp.example.json` for a placeholder-safe example with stdio and Streama
 
 ## Transports
 
-The Phase 5 transport boundary is implemented in `src/mcp/transport/` with `@modelcontextprotocol/sdk@1.29.0`. It supports SDK-backed connection and `listTools` handshakes for registry-declared MCP servers, but `callTool` is intentionally blocked until the approval and audit layers land in later Phase 5 tickets.
+The Phase 5 transport boundary is implemented in `src/mcp/transport/` with `@modelcontextprotocol/sdk@1.29.0`. It supports SDK-backed connection, `listTools`, and `callTool` for registry-declared MCP servers. `callTool` is gated by the permission ladder and approval flow (TSH-114/TSH-115); transport execution is only reached after `McpPermissionService.assess()` returns `auto_allow` or after an `approved` human decision via `McpToolCallService`.
 
 All transport implementations normalize failures into safe categories and must avoid logging raw request headers, child-process env, or environment-derived values.
 

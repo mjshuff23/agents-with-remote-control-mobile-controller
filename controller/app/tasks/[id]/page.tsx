@@ -489,6 +489,10 @@ export default function TaskDetailPage() {
           {pendingApprovals.map((approval) => {
             const command = parseJson<string[]>(approval.commandJson, []);
             const files = parseJson<string[]>(approval.filesJson, []);
+            const isMcp = approval.actionType === 'mcp.tool_call';
+            const mcpCtx = isMcp
+              ? parseJson<{ mcpServerId?: string; mcpServerDisplayName?: string; mcpToolName?: string; permissionLevel?: string; toolRisk?: string }>(approval.expectedEffect, {})
+              : null;
             const isResolving = pendingApprovalActionIds.has(approval.id);
             return (
               <div key={approval.id} className="border border-amber-200 bg-white rounded-lg p-3 space-y-2">
@@ -502,8 +506,18 @@ export default function TaskDetailPage() {
                   </span>
                 </div>
                 {approval.rationale && <p className="text-xs text-gray-600">{approval.rationale}</p>}
-                {command.length > 0 && <p className="text-xs font-mono text-gray-700 bg-gray-100 rounded px-2 py-1 break-all">{command.join(' ')}</p>}
-                {files.length > 0 && <p className="text-xs text-gray-500 truncate">{files.slice(0, 4).join(', ')}</p>}
+                {isMcp && mcpCtx ? (
+                  <div className="text-xs bg-amber-50 border border-amber-100 rounded px-2 py-1 space-y-0.5">
+                    <p className="font-mono text-gray-700"><span className="text-amber-700">server</span> {mcpCtx.mcpServerDisplayName ?? mcpCtx.mcpServerId}</p>
+                    <p className="font-mono text-gray-700"><span className="text-amber-700">tool</span> {mcpCtx.mcpToolName}</p>
+                    <p className="font-mono text-gray-700"><span className="text-amber-700">permission</span> {mcpCtx.permissionLevel} · <span className="text-amber-700">risk</span> {mcpCtx.toolRisk}</p>
+                  </div>
+                ) : (
+                  <>
+                    {command.length > 0 && <p className="text-xs font-mono text-gray-700 bg-gray-100 rounded px-2 py-1 break-all">{command.join(' ')}</p>}
+                    {files.length > 0 && <p className="text-xs text-gray-500 truncate">{files.slice(0, 4).join(', ')}</p>}
+                  </>
+                )}
                 <textarea
                   value={denyMessages[approval.id] ?? ''}
                   onChange={(e) => setDenyMessages((prev) => ({ ...prev, [approval.id]: e.target.value }))}
