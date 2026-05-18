@@ -11,6 +11,7 @@ import { McpRegistryService } from '../registry/mcp-registry.service';
 import { McpPermissionService } from '../permissions/mcp-permission.service';
 import { McpTransportFactory } from '../transport/mcp-transport.factory';
 import { AuditLogService } from '../../features/audit/audit-log.service';
+import { McpAuditService } from '../audit/mcp-audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../events/events.gateway';
 import { McpToolCallService } from './mcp-tool-call.service';
@@ -25,6 +26,10 @@ function makeFakeConfig(registryPath: string): AppConfigService {
 
 function makeAudit(): jest.Mocked<AuditLogService> {
   return { append: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<AuditLogService>;
+}
+
+function makeMcpAudit(): jest.Mocked<McpAuditService> {
+  return { record: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<McpAuditService>;
 }
 
 function makeEvents(): jest.Mocked<EventsGateway> {
@@ -87,12 +92,14 @@ describe('McpToolCallService (integration)', () => {
   let tmp: string;
   let registryPath: string;
   let audit: jest.Mocked<AuditLogService>;
+  let mcpAudit: jest.Mocked<McpAuditService>;
   let events: jest.Mocked<EventsGateway>;
 
   beforeEach(async () => {
     tmp = await mkdtemp(path.join(os.tmpdir(), 'arc-mcp-toolcall-int-'));
     registryPath = path.join(tmp, 'arc.mcp.json');
     audit = makeAudit();
+    mcpAudit = makeMcpAudit();
     events = makeEvents();
   });
 
@@ -105,7 +112,7 @@ describe('McpToolCallService (integration)', () => {
     const config = makeFakeConfig(registryPath);
     const registry = new McpRegistryService(config);
     const permission = new McpPermissionService(registry, audit, prisma);
-    return new McpToolCallService(permission, registry, transport, prisma, audit, events, config);
+    return new McpToolCallService(permission, registry, transport, prisma, mcpAudit, events, config);
   };
 
   // -------------------------------------------------------------------------
@@ -212,8 +219,8 @@ describe('McpToolCallService (integration)', () => {
 
     await service.execute({ taskId: 'task-1', sessionId: 'session-1', serverId: 'git-server', toolName: 'commit_files', args: {} });
 
-    expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'mcp.approval_resolved', decision: 'expired' })
+    expect(mcpAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'expired' })
     );
   });
 

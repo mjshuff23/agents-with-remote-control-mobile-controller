@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 import { McpRegistryService } from '../registry/mcp-registry.service';
 import { McpPermissionService } from '../permissions/mcp-permission.service';
 import type { McpTransportFactory } from '../transport/mcp-transport.factory';
-import { AuditLogService } from '../../features/audit/audit-log.service';
+import { McpAuditService } from '../audit/mcp-audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../events/events.gateway';
 import { AppConfigService } from '../../config/app-config.service';
@@ -90,8 +90,8 @@ function makeEvents(): jest.Mocked<EventsGateway> {
   return { emitEnvelopeToTask: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<EventsGateway>;
 }
 
-function makeAudit(): jest.Mocked<AuditLogService> {
-  return { append: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<AuditLogService>;
+function makeMcpAudit(): jest.Mocked<McpAuditService> {
+  return { record: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<McpAuditService>;
 }
 
 function makeConfig(timeoutMs = 60000): jest.Mocked<AppConfigService> {
@@ -103,7 +103,7 @@ function makeService(overrides: {
   registry?: jest.Mocked<McpRegistryService>;
   transport?: jest.Mocked<McpTransportFactory>;
   prisma?: jest.Mocked<PrismaService>;
-  audit?: jest.Mocked<AuditLogService>;
+  mcpAudit?: jest.Mocked<McpAuditService>;
   events?: jest.Mocked<EventsGateway>;
   config?: jest.Mocked<AppConfigService>;
 } = {}): { service: McpToolCallService; mocks: Required<typeof overrides> } {
@@ -112,7 +112,7 @@ function makeService(overrides: {
     registry: overrides.registry ?? makeRegistry(),
     transport: overrides.transport ?? makeTransport(),
     prisma: overrides.prisma ?? makePrisma(),
-    audit: overrides.audit ?? makeAudit(),
+    mcpAudit: overrides.mcpAudit ?? makeMcpAudit(),
     events: overrides.events ?? makeEvents(),
     config: overrides.config ?? makeConfig()
   };
@@ -121,7 +121,7 @@ function makeService(overrides: {
     mocks.registry,
     mocks.transport,
     mocks.prisma,
-    mocks.audit,
+    mocks.mcpAudit,
     mocks.events,
     mocks.config
   );
@@ -401,8 +401,7 @@ describe('McpToolCallService', () => {
       }
     } as unknown as jest.Mocked<PrismaService>;
 
-    const { service: s1 } = makeService({ prisma });
-    const { service: s2 } = makeService({ prisma });
+    const { service: s1 } = makeService({ prisma }), { service: s2 } = makeService({ prisma });
 
     await s1.execute({ ...BASE_REQUEST, args: { a: 1, b: 2 } });
     await s2.execute({ ...BASE_REQUEST, args: { b: 2, a: 1 } });
@@ -430,47 +429,83 @@ describe('McpToolCallService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 11. Audit record written for approval creation and outcome
+  // 11. McpAuditService.record called at terminal branches (TSH-116)
   // -------------------------------------------------------------------------
 
-  it('writes an audit record when the approval card is created', async () => {
+  it('calls mcpAudit.record when approval is created and resolved', async () => {
     const { service, mocks } = makeService();
 
     await service.execute(BASE_REQUEST);
 
-    expect(mocks.audit.append).toHaveBeenCalledWith(
+    expect(mocks.mcpAudit.record).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'mcp.approval_requested',
-        actionType: 'mcp.tool_call',
+        outcome: 'approved',
         taskId: 'task-1'
       })
     );
   });
 
-  it('writes an audit record for the approval decision outcome', async () => {
-    const { service, mocks } = makeService();
-
-    await service.execute(BASE_REQUEST);
-
-    expect(mocks.audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'mcp.approval_resolved',
-        decision: 'approved'
-      })
-    );
-  });
-
-  it('writes a denied audit record when approval is denied', async () => {
+  it('calls mcpAudit.record with denied outcome when approval is denied', async () => {
     const prisma = makePrisma('approval-1', 'denied');
     const { service, mocks } = makeService({ prisma });
 
     await service.execute(BASE_REQUEST);
 
-    expect(mocks.audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'mcp.approval_resolved',
-        decision: 'denied'
-      })
+    expect(mocks.mcpAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'denied' })
     );
+  });
+
+  it('calls mcpAudit.record with blocked outcome for blocked decisions', async () => {
+    const decision = makeDecision({ decision: 'blocked', reasonCode: 'permission_ceiling_exceeded' });
+    const { service, mocks } = makeService({ permission: makePermission(decision) });
+
+    await service.execute(BASE_REQUEST);
+
+    expect(mocks.mcpAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'blocked' })
+    );
+  });
+
+  it('calls mcpAudit.record with auto_allow outcome for read tools', async () => {
+    const decision = makeDecision({ decision: 'auto_allow', reasonCode: 'auto_allow_read', toolName: 'read_doc', toolRisk: 'read', ruleMatched: 'read_tool_auto_allow' });
+    const { service, mocks } = makeService({ permission: makePermission(decision) });
+
+    await service.execute({ ...BASE_REQUEST, toolName: 'read_doc' });
+
+    expect(mocks.mcpAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'auto_allow' })
+    );
+  });
+
+  it('calls mcpAudit.record with failed outcome when transport throws', async () => {
+    const decision = makeDecision({ decision: 'auto_allow', reasonCode: 'auto_allow_read', toolName: 'read_doc', toolRisk: 'read', ruleMatched: 'read_tool_auto_allow' });
+    const failingTransport = {
+      create: jest.fn().mockReturnValue({
+        connect: jest.fn().mockRejectedValue(new Error('connection refused')),
+        callTool: jest.fn(),
+        close: jest.fn().mockResolvedValue(undefined)
+      })
+    } as unknown as jest.Mocked<McpTransportFactory>;
+    const { service, mocks } = makeService({ permission: makePermission(decision), transport: failingTransport });
+
+    const result = await service.execute({ ...BASE_REQUEST, toolName: 'read_doc' });
+
+    expect(result.outcome).toBe('failed');
+    expect(mocks.mcpAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'failed', errorCategory: 'transport_error' })
+    );
+  });
+
+  it('mcpAudit.record includes startedAt', async () => {
+    const { service, mocks } = makeService();
+    const before = Date.now();
+    await service.execute(BASE_REQUEST);
+    const after = Date.now();
+
+    const call = (mocks.mcpAudit.record as jest.Mock).mock.calls[0][0];
+    expect(call.startedAt).toBeInstanceOf(Date);
+    expect(call.startedAt.getTime()).toBeGreaterThanOrEqual(before - 50);
+    expect(call.startedAt.getTime()).toBeLessThanOrEqual(after + 50);
   });
 });

@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AuditLogService } from '../../features/audit/audit-log.service';
 import { EventsGateway } from '../../events/events.gateway';
 import { AppConfigService } from '../../config/app-config.service';
 import { McpPermissionService } from '../permissions/mcp-permission.service';
@@ -9,6 +8,8 @@ import { McpTransportFactory } from '../transport/mcp-transport.factory';
 import { McpTransportClient } from '../transport/mcp-transport.types';
 import { sanitizeToolArguments } from '../permissions/mcp-permission.policy';
 import { buildMcpApprovalData } from './mcp-approval.mapper';
+import { McpAuditService } from '../audit/mcp-audit.service';
+import type { McpAuditErrorCategory, McpAuditOutcome } from '../audit/mcp-audit.types';
 
 export interface McpToolCallRequest {
   taskId: string;
@@ -18,7 +19,7 @@ export interface McpToolCallRequest {
   args: Record<string, unknown>;
 }
 
-export type McpToolCallOutcome = 'auto_allow' | 'blocked' | 'approved' | 'denied' | 'expired';
+export type McpToolCallOutcome = 'auto_allow' | 'blocked' | 'approved' | 'denied' | 'expired' | 'failed';
 
 export interface McpToolCallResult {
   outcome: McpToolCallOutcome;
@@ -31,17 +32,16 @@ export interface McpToolCallResult {
  * Orchestrates the full MCP tool-call pipeline:
  *
  *   1. Assess permission via McpPermissionService (TSH-114).
- *   2a. blocked   → return immediately, no ApprovalRequest created.
- *   2b. auto_allow → execute transport directly (read tools only).
+ *   2a. blocked        → return immediately, no ApprovalRequest created.
+ *   2b. auto_allow     → execute transport directly (read tools only).
  *   2c. needs_approval → create ApprovalRequest, emit approval card, poll for decision.
  *        approved  → execute transport, return result.
  *        denied    → return denied, transport never called.
  *        expired   → return expired, transport never called.
  *
- * This service is the bridge between the classifier (McpPermissionService) and
- * the approval lifecycle. It uses PrismaService directly so that commandJson /
- * filesJson fingerprints match exactly the format written by McpPermissionService,
- * preserving the denied-replay guard introduced in TSH-114.
+ * McpAuditService.record() is called at every terminal branch (TSH-116).
+ * The two legacy audit.append() calls have been replaced by structured McpAuditLog
+ * rows. AuditLogService is no longer injected here — McpAuditService owns the shadow.
  */
 @Injectable()
 export class McpToolCallService {
@@ -50,7 +50,7 @@ export class McpToolCallService {
     private readonly registry: McpRegistryService,
     private readonly transport: McpTransportFactory,
     private readonly prisma: PrismaService,
-    private readonly audit: AuditLogService,
+    private readonly mcpAudit: McpAuditService,
     private readonly events: EventsGateway,
     private readonly config: AppConfigService
   ) {}
@@ -58,21 +58,67 @@ export class McpToolCallService {
   async execute(request: McpToolCallRequest): Promise<McpToolCallResult> {
     const { taskId, sessionId, serverId, toolName, args } = request;
     const sanitizedArgs = sanitizeToolArguments(args);
+    const startedAt = new Date();
 
     const decision = await this.permission.assess(serverId, toolName, args, { taskId, sessionId });
 
     if (decision.decision === 'blocked') {
+      await this.mcpAudit.record({
+        taskId,
+        sessionId,
+        serverId,
+        serverDisplayName: serverId, // display name requires registry lookup; use serverId as fallback for blocked path
+        toolName,
+        permissionLevel: decision.declaredPermission,
+        toolRisk: decision.toolRisk ?? undefined,
+        outcome: 'blocked',
+        args,
+        startedAt,
+        finishedAt: new Date(),
+        errorCategory: undefined
+      });
       return { outcome: 'blocked', error: decision.reasonCode };
     }
 
     if (decision.decision === 'auto_allow') {
       const execResult = await this.callTransport(serverId, toolName, args);
-      return { outcome: 'auto_allow', ...execResult };
+      const outcome: McpAuditOutcome = execResult.error ? 'failed' : 'auto_allow';
+      const errorCategory = execResult.errorCategory;
+      await this.mcpAudit.record({
+        taskId,
+        sessionId,
+        serverId,
+        serverDisplayName: serverId,
+        toolName,
+        permissionLevel: decision.declaredPermission,
+        toolRisk: decision.toolRisk ?? undefined,
+        outcome,
+        args,
+        result: execResult.toolResult,
+        startedAt,
+        finishedAt: new Date(),
+        errorCategory
+      });
+      return { outcome, ...{ toolResult: execResult.toolResult, error: execResult.error } };
     }
 
     // needs_approval: create the approval card and wait for a human decision.
     const server = await this.registry.findServer(serverId);
     if (!server) {
+      await this.mcpAudit.record({
+        taskId,
+        sessionId,
+        serverId,
+        serverDisplayName: serverId,
+        toolName,
+        permissionLevel: decision.declaredPermission,
+        toolRisk: decision.toolRisk ?? undefined,
+        outcome: 'blocked',
+        args,
+        startedAt,
+        finishedAt: new Date(),
+        errorCategory: undefined
+      });
       return { outcome: 'blocked', error: 'server_not_found' };
     }
 
@@ -90,44 +136,52 @@ export class McpToolCallService {
       }
     });
 
-    await this.audit.append({
-      taskId,
-      sessionId,
-      approvalRequestId: approval.id,
-      kind: 'mcp.approval_requested',
-      actionType: 'mcp.tool_call',
-      riskLevel: decision.toolRisk ?? undefined,
-      ruleMatched: decision.ruleMatched,
-      message: `MCP approval requested: ${server.displayName}:${toolName}`,
-      metadata: { serverId, toolName, sanitizedArgs }
-    });
-
     await this.events.emitEnvelopeToTask(taskId, 'approval.requested', 'approval', 'warn', approval, {
       sessionId,
       correlationId: approvalData.actionRequestId
     });
 
     const resolved = await this.pollForDecision(approval.id, expiresAt);
-    const outcome = resolved.status === 'approved' ? 'approved' : resolved.status === 'expired' ? 'expired' : 'denied';
+    const approvalOutcome = resolved.status === 'approved' ? 'approved' : resolved.status === 'expired' ? 'expired' : 'denied';
 
-    await this.audit.append({
-      taskId,
-      sessionId,
-      approvalRequestId: approval.id,
-      kind: 'mcp.approval_resolved',
-      actionType: 'mcp.tool_call',
-      riskLevel: decision.toolRisk ?? undefined,
-      ruleMatched: decision.ruleMatched,
-      decision: outcome,
-      message: `MCP approval ${outcome}: ${server.displayName}:${toolName}`
-    });
-
-    if (outcome !== 'approved') {
-      return { outcome, approvalId: approval.id };
+    if (approvalOutcome !== 'approved') {
+      await this.mcpAudit.record({
+        taskId,
+        sessionId,
+        approvalRequestId: approval.id,
+        serverId,
+        serverDisplayName: server.displayName,
+        toolName,
+        permissionLevel: decision.declaredPermission,
+        toolRisk: decision.toolRisk ?? undefined,
+        outcome: approvalOutcome,
+        args,
+        startedAt,
+        finishedAt: new Date()
+      });
+      return { outcome: approvalOutcome, approvalId: approval.id };
     }
 
     const execResult = await this.callTransport(serverId, toolName, args);
-    return { outcome: 'approved', approvalId: approval.id, ...execResult };
+    const finalOutcome: McpAuditOutcome = execResult.error ? 'failed' : 'approved';
+    await this.mcpAudit.record({
+      taskId,
+      sessionId,
+      approvalRequestId: approval.id,
+      serverId,
+      serverDisplayName: server.displayName,
+      toolName,
+      permissionLevel: decision.declaredPermission,
+      toolRisk: decision.toolRisk ?? undefined,
+      outcome: finalOutcome,
+      args,
+      result: execResult.toolResult,
+      startedAt,
+      finishedAt: new Date(),
+      errorCategory: execResult.errorCategory
+    });
+
+    return { outcome: finalOutcome, approvalId: approval.id, ...{ toolResult: execResult.toolResult, error: execResult.error } };
   }
 
   /** Poll prisma until the approval reaches a terminal status or the deadline passes. */
@@ -162,10 +216,10 @@ export class McpToolCallService {
     serverId: string,
     toolName: string,
     args: Record<string, unknown>
-  ): Promise<{ toolResult?: unknown; error?: string }> {
+  ): Promise<{ toolResult?: unknown; error?: string; errorCategory?: McpAuditErrorCategory }> {
     const server = await this.registry.findServer(serverId);
     if (!server) {
-      return { error: 'server_not_found' };
+      return { error: 'server_not_found', errorCategory: 'unknown' };
     }
     let client: McpTransportClient | undefined;
     try {
@@ -174,7 +228,9 @@ export class McpToolCallService {
       const toolResult = await client.callTool(toolName, args);
       return { toolResult };
     } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
+      const message = error instanceof Error ? error.message : String(error);
+      const errorCategory: McpAuditErrorCategory = /timeout/i.test(message) ? 'timeout' : 'transport_error';
+      return { error: message, errorCategory };
     } finally {
       await client?.close().catch(() => undefined);
     }
