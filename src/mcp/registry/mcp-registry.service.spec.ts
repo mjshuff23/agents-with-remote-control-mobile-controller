@@ -265,11 +265,48 @@ describe('McpRegistryService', () => {
   // Mtime-based caching
   // -------------------------------------------------------------------------
 
-  it('caches registry between calls with the same mtime', async () => {
+  it('uses cached file contents between calls with the same mtime', async () => {
     await writeRegistry(tmp, [validServer()]);
     const first = await service.loadAll();
     const second = await service.loadAll();
-    expect(first).toBe(second);
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second);
+  });
+
+  it('returns cache copies so caller mutations cannot corrupt future loads', async () => {
+    await writeRegistry(tmp, [
+      validServer({
+        transport: {
+          kind: 'stdio',
+          command: 'my-mcp-server',
+          args: ['--safe'],
+          envAllowlist: ['ARC_SAFE_ENV']
+        },
+        tools: [{
+          name: 'read_doc',
+          risk: 'read',
+          requiresApproval: false,
+          allowedArgumentPaths: ['repoPath'],
+          blockedArgumentPaths: ['secretPath']
+        }]
+      })
+    ]);
+
+    const first = await service.loadAll();
+    first[0].id = 'mutated-id';
+    first[0].tools[0].allowedArgumentPaths?.push('mutatedPath');
+    if (first[0].transport.kind === 'stdio') {
+      first[0].transport.args?.push('--mutated');
+    }
+
+    const second = await service.loadAll();
+    expect(second[0].id).toBe('test-server');
+    expect(second[0].tools[0].allowedArgumentPaths).toEqual(['repoPath']);
+    expect(second[0].transport).toMatchObject({
+      kind: 'stdio',
+      args: ['--safe'],
+      envAllowlist: ['ARC_SAFE_ENV']
+    });
   });
 
   it('reloads registry when file changes', async () => {
@@ -297,8 +334,15 @@ describe('McpRegistryService', () => {
   // -------------------------------------------------------------------------
 
   it('rejects a registry file that is not valid JSON', async () => {
-    await writeFile(registryFilePath, 'not { json }');
-    await expect(service.loadAll()).rejects.toThrow();
+    const secretLikeValue = 'sk-secret-in-bad-json-12345';
+    await writeFile(registryFilePath, `{ "token": "${secretLikeValue}"`);
+
+    await expect(service.loadAll()).rejects.toThrow(
+      `MCP registry config at ${registryFilePath} is not valid JSON`
+    );
+    await expect(service.loadAll()).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining(secretLikeValue) })
+    );
   });
 
   it('rejects a registry file with wrong version', async () => {

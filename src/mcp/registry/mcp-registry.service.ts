@@ -52,14 +52,19 @@ export class McpRegistryService {
       this.cached.resolvedPath === resolvedPath &&
       this.cached.mtimeMs === fileStat.mtimeMs
     ) {
-      return this.cached.servers;
+      return this.cloneServers(this.cached.servers);
     }
 
     const raw = await readFile(resolvedPath, 'utf8');
-    const parsed = JSON.parse(raw) as McpRegistryConfig;
+    let parsed: McpRegistryConfig;
+    try {
+      parsed = JSON.parse(raw) as McpRegistryConfig;
+    } catch {
+      throw new Error(`MCP registry config at ${resolvedPath} is not valid JSON`);
+    }
     const servers = this.validateRegistry(parsed);
     this.cached = { servers, mtimeMs: fileStat.mtimeMs, resolvedPath };
-    return servers;
+    return this.cloneServers(servers);
   }
 
   /** Find a single registered server by its unique ID, or undefined if not found. */
@@ -219,6 +224,32 @@ export class McpRegistryService {
       throw new Error(`MCP server at index ${serverIndex} field "${fieldName}" must be an array of strings`);
     }
     return value as string[];
+  }
+
+  private cloneServers(servers: McpServerRegistration[]): McpServerRegistration[] {
+    return servers.map((server) => ({
+      ...server,
+      transport: this.cloneTransport(server.transport),
+      tools: server.tools.map((tool) => ({
+        ...tool,
+        allowedArgumentPaths: tool.allowedArgumentPaths ? [...tool.allowedArgumentPaths] : undefined,
+        blockedArgumentPaths: tool.blockedArgumentPaths ? [...tool.blockedArgumentPaths] : undefined
+      }))
+    }));
+  }
+
+  private cloneTransport(transport: McpTransportDeclaration): McpTransportDeclaration {
+    if (transport.kind === 'stdio') {
+      return {
+        ...transport,
+        args: transport.args ? [...transport.args] : undefined,
+        envAllowlist: transport.envAllowlist ? [...transport.envAllowlist] : undefined
+      };
+    }
+    return {
+      ...transport,
+      headersEnvAllowlist: transport.headersEnvAllowlist ? [...transport.headersEnvAllowlist] : undefined
+    };
   }
 
   private validateTools(rawTools: unknown[], serverIndex: number): McpToolDeclaration[] {
