@@ -85,9 +85,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@prisma/dev>@hono/node-server": "1.19.13",
-      "next>postcss": "8.5.10",
-      "ws": ">=8.20.1"
+      "ws": ">=8.20.1",
+      "@prisma/dev>@hono/node-server": "1.19.13"
     },
     "onlyBuiltDependencies": [
       "@nestjs/core",
