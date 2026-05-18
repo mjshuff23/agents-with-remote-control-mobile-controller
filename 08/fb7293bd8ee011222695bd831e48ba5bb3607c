@@ -1,0 +1,28 @@
+src/mcp/execution/mcp-tool-call.service.spec.ts
+  s_58de66feec6219::t_8e09eb56452561 306-308,317-318,321-324,331
+  s_58de66feec6219::t_52b14308e71039 72-73
+  s_58de66feec6219::t_c8b5e37ce85acb 305,309-316,319-320,325-330,332-333
+src/mcp/execution/mcp-approval.mapper.ts
+  s_58de66feec6219::t_1d97b10623a5ad 37,41,43,51
+controller/app/tasks/[id]/page.tsx
+  s_58de66feec6219::t_b3df3490383e93 493,496-498
+src/mcp/execution/mcp-tool-call.service.ts
+  s_58de66feec6219::t_26b8b4b7f5bc08 169,176-177
+  s_58de66feec6219::t_23054b0f40a196 138-139,150-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "08fb7293bd8ee011222695bd831e48ba5bb3607c",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
