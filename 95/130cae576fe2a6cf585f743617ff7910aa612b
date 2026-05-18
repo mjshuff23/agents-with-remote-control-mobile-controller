@@ -1,0 +1,32 @@
+src/mcp/execution/mcp-tool-call.service.spec.ts
+  s_58de66feec6219::t_a96e2a1d9a423a 10
+  s_58de66feec6219::t_a445ce80806fdb 1-6
+  s_58de66feec6219::t_91cb37ea4faa54 7-9,11-337,339-446
+  s_58de66feec6219::t_7f0fe185c75980 338
+src/mcp/execution/mcp-approval.mapper.ts
+  s_58de66feec6219::t_f074df725e7ccd 1-53
+src/mcp/execution/mcp-tool-call.service.ts
+  s_58de66feec6219::t_8455c391c23f84 1-175
+src/mcp/execution/mcp-tool-call.integration.spec.ts
+  s_58de66feec6219::t_b8432d3968ebcc 1-5
+  s_58de66feec6219::t_c8829c662a11f6 6-103,105-108,110-330
+  s_58de66feec6219::t_c51e2256af5940 104,109
+__mocks__/pkce-challenge.js
+  s_58de66feec6219::t_22b7f8bd4f0d9b 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "95130cae576fe2a6cf585f743617ff7910aa612b",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
