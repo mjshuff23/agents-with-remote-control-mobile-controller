@@ -1,0 +1,32 @@
+src/mcp/transport/stdio-mcp-transport.spec.ts
+  s_9903acc863b544::t_a4b689f9edc1f3 13-14
+src/mcp/transport/mcp-transport.types.spec.ts
+  s_9903acc863b544::t_98612bf3b41fa0 44-53,77-82
+src/mcp/transport/mcp-transport.types.ts
+  s_9903acc863b544::t_6206c71b1a99c8 94-95,97,110
+src/mcp/transport/stdio-mcp-transport.ts
+  s_9903acc863b544::t_79b463853e08c6 81,91-96,114-115,118-119
+src/mcp/transport/mcp-transport.integration.spec.ts
+  s_9903acc863b544::t_983726ffbbe4ba 88-90,92,123-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "9b8cd2efa9315b6ef6ed8de07d919161cb35a1e9",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9903acc863b544": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e3be5-285d-7170-8382-67bcb19a829f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
