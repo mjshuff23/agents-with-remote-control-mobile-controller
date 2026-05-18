@@ -67,37 +67,38 @@ export class McpToolCallService {
         taskId,
         sessionId,
         serverId,
-        serverDisplayName: serverId, // display name requires registry lookup; use serverId as fallback for blocked path
+        serverDisplayName: serverId, // fast-reject path: registry lookup skipped to keep latency minimal
         toolName,
         permissionLevel: decision.declaredPermission,
         toolRisk: decision.toolRisk ?? undefined,
         outcome: 'blocked',
+        reasonCode: decision.reasonCode,
         args,
         startedAt,
-        finishedAt: new Date(),
-        errorCategory: undefined
+        finishedAt: new Date()
       });
       return { outcome: 'blocked', error: decision.reasonCode };
     }
 
     if (decision.decision === 'auto_allow') {
+      const server = await this.registry.findServer(serverId);
       const execResult = await this.callTransport(serverId, toolName, args);
       const outcome: McpAuditOutcome = execResult.error ? 'failed' : 'auto_allow';
-      const errorCategory = execResult.errorCategory;
       await this.mcpAudit.record({
         taskId,
         sessionId,
         serverId,
-        serverDisplayName: serverId,
+        serverDisplayName: server?.displayName ?? serverId,
         toolName,
         permissionLevel: decision.declaredPermission,
         toolRisk: decision.toolRisk ?? undefined,
         outcome,
+        reasonCode: decision.reasonCode,
         args,
         result: execResult.toolResult,
         startedAt,
         finishedAt: new Date(),
-        errorCategory
+        errorCategory: execResult.errorCategory
       });
       return { outcome, ...{ toolResult: execResult.toolResult, error: execResult.error } };
     }
@@ -114,10 +115,10 @@ export class McpToolCallService {
         permissionLevel: decision.declaredPermission,
         toolRisk: decision.toolRisk ?? undefined,
         outcome: 'blocked',
+        reasonCode: decision.reasonCode,
         args,
         startedAt,
-        finishedAt: new Date(),
-        errorCategory: undefined
+        finishedAt: new Date()
       });
       return { outcome: 'blocked', error: 'server_not_found' };
     }
@@ -155,6 +156,7 @@ export class McpToolCallService {
         permissionLevel: decision.declaredPermission,
         toolRisk: decision.toolRisk ?? undefined,
         outcome: approvalOutcome,
+        reasonCode: decision.reasonCode,
         args,
         startedAt,
         finishedAt: new Date()
@@ -174,6 +176,7 @@ export class McpToolCallService {
       permissionLevel: decision.declaredPermission,
       toolRisk: decision.toolRisk ?? undefined,
       outcome: finalOutcome,
+      reasonCode: decision.reasonCode,
       args,
       result: execResult.toolResult,
       startedAt,
@@ -229,7 +232,7 @@ export class McpToolCallService {
       return { toolResult };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const errorCategory: McpAuditErrorCategory = /timeout/i.test(message) ? 'timeout' : 'transport_error';
+      const errorCategory: McpAuditErrorCategory = /(timeout|timed\s*out|etimedout|esockettimedout|econnaborted)/i.test(message) ? 'timeout' : 'transport_error';
       return { error: message, errorCategory };
     } finally {
       await client?.close().catch(() => undefined);

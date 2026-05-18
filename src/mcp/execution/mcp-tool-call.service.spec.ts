@@ -508,4 +508,23 @@ describe('McpToolCallService', () => {
     expect(call.startedAt.getTime()).toBeGreaterThanOrEqual(before - 50);
     expect(call.startedAt.getTime()).toBeLessThanOrEqual(after + 50);
   });
+
+  it('classifies ETIMEDOUT error as timeout errorCategory', async () => {
+    const decision = makeDecision({ decision: 'auto_allow', reasonCode: 'auto_allow_read', toolName: 'read_doc', toolRisk: 'read', ruleMatched: 'read_tool_auto_allow' });
+    const failingTransport = {
+      create: jest.fn().mockReturnValue({
+        connect: jest.fn().mockRejectedValue(new Error('ETIMEDOUT')),
+        callTool: jest.fn(),
+        close: jest.fn().mockResolvedValue(undefined)
+      })
+    } as unknown as jest.Mocked<McpTransportFactory>;
+    const { service, mocks } = makeService({ permission: makePermission(decision), transport: failingTransport });
+
+    const result = await service.execute({ ...BASE_REQUEST, toolName: 'read_doc' });
+
+    expect(result.outcome).toBe('failed');
+    expect(mocks.mcpAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'failed', errorCategory: 'timeout' })
+    );
+  });
 });

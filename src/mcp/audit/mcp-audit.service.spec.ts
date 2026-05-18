@@ -201,6 +201,24 @@ describe('McpAuditService.record', () => {
     expect(row.sanitizedResultPreview).toBeNull();
   });
 
+  it('sanitizedResultPreview is non-null and sanitized when result is provided', async () => {
+    const { service, prisma } = makeService();
+    await service.record(baseInput({ result: { output: 'ok', token: 'sk-result-secret' } }));
+    const row = (prisma.mcpAuditLog.create as jest.Mock).mock.calls[0][0].data;
+    expect(row.sanitizedResultPreview).not.toBeNull();
+    expect(row.sanitizedResultPreview).not.toContain('sk-result-secret');
+    expect(row.sanitizedResultPreview).toContain('[REDACTED]');
+    expect(row.sanitizedResultPreview).toContain('output');
+  });
+
+  it('sanitizedResultPreview sanitizes secrets inside array results', async () => {
+    const { service, prisma } = makeService();
+    await service.record(baseInput({ result: [{ token: 'sk-array-secret', name: 'item' }] }));
+    const row = (prisma.mcpAuditLog.create as jest.Mock).mock.calls[0][0].data;
+    expect(row.sanitizedResultPreview).not.toContain('sk-array-secret');
+    expect(row.sanitizedResultPreview).toContain('[REDACTED]');
+  });
+
   it('startedAt and finishedAt are written to the row', async () => {
     const startedAt = new Date('2026-01-01T00:00:00Z');
     const finishedAt = new Date('2026-01-01T00:00:05Z');

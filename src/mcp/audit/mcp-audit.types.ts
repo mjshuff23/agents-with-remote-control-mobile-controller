@@ -21,6 +21,8 @@ export interface RecordMcpAuditInput {
   permissionLevel?: string;
   toolRisk?: string;
   outcome: McpAuditOutcome;
+  /** Permission decision reason code from McpPermissionService.assess(). */
+  reasonCode?: string;
   /** Raw (pre-sanitization) args — hashed for forensic fidelity. */
   args: Record<string, unknown>;
   /** Raw result from transport, if execution occurred. */

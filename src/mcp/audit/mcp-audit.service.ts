@@ -47,11 +47,24 @@ export class McpAuditService {
    * main execution path.
    */
   async record(input: RecordMcpAuditInput): Promise<void> {
-    const argumentHash = McpAuditService.hashValue(input.args) as string; // args always present
-    const resultHash = McpAuditService.hashValue(input.result ?? null);
-    const sanitizedArgumentPreview = this.buildPreview(input.args) as string;
-    const sanitizedResultPreview = this.buildPreview(input.result ?? null);
-    const decider = this.resolveDecider(input.outcome);
+    // All preprocessing and the write are wrapped so record() never throws.
+    let argumentHash = 'sha256:error';
+    let resultHash: string | null = null;
+    let sanitizedArgumentPreview = '{}';
+    let sanitizedResultPreview: string | null = null;
+    let decider: ReturnType<typeof this.resolveDecider> = 'system';
+
+    try {
+      argumentHash = McpAuditService.hashValue(input.args) as string;
+      resultHash = McpAuditService.hashValue(input.result ?? null);
+      sanitizedArgumentPreview = this.buildPreview(input.args) as string;
+      sanitizedResultPreview = this.buildPreview(input.result ?? null);
+      decider = this.resolveDecider(input.outcome);
+    } catch (err) {
+      this.logger.warn(
+        `McpAuditLog preprocessing failed for ${input.serverId}:${input.toolName} — ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
 
     try {
       await this.prisma.mcpAuditLog.create({
@@ -66,6 +79,7 @@ export class McpAuditService {
           toolRisk: input.toolRisk,
           decider,
           outcome: input.outcome,
+          reasonCode: input.reasonCode,
           argumentHash,
           resultHash,
           sanitizedArgumentPreview,
@@ -116,21 +130,26 @@ export class McpAuditService {
   /** Build a sanitized, byte-capped JSON preview string. Returns null for null/undefined. */
   private buildPreview(value: unknown): string | null {
     if (value === null || value === undefined) return null;
-
-    let sanitized: unknown;
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      sanitized = sanitizeToolArguments(value as Record<string, unknown>);
-    } else {
-      sanitized = value;
-    }
-
+    const sanitized = this.sanitizePreviewValue(value);
     const json = JSON.stringify(sanitized);
     if (Buffer.byteLength(json) <= PREVIEW_MAX_BYTES) return json;
 
-    // Truncate to fit within PREVIEW_MAX_BYTES including suffix
+    // Truncate at a UTF-8-safe boundary so we never split a multi-byte character.
     const suffixBytes = Buffer.byteLength(PREVIEW_TRUNCATION_SUFFIX);
     const targetBytes = PREVIEW_MAX_BYTES - suffixBytes;
     const buf = Buffer.from(json);
-    return buf.slice(0, targetBytes).toString('utf8') + PREVIEW_TRUNCATION_SUFFIX;
+    // toString() with byte range drops an incomplete trailing multi-byte sequence.
+    return buf.toString('utf8', 0, targetBytes) + PREVIEW_TRUNCATION_SUFFIX;
+  }
+
+  /** Recursively sanitize a value for preview: redacts secrets in objects, recurses into arrays. */
+  private sanitizePreviewValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sanitizePreviewValue(item));
+    }
+    if (typeof value === 'object' && value !== null) {
+      return sanitizeToolArguments(value as Record<string, unknown>);
+    }
+    return value;
   }
 }
