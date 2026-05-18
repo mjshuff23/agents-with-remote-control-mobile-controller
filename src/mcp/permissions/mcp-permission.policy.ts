@@ -7,11 +7,18 @@ import {
   RISK_REQUIRED_PERMISSION
 } from './mcp-permission.types';
 
-/** Regex patterns used to detect secret-like argument values. */
+/**
+ * Secret-like value patterns. Deliberately specific to avoid over-redacting benign
+ * long strings (UUIDs, file paths, etc.). Covers common API key prefixes and
+ * high-entropy encodings, but not arbitrary 32+ char alphanumerics.
+ */
 const SECRET_VALUE_PATTERNS = [
-  /sk-[a-zA-Z0-9\-_]{8,}/,
-  /[a-zA-Z0-9]{32,}/,
-  /^[A-Z_]{4,}KEY$/i,
+  /sk-[a-zA-Z0-9\-_]{8,}/,                  // OpenAI-style: sk-...
+  /^(ghp|gho|github_pat)_[a-zA-Z0-9]{36,}/, // GitHub personal/OAuth tokens
+  /^xox[baprs]-[a-zA-Z0-9\-]+/,             // Slack tokens
+  /^AKIA[A-Z0-9]{16}$/,                      // AWS access key IDs
+  /^[a-f0-9]{40,}$/i,                        // SHA-1/SHA-256 hex hashes
+  /^[A-Z_]{4,}KEY$/i,                        // ENV-style keys e.g. MY_SECRET_KEY
   /token/i,
   /secret/i,
   /password/i,
@@ -41,8 +48,23 @@ function isSecretLikeValue(value: string): boolean {
   return SECRET_VALUE_PATTERNS.some((re) => re.test(value));
 }
 
+/** Sanitize a single value of unknown type, recursing into objects and arrays. */
+function sanitizeValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return isSecretLikeValue(value) ? '[REDACTED]' : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeValue(item));
+  }
+  if (typeof value === 'object' && value !== null) {
+    return sanitizeToolArguments(value as Record<string, unknown>);
+  }
+  return value;
+}
+
 /**
  * Returns a sanitized copy of tool arguments with secret-like keys/values redacted.
+ * Recurses into nested objects and arrays.
  * Pure function — never mutates input.
  */
 export function sanitizeToolArguments(args: Record<string, unknown>): Record<string, unknown> {
@@ -50,15 +72,34 @@ export function sanitizeToolArguments(args: Record<string, unknown>): Record<str
   for (const [key, value] of Object.entries(args)) {
     if (isSecretLikeKey(key)) {
       result[key] = '[REDACTED]';
-    } else if (typeof value === 'string' && isSecretLikeValue(value)) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      result[key] = sanitizeToolArguments(value as Record<string, unknown>);
     } else {
-      result[key] = value;
+      result[key] = sanitizeValue(value);
     }
   }
   return result;
+}
+
+/**
+ * Canonicalizes an object to a deterministic JSON string by deep-sorting keys.
+ * Used for denied-replay fingerprinting so that semantically identical argument
+ * objects with different insertion orders produce the same fingerprint.
+ */
+export function canonicalizeArgs(value: unknown): string {
+  return JSON.stringify(deepSortKeys(value));
+}
+
+function deepSortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => deepSortKeys(item));
+  }
+  if (typeof value === 'object' && value !== null) {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = deepSortKeys((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
 }
 
 function blocked(

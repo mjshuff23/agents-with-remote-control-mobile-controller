@@ -3,7 +3,7 @@ import { McpRegistryService } from '../registry/mcp-registry.service';
 import { AuditLogService } from '../../features/audit/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { McpPermissionDecision, McpPermissionContext } from './mcp-permission.types';
-import { computePermissionDecision, sanitizeToolArguments } from './mcp-permission.policy';
+import { computePermissionDecision, sanitizeToolArguments, canonicalizeArgs } from './mcp-permission.policy';
 
 /**
  * Classifies MCP tool calls against the Phase 5 permission ladder.
@@ -61,8 +61,9 @@ export class McpPermissionService {
     // Denied-replay check: only relevant when the base decision would proceed to approval.
     // Block early if the exact same call was previously denied/expired/refused.
     if (decision.decision === 'needs_approval') {
-      const commandJson = JSON.stringify([serverId, toolName]);
-      const filesJson = JSON.stringify(sanitizedArgs);
+      // Canonicalize both sides so different key-insertion orders produce the same fingerprint.
+      const commandJson = canonicalizeArgs([serverId, toolName]);
+      const filesJson = canonicalizeArgs(sanitizedArgs);
 
       const priorDenial = await this.prisma.approvalRequest.findFirst({
         where: {

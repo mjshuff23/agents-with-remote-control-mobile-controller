@@ -289,4 +289,41 @@ describe('McpPermissionService', () => {
     const metadataStr = JSON.stringify(auditCall.metadata ?? {});
     expect(metadataStr).not.toContain('sk-super-secret-key-12345');
   });
+
+  it('sanitizes secret-like values nested inside arrays before logging', async () => {
+    const registry = makeRegistry([makeServer({ permissionLevel: 'read_only' })]);
+    const service = new McpPermissionService(registry, audit, prisma);
+
+    await service.assess('test-server', 'read_doc', {
+      headers: [{ authorization: 'Bearer sk-super-secret-key-12345' }],
+      tokens: ['sk-another-secret-key-99']
+    });
+
+    const auditCall = audit.append.mock.calls[0][0];
+    const metadataStr = JSON.stringify(auditCall.metadata ?? {});
+    expect(metadataStr).not.toContain('sk-super-secret-key-12345');
+    expect(metadataStr).not.toContain('sk-another-secret-key-99');
+  });
+
+  it('produces identical denied-replay fingerprints for same args with different key order', async () => {
+    const capturedCalls: { where: { filesJson: string } }[] = [];
+    const capturingPrisma = {
+      approvalRequest: {
+        findFirst: jest.fn((args: unknown) => {
+          capturedCalls.push(args as { where: { filesJson: string } });
+          return Promise.resolve(null);
+        })
+      }
+    } as unknown as jest.Mocked<PrismaService>;
+
+    const registry = makeRegistry([makeServer({ permissionLevel: 'write' })]);
+    const s1 = new McpPermissionService(registry, audit, capturingPrisma);
+    const s2 = new McpPermissionService(registry, audit, capturingPrisma);
+
+    await s1.assess('test-server', 'write_file', { a: 1, b: 2 });
+    await s2.assess('test-server', 'write_file', { b: 2, a: 1 });
+
+    expect(capturedCalls).toHaveLength(2);
+    expect(capturedCalls[0].where.filesJson).toBe(capturedCalls[1].where.filesJson);
+  });
 });

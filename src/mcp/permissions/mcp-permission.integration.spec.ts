@@ -209,9 +209,53 @@ describe('McpPermissionService (integration)', () => {
     await service.assess('git-server', 'commit_files', { token: 'sk-secret-123', message: 'fix' });
 
     expect(capturedQuery).toHaveLength(1);
-    const query = capturedQuery[0] as { where: { filesJson: string } };
+    const query = capturedQuery[0] as { where: { commandJson: string; filesJson: string } };
+
+    // commandJson must encode [serverId, toolName] identity
+    expect(query.where.commandJson).toContain('git-server');
+    expect(query.where.commandJson).toContain('commit_files');
+
+    // filesJson must redact secrets but preserve non-secret args
     expect(query.where.filesJson).not.toContain('sk-secret-123');
     expect(query.where.filesJson).toContain('[REDACTED]');
+    expect(query.where.filesJson).toContain('fix');
+  });
+
+  it('produces identical fingerprints for semantically equivalent args with different key order', async () => {
+    const capturedQueries: { where: { filesJson: string } }[] = [];
+    prisma = {
+      approvalRequest: {
+        findFirst: jest.fn((args: unknown) => {
+          capturedQueries.push(args as { where: { filesJson: string } });
+          return Promise.resolve(null);
+        })
+      }
+    } as unknown as jest.Mocked<PrismaService>;
+
+    await writeRegistry(registryPath, {
+      version: 1,
+      servers: [{
+        id: 'git-server',
+        displayName: 'Git',
+        enabled: true,
+        transport: { kind: 'stdio', command: 'mcp-git' },
+        permissionLevel: 'write',
+        tools: [{ name: 'commit_files', risk: 'write', requiresApproval: true }],
+        canReadSecrets: false,
+        createdBy: 'config'
+      }]
+    });
+
+    const registry1 = new McpRegistryService(makeFakeConfig(registryPath));
+    const service1 = new McpPermissionService(registry1, audit, prisma);
+    const registry2 = new McpRegistryService(makeFakeConfig(registryPath));
+    const service2 = new McpPermissionService(registry2, audit, prisma);
+
+    await service1.assess('git-server', 'commit_files', { a: 1, b: 2 });
+    await service2.assess('git-server', 'commit_files', { b: 2, a: 1 });
+
+    expect(capturedQueries).toHaveLength(2);
+    expect(capturedQueries[0].where.filesJson).toBe(capturedQueries[1].where.filesJson);
   });
 
   // -------------------------------------------------------------------------

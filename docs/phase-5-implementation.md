@@ -53,7 +53,7 @@ Every Phase 5 implementation PR must preserve these constraints:
 | --- | --- | --- | --- |
 | 1 | [TSH-112](https://linear.app/michaelshuff/issue/TSH-112) | MCP registry schema/config loader | Establishes the controlled inventory and permission ceiling. |
 | 2 | [TSH-113](https://linear.app/michaelshuff/issue/TSH-113) | MCP transports | Complete: adds stdio, Streamable HTTP, and legacy SSE boundaries without execution bypass. |
-| 3 | [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | Permission ladder | Complete: enforces read_only→append_only→write ladder, denied-replay blocking, secret sanitization, and per-decision audit. |
+| 3 | [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | Permission ladder | Complete: enforces read_only→append_only→write ladder, denied/expired/refused-replay blocking (canonical fingerprint), recursive secret sanitization including arrays, and per-decision audit. |
 | 4 | [TSH-115](https://linear.app/michaelshuff/issue/TSH-115) | Mobile approval for MCP writes | Routes append/write calls through the phone approval surface. |
 | 5 | [TSH-116](https://linear.app/michaelshuff/issue/TSH-116) | MCP audit log | Persists every MCP decision with argument/result hashes. |
 | 6 | [TSH-117](https://linear.app/michaelshuff/issue/TSH-117) | Notion adapter | Adds append-only strategy doc sync behind approval/audit. |
