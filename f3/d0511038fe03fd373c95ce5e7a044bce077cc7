@@ -1,0 +1,26 @@
+src/mcp/registry/mcp-registry.service.ts
+  s_9903acc863b544::t_e66ddac13ac131 87,94
+src/mcp/registry/mcp-registry.service.spec.ts
+  s_9903acc863b544::t_632888edc2d00c 1,71-82,281-284,286-288,292
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "f3d0511038fe03fd373c95ce5e7a044bce077cc7",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9903acc863b544": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e3be5-285d-7170-8382-67bcb19a829f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
