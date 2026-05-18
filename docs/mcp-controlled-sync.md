@@ -54,6 +54,10 @@ See `arc.mcp.example.json` for a placeholder-safe example with stdio and Streama
 
 ## Transports
 
+The Phase 5 transport boundary is implemented in `src/mcp/transport/` with `@modelcontextprotocol/sdk@1.29.0`. It supports SDK-backed connection and `listTools` handshakes for registry-declared MCP servers, but `callTool` is intentionally blocked until the permission, mobile approval, and audit layers are in place.
+
+All transport implementations normalize failures into safe categories and must avoid logging raw request headers, child-process env, or environment-derived values.
+
 ### Stdio
 
 Use stdio for local MCP servers that run as child processes.
@@ -66,6 +70,8 @@ Rules:
 - Never pass `process.env` wholesale.
 - Apply startup and request timeouts.
 - Do not log child-process env.
+- Fixture coverage verifies stdio handshakes can list tools without forwarding non-allowlisted env.
+- Prefer absolute executable paths in registry entries. If a bare command must rely on `PATH`, allowlist `PATH` only when the operator understands the additional executable-discovery surface.
 
 ### Streamable HTTP
 
@@ -78,6 +84,7 @@ Rules:
 - Do not log auth headers.
 - Apply connect/request timeouts.
 - Normalize errors into safe categories.
+- Fixture coverage verifies local request/response handshakes without internet access.
 
 ### Legacy SSE
 
@@ -88,6 +95,7 @@ Rules:
 - Keep it behind the same permission service.
 - Prefer Streamable HTTP for new integrations.
 - Do not let legacy compatibility weaken approval or audit requirements.
+- Fixture coverage uses a local SSE server only; no internet dependency is required.
 
 ## Permission ladder
 

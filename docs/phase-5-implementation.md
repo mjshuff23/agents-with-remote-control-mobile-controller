@@ -6,6 +6,8 @@ Phase 5 is active. Phase 4.5 / Tailscale remote access is complete and is now th
 
 TSH-112 is complete. The MCP registry spine (`src/mcp/`) is implemented: typed schema, Phase-5 security validation, mtime-cached config loader, and unit + integration test coverage. The registry accepts `arc.mcp.json` (configurable via `ARC_MCP_REGISTRY_PATH`) and starts without MCP if the file is absent.
 
+TSH-113 is complete. The MCP transport boundary is implemented in `src/mcp/transport/` with SDK-backed stdio, Streamable HTTP, and legacy SSE clients. The transport layer supports connection and `listTools` handshakes only; direct `callTool` execution remains blocked until the permission, approval, and audit layers land in later Phase 5 tickets.
+
 Parent issue:
 
 - Linear: [TSH-81](https://linear.app/michaelshuff/issue/TSH-81)
@@ -48,7 +50,7 @@ Every Phase 5 implementation PR must preserve these constraints:
 | Order | Linear | Focus | Why first/next |
 | --- | --- | --- | --- |
 | 1 | [TSH-112](https://linear.app/michaelshuff/issue/TSH-112) | MCP registry schema/config loader | Establishes the controlled inventory and permission ceiling. |
-| 2 | [TSH-113](https://linear.app/michaelshuff/issue/TSH-113) | MCP transports | Adds stdio, Streamable HTTP, and legacy SSE boundaries without execution bypass. |
+| 2 | [TSH-113](https://linear.app/michaelshuff/issue/TSH-113) | MCP transports | Complete: adds stdio, Streamable HTTP, and legacy SSE boundaries without execution bypass. |
 | 3 | [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | Permission ladder | Creates the policy choke point before write flows exist. |
 | 4 | [TSH-115](https://linear.app/michaelshuff/issue/TSH-115) | Mobile approval for MCP writes | Routes append/write calls through the phone approval surface. |
 | 5 | [TSH-116](https://linear.app/michaelshuff/issue/TSH-116) | MCP audit log | Persists every MCP decision with argument/result hashes. |
@@ -156,6 +158,33 @@ Validation rules:
 - `admin` is reserved and blocked unless a future phase explicitly enables it.
 - Runtime-discovered tools not present in the registry are blocked.
 - Runtime-discovered capabilities can only reduce authority.
+
+## MCP transport boundary
+
+The transport layer lives in `src/mcp/transport/` and uses `@modelcontextprotocol/sdk@1.29.0`, the latest SDK patch checked on May 18, 2026.
+
+Implemented files:
+
+- `mcp-transport.types.ts` defines the common client interface, safe error categories, timeout helper, and SDK-backed base class.
+- `mcp-transport.factory.ts` constructs transports from registry declarations and exports a Nest-injectable factory.
+- `stdio-mcp-transport.ts` validates executable/args form, rejects shell interpolation paths, and passes only `envAllowlist` values.
+- `streamable-http-mcp-transport.ts` validates `http`/`https` URLs and passes only `headersEnvAllowlist` values as request headers.
+- `legacy-sse-mcp-transport.ts` keeps old SSE servers behind the same safe HTTP header and timeout behavior.
+
+Supported operations:
+
+- `connect`
+- `listTools`
+- `close`
+
+Blocked until later tickets:
+
+- `callTool`, which currently throws `execution_blocked`.
+- Permission classification for tool execution.
+- Mobile approval cards for append/write calls.
+- MCP audit persistence and argument/result hashing.
+
+Streamable HTTP remains the preferred HTTP path. Legacy SSE exists only for older MCP servers that have not adopted Streamable HTTP.
 
 ## Permission ladder
 
