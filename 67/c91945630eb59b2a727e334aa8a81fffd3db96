@@ -1,0 +1,42 @@
+src/mcp/permissions/mcp-permission.integration.spec.ts
+  s_58de66feec6219::t_6156a201de7277 1-310
+src/mcp/mcp.module.ts
+  s_58de66feec6219::t_b8b65ab96ea993 3,6,8,10-12
+src/mcp/permissions/mcp-permission.policy.ts
+  s_58de66feec6219::t_368a361cc2e63a 1-156
+src/mcp/permissions/mcp-permission.service.spec.ts
+  s_58de66feec6219::t_527e70184e194d 1-292
+docs/mcp-controlled-sync.md
+  s_58de66feec6219::t_ef2f551b4f323a 57
+  s_58de66feec6219::t_82da879a2de472 102-115,127-131
+src/mcp/permissions/mcp-permission.service.ts
+  s_58de66feec6219::t_255da889c10ddb 1-117
+docs/phase-5-implementation.md
+  s_58de66feec6219::t_167f1b23328b1a 11-12
+  s_58de66feec6219::t_a290280efc5cf9 56
+docs/SAFETY.md
+  s_58de66feec6219::t_035649103d50df 177
+src/mcp/permissions/mcp-permission.types.ts
+  s_58de66feec6219::t_11280b294518f8 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "67c91945630eb59b2a727e334aa8a81fffd3db96",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
