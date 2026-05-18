@@ -174,7 +174,7 @@ The controller secret remains required for every REST controller action and ever
 
 - The risk taxonomy itself (per-action rules) — lives in `arc.config.json`, populated in Phase 3.
 - The state machine for `ApprovalRequest` — see [`diagrams.md`](diagrams.md#3-approval-gate-state-machine).
-- Specific MCP server permission ladders — Phase 5 work, captured in the registry schema.
+- Specific MCP server permission ladders — implemented in `src/mcp/permissions/` (TSH-114). See [`mcp-controlled-sync.md`](mcp-controlled-sync.md#permission-ladder) for the full decision matrix.
 
 ---
 
