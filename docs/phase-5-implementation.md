@@ -4,6 +4,8 @@
 
 Phase 5 is active. Phase 4.5 / Tailscale remote access is complete and is now the default private approval path for phone-based review outside the home LAN.
 
+TSH-112 is complete. The MCP registry spine (`src/mcp/`) is implemented: typed schema, Phase-5 security validation, mtime-cached config loader, and unit + integration test coverage. The registry accepts `arc.mcp.json` (configurable via `ARC_MCP_REGISTRY_PATH`) and starts without MCP if the file is absent.
+
 Parent issue:
 
 - Linear: [TSH-81](https://linear.app/michaelshuff/issue/TSH-81)

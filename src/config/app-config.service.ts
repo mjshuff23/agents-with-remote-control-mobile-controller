@@ -122,6 +122,11 @@ export class AppConfigService {
     return this.emptyToUndefined(this.config.get<string>('ARC_LINEAR_TOKEN'));
   }
 
+  /** Path to the MCP registry config file (arc.mcp.json by default). */
+  get mcpRegistryPath(): string | undefined {
+    return this.emptyToUndefined(this.config.get<string>('ARC_MCP_REGISTRY_PATH'));
+  }
+
   /** Return undefined for empty or whitespace-only strings. */
   private emptyToUndefined(value: string | undefined): string | undefined {
     return value && value.trim().length > 0 ? value : undefined;

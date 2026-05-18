@@ -15,6 +15,7 @@ import { TestRunnerModule } from './features/test-runs/test-runner.module';
 import { ProvidersModule } from './features/providers/providers.module';
 import { SyncModule } from './features/sync/sync.module';
 import { IntegrationsModule } from './features/integrations/integrations.module';
+import { McpModule } from './mcp/mcp.module';
 
 @Module({
   imports: [
@@ -32,7 +33,8 @@ import { IntegrationsModule } from './features/integrations/integrations.module'
     TestRunnerModule,
     ProvidersModule,
     SyncModule,
-    IntegrationsModule
+    IntegrationsModule,
+    McpModule
   ]
 })
 export class AppModule {}
