@@ -87,7 +87,6 @@
     "overrides": {
       "@prisma/dev>@hono/node-server": "1.19.13",
       "next>postcss": "8.5.10",
-      "markdownlint>string-width": "^7.2.0",
       "ws": ">=8.20.1"
     },
     "onlyBuiltDependencies": [

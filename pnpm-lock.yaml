@@ -7,7 +7,6 @@ settings:
 overrides:
   '@prisma/dev>@hono/node-server': 1.19.13
   next>postcss: 8.5.10
-  markdownlint>string-width: ^7.2.0
   ws: '>=8.20.1'
 
 importers:
@@ -3173,6 +3172,10 @@ packages:
   string-width@7.2.0:
     resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
     engines: {node: '>=18'}
+
+  string-width@8.1.0:
+    resolution: {integrity: sha512-Kxl3KJGb/gxkaUMOjRsQ8IrXiGW75O4E3RPjFIINOVH8AMl2SQ/yWdTzWwF3FevIX9LcMAjJW+GRwAlAbTSXdg==}
+    engines: {node: '>=20'}
 
   string-width@8.2.1:
     resolution: {integrity: sha512-IIaP0g3iy9Cyy18w3M9YcaDudujEAVHKt3a3QJg1+sr/oX96TbaGUubG0hJyCjCBThFH+tFpcIyoUHUn1ogaLA==}
@@ -6365,7 +6368,7 @@ snapshots:
       micromark-extension-gfm-table: 2.1.1
       micromark-extension-math: 3.1.0
       micromark-util-types: 2.0.2
-      string-width: 7.2.0
+      string-width: 8.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -7160,6 +7163,11 @@ snapshots:
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.6.0
+      get-east-asian-width: 1.6.0
+      strip-ansi: 7.2.0
+
+  string-width@8.1.0:
+    dependencies:
       get-east-asian-width: 1.6.0
       strip-ansi: 7.2.0
 
