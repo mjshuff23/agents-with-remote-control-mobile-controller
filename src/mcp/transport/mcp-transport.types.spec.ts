@@ -41,6 +41,16 @@ class CountingTransport extends SdkBackedMcpTransport {
   }
 }
 
+class ThrowingTransport extends SdkBackedMcpTransport {
+  constructor() {
+    super('streamable_http', { kind: 'streamable_http', url: 'http://127.0.0.1/mcp' });
+  }
+
+  protected createSdkTransport(): Transport {
+    throw new Error('secret transport config detail');
+  }
+}
+
 describe('MCP transport shared helpers', () => {
   it('normalizes timeout failures into safe categories', async () => {
     await expect(withMcpTimeout(new Promise(() => undefined), 5, 'request_timeout')).rejects.toMatchObject({
@@ -63,5 +73,12 @@ describe('MCP transport shared helpers', () => {
     await Promise.all([transport.connect(), transport.connect()]);
 
     expect(transport.created).toBe(1);
+  });
+
+  it('normalizes synchronous SDK transport creation failures', async () => {
+    await expect(new ThrowingTransport().connect()).rejects.toMatchObject({
+      category: 'invalid_config',
+      message: 'MCP transport failed: invalid_config'
+    });
   });
 });

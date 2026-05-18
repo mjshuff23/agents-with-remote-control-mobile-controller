@@ -10,6 +10,8 @@ describe('StdioMcpTransport', () => {
 
   it.each([
     { command: 'bash', args: ['-c', 'echo secret'] },
+    { command: 'dash', args: ['-lc', 'echo secret'] },
+    { command: '/bin/ksh', args: ['-lc', 'echo secret'] },
     { command: '/bin/sh', args: ['-c', 'echo secret'] },
     { command: 'cmd.exe', args: ['/c', 'echo secret'] },
     { command: 'powershell.exe', args: ['-Command', 'Write-Host secret'] }

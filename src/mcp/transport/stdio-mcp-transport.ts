@@ -78,7 +78,7 @@ function assertNoShellCommandExecution(command: string, args: string[]): void {
     return;
   }
 
-  if (args.some((arg) => SHELL_EXECUTION_FLAGS.has(arg.toLowerCase()))) {
+  if (args.some(isShellExecutionFlag)) {
     throw new McpTransportError('invalid_config');
   }
 }
@@ -86,6 +86,12 @@ function assertNoShellCommandExecution(command: string, args: string[]): void {
 function isShellInterpreter(command: string): boolean {
   const executable = command.split(/[\\/]/).pop()?.toLowerCase() ?? '';
   return SHELL_INTERPRETERS.has(executable);
+}
+
+function isShellExecutionFlag(arg: string): boolean {
+  const normalized = arg.toLowerCase();
+  return SHELL_EXECUTION_FLAGS.has(normalized) ||
+    (/^-[a-z]+$/.test(normalized) && normalized.includes('c'));
 }
 
 function assertSafeArg(arg: string): void {
@@ -105,8 +111,12 @@ const SHELL_INTERPRETERS = new Set([
   'bash.exe',
   'cmd',
   'cmd.exe',
+  'dash',
+  'dash.exe',
   'fish',
   'fish.exe',
+  'ksh',
+  'ksh.exe',
   'powershell',
   'powershell.exe',
   'pwsh',

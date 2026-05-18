@@ -85,11 +85,11 @@ describe('MCP transport integrations', () => {
       registerFixtureTool(mcpServer, 'streamable_tool');
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await mcpServer.connect(transport);
-      await transport.handleRequest(req, res);
-      res.on('close', () => {
-        transport.close();
-        mcpServer.close();
+      res.once('close', () => {
+        void transport.close();
+        void mcpServer.close();
       });
+      await transport.handleRequest(req, res);
     });
     servers.push(server);
     const baseUrl = await listen(server);
@@ -120,6 +120,8 @@ describe('MCP transport integrations', () => {
         transports.set(transport.sessionId, { transport, server: mcpServer });
         transport.onclose = () => {
           transports.delete(transport.sessionId);
+          transport.onclose = undefined;
+          void mcpServer.close();
         };
         await mcpServer.connect(transport);
         return;

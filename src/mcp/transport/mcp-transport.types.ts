@@ -90,11 +90,11 @@ export abstract class SdkBackedMcpTransport implements McpTransportClient {
       return this.connectPromise;
     }
 
-    const client = new Client({ name: 'arc-orchestrator', version: '0.1.0' }, { capabilities: {} });
-    const transport = this.createSdkTransport();
-
     this.connectPromise = (async () => {
+      const client = new Client({ name: 'arc-orchestrator', version: '0.1.0' }, { capabilities: {} });
+      let transport: Transport | undefined;
       try {
+        transport = this.createSdkTransport();
         await withMcpTimeout(
           client.connect(transport, { timeout: this.connectTimeoutMs }),
           this.connectTimeoutMs,
@@ -107,7 +107,7 @@ export abstract class SdkBackedMcpTransport implements McpTransportClient {
         if (error instanceof McpTransportError) {
           throw error;
         }
-        throw McpTransportError.from('connection_failed', error);
+        throw McpTransportError.from(transport ? 'connection_failed' : 'invalid_config', error);
       } finally {
         this.connectPromise = undefined;
       }
