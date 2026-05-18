@@ -1,0 +1,55 @@
+docs/phase-5-implementation.md
+  s_9903acc863b544::t_30173aae4f47c8 9-10,53,162-187
+docs/mcp-controlled-sync.md
+  s_9903acc863b544::t_625026446b7d44 57-60,73,86,97
+src/mcp/transport/mcp-transport.types.ts
+  s_9903acc863b544::t_66abb02f7eb98f 1-32,34-134,136-165
+  s_9903acc863b544::t_e87f25541ccb53 33,135
+src/mcp/transport/mcp-transport.factory.ts
+  s_9903acc863b544::t_66abb02f7eb98f 2-20,31-32
+  s_9903acc863b544::t_429a871b91848b 1,21-30
+pnpm-lock.yaml
+  ai_agent 15-17,613-622,1842-1849,1866-1871,2126-2129,2349-2351,2377-2379,2840-2843,3602-3609,4243-4264,4909-4912,5498-5503,5529-5533,5819-5820,6217-6218,6238-6239,6779-6780,7592-7597
+src/mcp/mcp.module.ts
+  s_9903acc863b544::t_a1ebf9e57d293d 4,6,9-10
+src/mcp/transport/legacy-sse-mcp-transport.ts
+  s_9903acc863b544::t_66abb02f7eb98f 1-36
+src/mcp/transport/http-mcp-transport.spec.ts
+  s_9903acc863b544::t_36029e98c45c3d 1-54
+src/mcp/transport/streamable-http-mcp-transport.ts
+  s_9903acc863b544::t_66abb02f7eb98f 1-76
+src/mcp/transport/mcp-transport.integration.spec.ts
+  s_9903acc863b544::t_4d4effff0aace7 36
+  s_9903acc863b544::t_36029e98c45c3d 1-35,37-158
+src/mcp/transport/stdio-mcp-transport.spec.ts
+  s_9903acc863b544::t_36029e98c45c3d 1-42
+src/mcp/transport/stdio-mcp-transport.ts
+  s_9903acc863b544::t_66abb02f7eb98f 1-79
+src/mcp/transport/mcp-transport.factory.spec.ts
+  s_9903acc863b544::t_36029e98c45c3d 1-44
+src/mcp/transport/mcp-transport.types.spec.ts
+  s_9903acc863b544::t_36029e98c45c3d 1-16
+package.json
+  s_9903acc863b544::t_d50605ac56084a 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "de79695dfd2b0c821129510684dab0054881dac9",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9903acc863b544": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e3be5-285d-7170-8382-67bcb19a829f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
