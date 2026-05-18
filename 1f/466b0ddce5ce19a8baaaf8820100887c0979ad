@@ -1,0 +1,43 @@
+src/mcp/audit/mcp-audit.service.spec.ts
+  s_58de66feec6219::t_e7f99614ae05f5 1-296
+prisma/schema.prisma
+  s_58de66feec6219::t_3040fef34fb753 27
+  s_58de66feec6219::t_fde74dd024d549 122
+  s_58de66feec6219::t_17c487ca6b3a61 54
+  s_58de66feec6219::t_e026e4ce9f24d6 250-286
+src/mcp/execution/mcp-tool-call.service.ts
+  s_58de66feec6219::t_87d447f063e98c 11-12,22,35-36,42-44,53,61,66-79,85-102,108-121,145-163,165-167,171-181,184,219,222,231-233
+src/mcp/execution/mcp-tool-call.service.spec.ts
+  s_58de66feec6219::t_457fd2f759eeb0 11,93-94,106,115,124,432,435,440,442,448-450,454-455,459-461,465-487,489-496,499-509
+  s_58de66feec6219::t_de81ff0d110509 404
+src/mcp/audit/mcp-audit.service.ts
+  s_58de66feec6219::t_e9fec12fbd96bf 1-136
+src/mcp/audit/mcp-audit.types.ts
+  s_58de66feec6219::t_e9c797c3ad04bd 1-31
+src/mcp/execution/mcp-tool-call.integration.spec.ts
+  s_58de66feec6219::t_eee26ce23c5dd2 31-34
+  s_58de66feec6219::t_229a67a91948af 14
+  s_58de66feec6219::t_fe20fbed9f9c7b 222-223
+  s_58de66feec6219::t_101eb117d6e3b4 95,102
+  s_58de66feec6219::t_37e171c83fe78b 115
+src/mcp/mcp.module.ts
+  s_58de66feec6219::t_76c4086ae007b5 8,11,14-15
+prisma/migrations/20260518222127_add_mcp_audit_log/migration.sql
+  s_58de66feec6219::t_b8089eacf8a6da 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "1f466b0ddce5ce19a8baaaf8820100887c0979ad",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
