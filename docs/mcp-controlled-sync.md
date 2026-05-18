@@ -54,7 +54,7 @@ See `arc.mcp.example.json` for a placeholder-safe example with stdio and Streama
 
 ## Transports
 
-The Phase 5 transport boundary is implemented in `src/mcp/transport/` with `@modelcontextprotocol/sdk@1.29.0`. It supports SDK-backed connection and `listTools` handshakes for registry-declared MCP servers, but `callTool` is intentionally blocked until the permission, mobile approval, and audit layers are in place.
+The Phase 5 transport boundary is implemented in `src/mcp/transport/` with `@modelcontextprotocol/sdk@1.29.0`. It supports SDK-backed connection and `listTools` handshakes for registry-declared MCP servers, but `callTool` is intentionally blocked until the approval and audit layers land in later Phase 5 tickets.
 
 All transport implementations normalize failures into safe categories and must avoid logging raw request headers, child-process env, or environment-derived values.
 
@@ -99,6 +99,20 @@ Rules:
 
 ## Permission ladder
 
+The Phase 5 permission ladder is implemented in `src/mcp/permissions/` as `McpPermissionService.assess()`. It is the policy choke point that every MCP tool call must pass through before approval creation or execution.
+
+Decision order (fail-safe):
+
+1. Unknown server or undeclared tool → `blocked(undeclared_tool)`
+2. `admin` permission level → `blocked(admin_blocked)`
+3. `destructive` or `secret_sensitive` tool risk → `blocked(blocked_tool_risk)`
+4. Tool risk rank exceeds server permission ceiling → `blocked(permission_ceiling_exceeded)`
+5. Prior denial replay (same server+tool+sanitized-args fingerprint was denied/expired/refused) → `blocked(denied_replay)`
+6. `read` tool within ceiling → `auto_allow`
+7. `append` or `write` tool within ceiling → `needs_approval`
+
+Every assessment writes a structured audit record regardless of outcome.
+
 | Level | Meaning | Phase 5 behavior |
 | --- | --- | --- |
 | `read_only` | Read bounded, non-secret metadata. | Auto-allow declared read tools; audit all calls. |
@@ -110,11 +124,11 @@ Tool risk classification:
 
 | Risk | Behavior |
 | --- | --- |
-| `read` | Allowed only inside server permission ceiling. |
-| `append` | Requires approval unless future policy grants exact scoped automation. |
-| `write` | Requires approval per call. |
-| `destructive` | Blocked in Phase 5. |
-| `secret_sensitive` | Blocked in Phase 5. |
+| `read` | Auto-allowed when within server permission ceiling; audited. |
+| `append` | Requires approval when within ceiling; blocked if above ceiling. |
+| `write` | Requires approval per call; blocked if above ceiling. |
+| `destructive` | Blocked in Phase 5 regardless of server permission. |
+| `secret_sensitive` | Blocked in Phase 5 regardless of server permission. |
 
 ## Approval payload
 

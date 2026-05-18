@@ -8,6 +8,8 @@ TSH-112 is complete. The MCP registry spine (`src/mcp/`) is implemented: typed s
 
 TSH-113 is complete. The MCP transport boundary is implemented in `src/mcp/transport/` with SDK-backed stdio, Streamable HTTP, and legacy SSE clients. The transport layer supports connection and `listTools` handshakes only; direct `callTool` execution remains blocked until the permission, approval, and audit layers land in later Phase 5 tickets.
 
+TSH-114 is complete. The MCP permission ladder is implemented in `src/mcp/permissions/`. `McpPermissionService.assess()` enforces the Phase 5 policy choke point: read tools auto-allow, append/write tools require explicit approval, destructive/secret_sensitive tools are unconditionally blocked, admin permission is blocked, undeclared servers/tools are blocked, and denied-replay detection prevents silently re-running previously denied write calls. Every decision path writes a structured audit record.
+
 Parent issue:
 
 - Linear: [TSH-81](https://linear.app/michaelshuff/issue/TSH-81)
@@ -51,7 +53,7 @@ Every Phase 5 implementation PR must preserve these constraints:
 | --- | --- | --- | --- |
 | 1 | [TSH-112](https://linear.app/michaelshuff/issue/TSH-112) | MCP registry schema/config loader | Establishes the controlled inventory and permission ceiling. |
 | 2 | [TSH-113](https://linear.app/michaelshuff/issue/TSH-113) | MCP transports | Complete: adds stdio, Streamable HTTP, and legacy SSE boundaries without execution bypass. |
-| 3 | [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | Permission ladder | Creates the policy choke point before write flows exist. |
+| 3 | [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | Permission ladder | Complete: enforces read_only→append_only→write ladder, denied/expired/refused-replay blocking (canonical fingerprint), recursive secret sanitization including arrays, and per-decision audit. |
 | 4 | [TSH-115](https://linear.app/michaelshuff/issue/TSH-115) | Mobile approval for MCP writes | Routes append/write calls through the phone approval surface. |
 | 5 | [TSH-116](https://linear.app/michaelshuff/issue/TSH-116) | MCP audit log | Persists every MCP decision with argument/result hashes. |
 | 6 | [TSH-117](https://linear.app/michaelshuff/issue/TSH-117) | Notion adapter | Adds append-only strategy doc sync behind approval/audit. |
