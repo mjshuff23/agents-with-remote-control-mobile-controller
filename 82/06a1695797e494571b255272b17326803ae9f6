@@ -1,0 +1,21 @@
+controller/pnpm-lock.yaml
+  ai_agent 8-9,1890-1891,2742,3473,4011
+controller/package.json
+  s_58de66feec6219::t_70e430ab0facab 35-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "8206a1695797e494571b255272b17326803ae9f6",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
