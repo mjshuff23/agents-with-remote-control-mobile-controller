@@ -1,0 +1,21 @@
+src/mcp/execution/mcp-tool-call.service.ts
+  s_58de66feec6219::t_3a5cb3138d024e 9
+  s_58de66feec6219::t_ebf5d7113dfca2 172,179
+  s_58de66feec6219::t_3cd8dd0587817a 170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "ed894717ae78aa42aa1c0b854ad98a7dc5c4a0bc",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
