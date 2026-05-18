@@ -18,6 +18,14 @@ describe('HTTP MCP transports', () => {
     expect(init.headers).toEqual({ ARC_MCP_TOKEN: 'secret-token' });
   });
 
+  it('rejects invalid header allowlist names', () => {
+    expect(() => buildHttpRequestInit({
+      kind: 'streamable_http',
+      url: 'http://127.0.0.1:3000/mcp',
+      headersEnvAllowlist: ['Authorization', 'Bad Header']
+    })).toThrow(/invalid_config/);
+  });
+
   it('rejects invalid HTTP URLs', () => {
     expect(() => new StreamableHttpMcpTransport({
       kind: 'streamable_http',

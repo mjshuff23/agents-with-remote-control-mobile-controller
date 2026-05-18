@@ -71,6 +71,7 @@ Rules:
 - Apply startup and request timeouts.
 - Do not log child-process env.
 - Fixture coverage verifies stdio handshakes can list tools without forwarding non-allowlisted env.
+- Prefer absolute executable paths in registry entries. If a bare command must rely on `PATH`, allowlist `PATH` only when the operator understands the additional executable-discovery surface.
 
 ### Streamable HTTP
 

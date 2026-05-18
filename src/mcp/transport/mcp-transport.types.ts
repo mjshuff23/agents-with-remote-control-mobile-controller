@@ -36,10 +36,9 @@ export interface McpTransportClient {
 
 export class McpTransportError extends Error {
   constructor(
-    readonly category: McpTransportErrorCategory,
-    cause?: unknown
+    readonly category: McpTransportErrorCategory
   ) {
-    super(`MCP transport failed: ${category}`, { cause });
+    super(`MCP transport failed: ${category}`);
     this.name = 'McpTransportError';
   }
 
@@ -47,7 +46,7 @@ export class McpTransportError extends Error {
     if (cause instanceof McpTransportError) {
       return cause;
     }
-    return new McpTransportError(category, cause);
+    return new McpTransportError(category);
   }
 }
 
@@ -91,9 +90,10 @@ export abstract class SdkBackedMcpTransport implements McpTransportClient {
     }
 
     this.connectPromise = (async () => {
-      const client = new Client({ name: 'arc-orchestrator', version: '0.1.0' }, { capabilities: {} });
+      let client: Client | undefined;
       let transport: Transport | undefined;
       try {
+        client = new Client({ name: 'arc-orchestrator', version: '0.1.0' }, { capabilities: {} });
         transport = this.createSdkTransport();
         await withMcpTimeout(
           client.connect(transport, { timeout: this.connectTimeoutMs }),

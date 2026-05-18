@@ -58,13 +58,13 @@ describe('MCP transport shared helpers', () => {
     });
   });
 
-  it('does not expose raw cause messages through transport error messages', () => {
+  it('does not expose raw cause messages through transport error messages or cause', () => {
     const cause = new Error('secret-token-value');
     const error = McpTransportError.from('connection_failed', cause);
 
     expect(error.message).toBe('MCP transport failed: connection_failed');
     expect(error.message).not.toContain('secret-token-value');
-    expect(error.cause).toBe(cause);
+    expect(error.cause).toBeUndefined();
   });
 
   it('shares an in-flight SDK connection when connect is called concurrently', async () => {

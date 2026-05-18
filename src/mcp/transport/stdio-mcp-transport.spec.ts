@@ -53,6 +53,14 @@ describe('StdioMcpTransport', () => {
     expect(params.env).toEqual({ ARC_ALLOWED: 'allowed-value' });
   });
 
+  it('rejects invalid environment allowlist names', () => {
+    expect(() => buildStdioServerParameters({
+      kind: 'stdio',
+      command: 'node',
+      envAllowlist: ['ARC_ALLOWED', 'BAD-NAME?']
+    })).toThrow(/invalid_config/);
+  });
+
   it('blocks direct tool execution until permission and approval layers exist', async () => {
     const transport = new StdioMcpTransport({ kind: 'stdio', command: 'node' });
 

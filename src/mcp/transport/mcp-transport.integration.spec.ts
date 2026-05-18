@@ -111,9 +111,11 @@ describe('MCP transport integrations', () => {
 
   it('simulates a legacy SSE handshake with a local test server', async () => {
     const transports = new Map<string, { transport: SSEServerTransport; server: McpServer }>();
+    let sawInitialAuthorizationHeader = false;
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
       if (req.method === 'GET' && requestUrl.pathname === '/mcp') {
+        sawInitialAuthorizationHeader = req.headers.authorization === 'Bearer fixture-token';
         const mcpServer = new McpServer({ name: 'legacy-sse-fixture', version: '1.0.0' });
         registerFixtureTool(mcpServer, 'legacy_sse_tool');
         const transport = new SSEServerTransport('/messages', res);
@@ -145,8 +147,10 @@ describe('MCP transport integrations', () => {
 
     const transport = new LegacySseMcpTransport({
       kind: 'legacy_sse',
-      url: `${baseUrl}/mcp`
+      url: `${baseUrl}/mcp`,
+      headersEnvAllowlist: ['Authorization']
     }, {
+      env: { Authorization: 'Bearer fixture-token' },
       connectTimeoutMs: 2000,
       requestTimeoutMs: 2000
     });
@@ -156,5 +160,6 @@ describe('MCP transport integrations', () => {
     await transport.close();
 
     expect(tools.map((tool) => tool.name)).toContain('legacy_sse_tool');
+    expect(sawInitialAuthorizationHeader).toBe(true);
   });
 });
