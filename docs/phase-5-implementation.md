@@ -10,6 +10,8 @@ TSH-113 is complete. The MCP transport boundary is implemented in `src/mcp/trans
 
 TSH-114 is complete. The MCP permission ladder is implemented in `src/mcp/permissions/`. `McpPermissionService.assess()` enforces the Phase 5 policy choke point: read tools auto-allow, append/write tools require explicit approval, destructive/secret_sensitive tools are unconditionally blocked, admin permission is blocked, undeclared servers/tools are blocked, and denied-replay detection prevents silently re-running previously denied write calls. Every decision path writes a structured audit record.
 
+TSH-115 is complete. Write-capable MCP calls now route through the mobile approval surface. `McpToolCallService.execute()` bridges the permission classifier to the approval lifecycle: it creates an `ApprovalRequest` row in Prisma, emits an `approval.requested` WebSocket card (with sanitized args and MCP context in `expectedEffect`), polls until the human decides, and only calls the MCP transport on an approved outcome. Denied and expired calls return without executing. The controller approval card detects `actionType === 'mcp.tool_call'` and renders a structured server/tool/permission panel using the `expectedEffect` JSON field. Secrets are sanitized before fingerprinting via the existing `canonicalizeArgs` redaction path.
+
 Parent issue:
 
 - Linear: [TSH-81](https://linear.app/michaelshuff/issue/TSH-81)
@@ -54,7 +56,7 @@ Every Phase 5 implementation PR must preserve these constraints:
 | 1 | [TSH-112](https://linear.app/michaelshuff/issue/TSH-112) | MCP registry schema/config loader | Establishes the controlled inventory and permission ceiling. |
 | 2 | [TSH-113](https://linear.app/michaelshuff/issue/TSH-113) | MCP transports | Complete: adds stdio, Streamable HTTP, and legacy SSE boundaries without execution bypass. |
 | 3 | [TSH-114](https://linear.app/michaelshuff/issue/TSH-114) | Permission ladder | Complete: enforces read_only→append_only→write ladder, denied/expired/refused-replay blocking (canonical fingerprint), recursive secret sanitization including arrays, and per-decision audit. |
-| 4 | [TSH-115](https://linear.app/michaelshuff/issue/TSH-115) | Mobile approval for MCP writes | Routes append/write calls through the phone approval surface. |
+| 4 | [TSH-115](https://linear.app/michaelshuff/issue/TSH-115) | Mobile approval for MCP writes | Complete: routes write-capable MCP calls through mobile approval cards, polls for human decision, blocks transport on deny/expire, emits sanitized MCP context card via `expectedEffect`. |
 | 5 | [TSH-116](https://linear.app/michaelshuff/issue/TSH-116) | MCP audit log | Persists every MCP decision with argument/result hashes. |
 | 6 | [TSH-117](https://linear.app/michaelshuff/issue/TSH-117) | Notion adapter | Adds append-only strategy doc sync behind approval/audit. |
 | 7 | [TSH-118](https://linear.app/michaelshuff/issue/TSH-118) | Figma/FigJam adapter | Adds read-only metadata and link attachment. |
