@@ -1,0 +1,19 @@
+package.json
+  s_58de66feec6219::t_7112877bdbffc0 89-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "c7c8529eeab4191ebfe61f3bb1c797bb98a715d2",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
