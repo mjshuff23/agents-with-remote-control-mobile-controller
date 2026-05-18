@@ -24,6 +24,7 @@ model Task {
   sessions        AgentSession[]
   approvals       ApprovalRequest[]
   auditLogs       AuditLog[]
+  mcpAuditLogs    McpAuditLog[]
   changeSummaries GitChangeSummary[]
   testRuns        TestRunSummary[]
   events          TaskEvent[]
@@ -50,6 +51,7 @@ model AgentSession {
   logs                AgentLog[]
   approvals           ApprovalRequest[]
   auditLogs           AuditLog[]
+  mcpAuditLogs        McpAuditLog[]
   changeSummaries     GitChangeSummary[]
   testRuns            TestRunSummary[]
   events              TaskEvent[]
@@ -117,6 +119,7 @@ model ApprovalRequest {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   auditLogs        AuditLog[]
+  mcpAuditLogs     McpAuditLog[]
 
   @@unique([taskId, actionRequestId])
   @@index([taskId, status])
@@ -243,4 +246,42 @@ model TestRunSummary {
 
   @@index([taskId, createdAt])
   @@index([sessionId, createdAt])
+}
+
+/// Structured lifecycle record for every MCP tool-call attempt.
+/// One row per execute() invocation — written at the terminal branch.
+/// argumentHash / resultHash cover raw (pre-sanitization) canonical args
+/// so the hash is reproducible from the original call.
+/// sanitizedArgumentPreview / sanitizedResultPreview are human-readable
+/// and never contain raw secret values.
+model McpAuditLog {
+  id                       String           @id @default(uuid())
+  taskId                   String?
+  task                     Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  sessionId                String?
+  session                  AgentSession?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  approvalRequestId        String?
+  approvalRequest          ApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+  serverId                 String
+  serverDisplayName        String
+  toolName                 String
+  permissionLevel          String?          // McpPermissionLevel value
+  toolRisk                 String?          // McpToolRisk value
+  decider                  String           // 'policy' | 'user' | 'system'
+  outcome                  String           // 'auto_allow' | 'blocked' | 'approved' | 'denied' | 'expired' | 'failed'
+  reasonCode               String?          // McpPermissionReasonCode value, null for execution-level failures
+  argumentHash             String           // 'sha256:<64 hex chars>'
+  resultHash               String?          // 'sha256:<64 hex chars>' | null (null if no transport exec)
+  sanitizedArgumentPreview String           // JSON string, max 4096 bytes, secrets redacted
+  sanitizedResultPreview   String?          // JSON string, max 4096 bytes | null
+  startedAt                DateTime
+  finishedAt               DateTime?
+  errorCategory            String?          // 'transport_error' | 'tool_error' | 'timeout' | 'unknown'
+  createdAt                DateTime         @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([approvalRequestId])
+  @@index([serverId, toolName, createdAt])
+  @@index([outcome, createdAt])
 }
