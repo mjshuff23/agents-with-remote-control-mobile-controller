@@ -1,0 +1,31 @@
+src/mcp/mcp.module.ts
+  s_58de66feec6219::t_6bcf2f0ecd3222 4,8,10,12-14
+controller/app/tasks/[id]/page.tsx
+  s_58de66feec6219::t_1b3d82dafbfebd 492-495,509-520
+docs/mcp-controlled-sync.md
+  s_58de66feec6219::t_1522f8125a2296 57
+test/jest-e2e.json
+  s_58de66feec6219::t_01dbbea3322f97 10
+docs/phase-5-implementation.md
+  s_58de66feec6219::t_22ba84b4dc730f 59
+  s_58de66feec6219::t_319c2a68132f0b 13-14
+package.json
+  s_58de66feec6219::t_71336abe955d6c 74-75
+  s_58de66feec6219::t_9465d605158359 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "b400b89105fdbc1bdc11a662f9271c4f4f41a3ce",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
