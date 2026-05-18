@@ -1,0 +1,34 @@
+src/mcp/transport/stdio-mcp-transport.ts
+  s_9903acc863b544::t_0c6fc18f5f1ade 19,65-71,76-90,102-125
+src/mcp/transport/http-mcp-transport.spec.ts
+  s_9903acc863b544::t_63ec014f4caa86 3,54-68
+src/mcp/transport/mcp-transport.types.spec.ts
+  s_9903acc863b544::t_64d47fe950023c 1-42,52-53,57-65
+src/mcp/transport/mcp-transport.types.ts
+  s_9903acc863b544::t_b6e6410534dba5 42,77,89-91,96-112,114-116,149-151
+src/mcp/transport/legacy-sse-mcp-transport.ts
+  s_9903acc863b544::t_d1d55e5de29e20 1,13-22,36-39
+src/mcp/transport/stdio-mcp-transport.spec.ts
+  s_9903acc863b544::t_a993769a98aa33 11-19,28-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "cbb4a1e006ca38600ee59ef0e7664dded2c24d14",
+  "prompts": {},
+  "humans": {
+    "h_d7f45408b008e1": {
+      "author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9903acc863b544": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e3be5-285d-7170-8382-67bcb19a829f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
