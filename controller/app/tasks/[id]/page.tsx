@@ -490,9 +490,12 @@ export default function TaskDetailPage() {
             const command = parseJson<string[]>(approval.commandJson, []);
             const files = parseJson<string[]>(approval.filesJson, []);
             const isMcp = approval.actionType === 'mcp.tool_call';
-            const mcpCtx = isMcp
+            const mcpCtxRaw = isMcp
               ? parseJson<{ mcpServerId?: string; mcpServerDisplayName?: string; mcpToolName?: string; permissionLevel?: string; toolRisk?: string }>(approval.expectedEffect, {})
               : null;
+            // Only use the MCP-specific layout when required fields are present;
+            // a truthy-but-empty object (parse fallback {}) would render undefined labels.
+            const mcpCtx = mcpCtxRaw?.mcpServerId || mcpCtxRaw?.mcpToolName ? mcpCtxRaw : null;
             const isResolving = pendingApprovalActionIds.has(approval.id);
             return (
               <div key={approval.id} className="border border-amber-200 bg-white rounded-lg p-3 space-y-2">

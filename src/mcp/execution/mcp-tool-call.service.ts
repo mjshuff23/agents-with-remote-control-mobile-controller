@@ -135,7 +135,8 @@ export class McpToolCallService {
     expiresAt: Date,
     pollIntervalMs = 500
   ): Promise<{ status: string }> {
-    // Allow a small buffer beyond expiresAt for the human to see the card.
+    // Allow a small buffer beyond expiresAt so a human approval recorded at the
+    // last moment isn't discarded before we see it.
     const deadline = expiresAt.getTime() + 5000;
 
     while (Date.now() < deadline) {
@@ -143,12 +144,15 @@ export class McpToolCallService {
       if (!record || record.status !== 'pending') {
         return { status: record?.status ?? 'expired' };
       }
-      if (Date.now() >= expiresAt.getTime()) {
-        return { status: 'expired' };
-      }
       await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
+    // Deadline passed with no human decision — mark the row expired so
+    // denied-replay detection sees a terminal status rather than stale pending.
+    await this.prisma.approvalRequest.update({
+      where: { id: approvalId },
+      data: { status: 'expired' }
+    });
     return { status: 'expired' };
   }
 
@@ -162,14 +166,15 @@ export class McpToolCallService {
     if (!server) {
       return { error: 'server_not_found' };
     }
+    const client = this.transport.create(server.transport);
     try {
-      const client = this.transport.create(server.transport);
       await client.connect();
       const toolResult = await client.callTool(toolName, args);
-      await client.close();
       return { toolResult };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      await client.close().catch(() => undefined);
     }
   }
 }

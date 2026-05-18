@@ -34,12 +34,13 @@ export function buildMcpApprovalData(
   server: McpServerRegistration,
   sanitizedArgs: Record<string, unknown>
 ): McpApprovalData {
+  const riskLevel = decision.toolRisk ?? 'append';
   return {
     actionRequestId: randomUUID(),
     actionType: 'mcp.tool_call',
-    riskLevel: decision.toolRisk ?? 'append',
+    riskLevel,
     title: `${server.displayName}: ${decision.toolName}`,
-    rationale: `Tool '${decision.toolName}' with risk '${decision.toolRisk}' requires explicit approval on a '${decision.declaredPermission}' server.`,
+    rationale: `Tool '${decision.toolName}' with risk '${riskLevel}' requires explicit approval on a '${decision.declaredPermission ?? 'unknown'}' server.`,
     commandJson: canonicalizeArgs([decision.serverId, decision.toolName]),
     filesJson: canonicalizeArgs(sanitizedArgs),
     expectedEffect: JSON.stringify({
@@ -47,7 +48,7 @@ export function buildMcpApprovalData(
       mcpServerDisplayName: server.displayName,
       mcpToolName: decision.toolName,
       permissionLevel: decision.declaredPermission,
-      toolRisk: decision.toolRisk
+      toolRisk: riskLevel
     })
   };
 }

@@ -69,7 +69,8 @@ function makePrisma(approvalId = 'approval-1', finalStatus = 'approved'): jest.M
   return {
     approvalRequest: {
       create: jest.fn().mockResolvedValue(approval),
-      findUnique: jest.fn().mockResolvedValue(resolved)
+      findUnique: jest.fn().mockResolvedValue(resolved),
+      update: jest.fn().mockResolvedValue({ ...approval, status: 'expired' })
     }
   } as unknown as jest.Mocked<PrismaService>;
 }
@@ -299,6 +300,35 @@ describe('McpToolCallService', () => {
 
     expect(result.outcome).toBe('expired');
     expect(transport.create).not.toHaveBeenCalled();
+  });
+
+  it('writes expired status to DB when deadline passes with approval still pending', async () => {
+    // findUnique always returns pending so the loop exhausts the deadline.
+    // Use fake timers + advanceTimersByTime to skip the poll sleeps instantly.
+    jest.useFakeTimers();
+    const pendingApproval = { id: 'approval-1', status: 'pending', decision: null, taskId: 'task-1', sessionId: 'session-1' };
+    const prisma = {
+      approvalRequest: {
+        create: jest.fn().mockResolvedValue(pendingApproval),
+        findUnique: jest.fn().mockResolvedValue(pendingApproval),
+        update: jest.fn().mockResolvedValue({ ...pendingApproval, status: 'expired' })
+      }
+    } as unknown as jest.Mocked<PrismaService>;
+    // approvalTimeoutMs: -10000 puts expiresAt in the past so deadline is already passed
+    const config = { approvalTimeoutMs: -10000 } as unknown as jest.Mocked<AppConfigService>;
+    const { service } = makeService({ prisma, config });
+
+    const resultPromise = service.execute(BASE_REQUEST);
+    // Advance timers so the setTimeout inside pollForDecision resolves
+    jest.runAllTimersAsync().catch(() => undefined);
+    const result = await resultPromise;
+
+    expect(result.outcome).toBe('expired');
+    expect(prisma.approvalRequest.update).toHaveBeenCalledWith({
+      where: { id: 'approval-1' },
+      data: { status: 'expired' }
+    });
+    jest.useRealTimers();
   });
 
   // -------------------------------------------------------------------------
