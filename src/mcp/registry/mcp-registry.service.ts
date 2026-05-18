@@ -84,14 +84,14 @@ export class McpRegistryService {
     if (configured) {
       return path.isAbsolute(configured)
         ? configured
-        : path.join(this.config.repoPath ?? '.', configured);
+        : path.resolve(this.config.repoPath ?? '.', configured);
     }
     // Fall back to arc.mcp.json beside the repo root if repoPath is available.
     const repoPath = this.config.repoPath;
     if (!repoPath) {
       return undefined;
     }
-    return path.join(repoPath, MCP_REGISTRY_DEFAULT_FILENAME);
+    return path.resolve(repoPath, MCP_REGISTRY_DEFAULT_FILENAME);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdtemp, rm, utimes, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { AppConfigService } from '../../config/app-config.service';
@@ -66,6 +66,18 @@ describe('McpRegistryService', () => {
       { mcpRegistryPath: undefined, repoPath: undefined } as unknown as AppConfigService
     );
     await expect(noPathService.loadAll()).resolves.toEqual([]);
+  });
+
+  it('resolves relative configured registry paths to absolute paths', async () => {
+    const relativePath = path.relative(process.cwd(), registryFilePath);
+    const relativePathService = new McpRegistryService(
+      { mcpRegistryPath: relativePath, repoPath: undefined } as unknown as AppConfigService
+    );
+    await writeFile(registryFilePath, '{ "version": 1, "servers": ');
+
+    await expect(relativePathService.loadAll()).rejects.toThrow(
+      `MCP registry config at ${registryFilePath} is not valid JSON`
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -266,11 +278,18 @@ describe('McpRegistryService', () => {
   // -------------------------------------------------------------------------
 
   it('uses cached file contents between calls with the same mtime', async () => {
-    await writeRegistry(tmp, [validServer()]);
+    const cachedMtime = new Date('2026-01-01T00:00:00.000Z');
+    await writeRegistry(tmp, [validServer({ id: 'cached-server' })]);
+    await utimes(registryFilePath, cachedMtime, cachedMtime);
+
     const first = await service.loadAll();
+    await writeRegistry(tmp, [validServer({ id: 'changed-with-same-mtime' })]);
+    await utimes(registryFilePath, cachedMtime, cachedMtime);
+
     const second = await service.loadAll();
     expect(first).toEqual(second);
     expect(first).not.toBe(second);
+    expect(second[0].id).toBe('cached-server');
   });
 
   it('returns cache copies so caller mutations cannot corrupt future loads', async () => {
