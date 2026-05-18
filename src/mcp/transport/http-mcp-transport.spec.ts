@@ -1,6 +1,6 @@
 import { buildHttpRequestInit } from './streamable-http-mcp-transport';
 import { StreamableHttpMcpTransport } from './streamable-http-mcp-transport';
-import { LegacySseMcpTransport } from './legacy-sse-mcp-transport';
+import { LegacySseMcpTransport, buildLegacySseTransportOptions } from './legacy-sse-mcp-transport';
 
 describe('HTTP MCP transports', () => {
   it('passes only allowlisted env-derived headers', () => {
@@ -50,5 +50,21 @@ describe('HTTP MCP transports', () => {
     await expect(transport.callTool('anything', {})).rejects.toMatchObject({
       category: 'execution_blocked'
     });
+  });
+
+  it('passes custom legacy SSE fetch at the top level so all requests use it', () => {
+    const fetch = jest.fn();
+    const options = buildLegacySseTransportOptions({
+      kind: 'legacy_sse',
+      url: 'http://127.0.0.1:3000/mcp',
+      headersEnvAllowlist: ['ARC_MCP_TOKEN']
+    }, {
+      env: { ARC_MCP_TOKEN: 'secret-token' },
+      fetch
+    });
+
+    expect(options.fetch).toBe(fetch);
+    expect(options.requestInit).toEqual({ headers: { ARC_MCP_TOKEN: 'secret-token' } });
+    expect(options.eventSourceInit).toBeUndefined();
   });
 });

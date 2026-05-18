@@ -8,12 +8,31 @@ describe('StdioMcpTransport', () => {
     }
   );
 
+  it.each([
+    { command: 'bash', args: ['-c', 'echo secret'] },
+    { command: '/bin/sh', args: ['-c', 'echo secret'] },
+    { command: 'cmd.exe', args: ['/c', 'echo secret'] },
+    { command: 'powershell.exe', args: ['-Command', 'Write-Host secret'] }
+  ])('rejects shell interpreters with command execution flags: $command', ({ command, args }) => {
+    expect(() => new StdioMcpTransport({ kind: 'stdio', command, args })).toThrow(/invalid_config/);
+  });
+
   it('rejects args that attempt shell interpolation or pipe execution', () => {
     expect(() => new StdioMcpTransport({
       kind: 'stdio',
       command: 'node',
       args: ['fixture.js', '&&', 'echo secret']
     })).toThrow(/invalid_config/);
+  });
+
+  it('allows executable paths with spaces when they are still a single path', () => {
+    const params = buildStdioServerParameters({
+      kind: 'stdio',
+      command: '/opt/Model Context/server',
+      args: ['fixture.js']
+    });
+
+    expect(params.command).toBe('/opt/Model Context/server');
   });
 
   it('passes only allowlisted environment variables to stdio child processes', () => {

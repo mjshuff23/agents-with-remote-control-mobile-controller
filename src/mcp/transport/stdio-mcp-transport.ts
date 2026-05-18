@@ -16,6 +16,7 @@ export function buildStdioServerParameters(
   options: Pick<McpTransportRuntimeOptions, 'env'> = {}
 ): StdioServerParameters {
   assertSafeExecutable(declaration.command);
+  assertNoShellCommandExecution(declaration.command, declaration.args ?? []);
   for (const arg of declaration.args ?? []) {
     assertSafeArg(arg);
   }
@@ -61,9 +62,30 @@ export class StdioMcpTransport extends SdkBackedMcpTransport {
 }
 
 function assertSafeExecutable(command: string): void {
-  if (!command.trim() || /\s/.test(command) || SHELL_META_PATTERN.test(command)) {
+  const trimmed = command.trim();
+  if (
+    !trimmed ||
+    command !== trimmed ||
+    SHELL_META_PATTERN.test(command) ||
+    (/\s/.test(command) && !/[\\/]/.test(command))
+  ) {
     throw new McpTransportError('invalid_config');
   }
+}
+
+function assertNoShellCommandExecution(command: string, args: string[]): void {
+  if (!isShellInterpreter(command)) {
+    return;
+  }
+
+  if (args.some((arg) => SHELL_EXECUTION_FLAGS.has(arg.toLowerCase()))) {
+    throw new McpTransportError('invalid_config');
+  }
+}
+
+function isShellInterpreter(command: string): boolean {
+  const executable = command.split(/[\\/]/).pop()?.toLowerCase() ?? '';
+  return SHELL_INTERPRETERS.has(executable);
 }
 
 function assertSafeArg(arg: string): void {
@@ -77,3 +99,27 @@ function assertSafeEnvName(name: string): void {
     throw new McpTransportError('invalid_config');
   }
 }
+
+const SHELL_INTERPRETERS = new Set([
+  'bash',
+  'bash.exe',
+  'cmd',
+  'cmd.exe',
+  'fish',
+  'fish.exe',
+  'powershell',
+  'powershell.exe',
+  'pwsh',
+  'pwsh.exe',
+  'sh',
+  'sh.exe',
+  'zsh',
+  'zsh.exe'
+]);
+
+const SHELL_EXECUTION_FLAGS = new Set([
+  '-c',
+  '/c',
+  '-command',
+  '-encodedcommand'
+]);

@@ -1,4 +1,4 @@
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { SSEClientTransport, SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { FetchLike, Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { McpTransportDeclaration } from '../registry/mcp-registry.schema';
 import {
@@ -9,6 +9,16 @@ import { buildHttpRequestInit, parseHttpUrl } from './streamable-http-mcp-transp
 
 type LegacySseDeclaration = Extract<McpTransportDeclaration, { kind: 'legacy_sse' }>;
 type LegacySseRuntimeOptions = McpTransportRuntimeOptions & { fetch?: FetchLike };
+
+export function buildLegacySseTransportOptions(
+  declaration: LegacySseDeclaration,
+  options: LegacySseRuntimeOptions = {}
+): SSEClientTransportOptions {
+  return {
+    requestInit: buildHttpRequestInit(declaration, { env: options.env }),
+    fetch: options.fetch
+  };
+}
 
 export class LegacySseMcpTransport extends SdkBackedMcpTransport {
   private readonly url: URL;
@@ -23,14 +33,9 @@ export class LegacySseMcpTransport extends SdkBackedMcpTransport {
   }
 
   protected createSdkTransport(): Transport {
-    const requestInit = buildHttpRequestInit(this.sseDeclaration, { env: this.env });
-    return new SSEClientTransport(this.url, {
-      requestInit,
-      eventSourceInit: {
-        fetch: this.sseOptions.fetch
-          ? (url, init) => this.sseOptions.fetch!(url, { ...init, ...requestInit })
-          : undefined
-      }
-    });
+    return new SSEClientTransport(this.url, buildLegacySseTransportOptions(this.sseDeclaration, {
+      ...this.sseOptions,
+      env: this.env
+    }));
   }
 }

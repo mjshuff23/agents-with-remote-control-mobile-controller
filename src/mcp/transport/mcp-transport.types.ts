@@ -39,9 +39,8 @@ export class McpTransportError extends Error {
     readonly category: McpTransportErrorCategory,
     cause?: unknown
   ) {
-    super(`MCP transport failed: ${category}`);
+    super(`MCP transport failed: ${category}`, { cause });
     this.name = 'McpTransportError';
-    this.cause = cause;
   }
 
   static from(category: McpTransportErrorCategory, cause?: unknown): McpTransportError {
@@ -75,6 +74,7 @@ export async function withMcpTimeout<T>(
 export abstract class SdkBackedMcpTransport implements McpTransportClient {
   protected client?: Client;
   protected sdkTransport?: Transport;
+  private connectPromise?: Promise<void>;
 
   protected constructor(
     readonly kind: McpTransportKind,
@@ -86,25 +86,34 @@ export abstract class SdkBackedMcpTransport implements McpTransportClient {
     if (this.client) {
       return;
     }
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
 
     const client = new Client({ name: 'arc-orchestrator', version: '0.1.0' }, { capabilities: {} });
     const transport = this.createSdkTransport();
 
-    try {
-      await withMcpTimeout(
-        client.connect(transport, { timeout: this.connectTimeoutMs }),
-        this.connectTimeoutMs,
-        'connect_timeout'
-      );
-      this.client = client;
-      this.sdkTransport = transport;
-    } catch (error) {
-      await this.closeSdkClient(client, transport);
-      if (error instanceof McpTransportError) {
-        throw error;
+    this.connectPromise = (async () => {
+      try {
+        await withMcpTimeout(
+          client.connect(transport, { timeout: this.connectTimeoutMs }),
+          this.connectTimeoutMs,
+          'connect_timeout'
+        );
+        this.client = client;
+        this.sdkTransport = transport;
+      } catch (error) {
+        await this.closeSdkClient(client, transport);
+        if (error instanceof McpTransportError) {
+          throw error;
+        }
+        throw McpTransportError.from('connection_failed', error);
+      } finally {
+        this.connectPromise = undefined;
       }
-      throw McpTransportError.from('connection_failed', error);
-    }
+    })();
+
+    return this.connectPromise;
   }
 
   async listTools(): Promise<McpTransportTool[]> {
@@ -137,6 +146,9 @@ export abstract class SdkBackedMcpTransport implements McpTransportClient {
   }
 
   async close(): Promise<void> {
+    if (this.connectPromise) {
+      await this.connectPromise.catch(() => undefined);
+    }
     await this.closeSdkClient(this.client, this.sdkTransport);
     this.client = undefined;
     this.sdkTransport = undefined;
