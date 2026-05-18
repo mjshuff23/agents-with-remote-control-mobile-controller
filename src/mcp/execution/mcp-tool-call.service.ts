@@ -6,6 +6,7 @@ import { AppConfigService } from '../../config/app-config.service';
 import { McpPermissionService } from '../permissions/mcp-permission.service';
 import { McpRegistryService } from '../registry/mcp-registry.service';
 import { McpTransportFactory } from '../transport/mcp-transport.factory';
+import { McpTransportClient } from '../transport/mcp-transport.types';
 import { sanitizeToolArguments } from '../permissions/mcp-permission.policy';
 import { buildMcpApprovalData } from './mcp-approval.mapper';
 
@@ -166,15 +167,16 @@ export class McpToolCallService {
     if (!server) {
       return { error: 'server_not_found' };
     }
-    const client = this.transport.create(server.transport);
+    let client: McpTransportClient | undefined;
     try {
+      client = this.transport.create(server.transport);
       await client.connect();
       const toolResult = await client.callTool(toolName, args);
       return { toolResult };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     } finally {
-      await client.close().catch(() => undefined);
+      await client?.close().catch(() => undefined);
     }
   }
 }
