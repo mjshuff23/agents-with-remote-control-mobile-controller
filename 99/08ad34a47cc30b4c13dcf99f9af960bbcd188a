@@ -1,0 +1,28 @@
+docs/phase-5-implementation.md
+  s_58de66feec6219::t_5f43ed37d7001f 56
+src/mcp/permissions/mcp-permission.policy.ts
+  s_58de66feec6219::t_6c1dfcaf0f590a 10-14,16-21,51-64,67,76,82-102
+src/mcp/permissions/mcp-permission.service.spec.ts
+  s_58de66feec6219::t_cc7d3ede7e5875 292-328
+src/mcp/permissions/mcp-permission.service.ts
+  s_58de66feec6219::t_0d0ef8615b68eb 64-66
+  s_58de66feec6219::t_f249386f10f622 6
+src/mcp/permissions/mcp-permission.integration.spec.ts
+  s_58de66feec6219::t_772c62e454d367 212-218,221-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "9908ad34a47cc30b4c13dcf99f9af960bbcd188a",
+  "prompts": {},
+  "sessions": {
+    "s_58de66feec6219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "453dbade-fd9d-40cf-8e13-d001d2d37e2e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Michael Shuff <mjshuff23@gmail.com>"
+    }
+  }
+}
